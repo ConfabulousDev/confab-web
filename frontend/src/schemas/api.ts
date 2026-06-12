@@ -548,19 +548,21 @@ const TrendsCostDistributionBucketSchema = z.object({
   total_usd: z.string(),
 });
 
-// p50/p90/p99 of the per-data-point cost values (decimal strings). The whole
-// object is null when there are no data points.
-const TrendsCostDistributionPercentilesSchema = z.object({
+// Summary stats of the per-data-point cost values (decimal strings): p50/p90/p99
+// percentiles plus the arithmetic mean (`avg`). The whole object is null when there
+// are no data points.
+const TrendsCostDistributionStatsSchema = z.object({
   p50: z.string(),
   p90: z.string(),
   p99: z.string(),
+  avg: z.string(),
 });
 
 const TrendsCostDistributionCardSchema = z.object({
   buckets: z.array(TrendsCostDistributionBucketSchema),
-  percentiles: TrendsCostDistributionPercentilesSchema.nullable(),
+  stats: TrendsCostDistributionStatsSchema.nullable(),
   // covered_session_count = sessions with per-session cost data contributing data
-  // points; total_session_count = all filtered sessions in range. Percentiles are
+  // points; total_session_count = all filtered sessions in range. The stats are
   // biased by this partial v2 subset during backfill (surfaced in the caption).
   covered_session_count: z.number(),
   total_session_count: z.number(),

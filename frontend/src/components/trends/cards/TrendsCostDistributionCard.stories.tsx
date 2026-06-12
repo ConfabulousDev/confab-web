@@ -48,7 +48,7 @@ export const Default: Story = {
   args: {
     data: {
       buckets: buckets([8, 21, 34, 12, 3], ['0.04', '1.20', '14.80', '52.30', '88.00']),
-      percentiles: { p50: '0.32', p90: '4.10', p99: '21.40' },
+      stats: { p50: '0.32', p90: '4.10', p99: '21.40', avg: '3.85' },
       covered_session_count: 78,
       total_session_count: 91,
       timed_out: false,
@@ -61,7 +61,7 @@ export const SingleBand: Story = {
   args: {
     data: {
       buckets: buckets([0, 0, 6, 0, 0], ['0', '0', '3.90', '0', '0']),
-      percentiles: { p50: '0.62', p90: '0.81', p99: '0.95' },
+      stats: { p50: '0.62', p90: '0.81', p99: '0.95', avg: '0.65' },
       covered_session_count: 6,
       total_session_count: 6,
       timed_out: false,
@@ -75,7 +75,7 @@ export const ModelFilterActive: Story = {
     modelFilterActive: true,
     data: {
       buckets: buckets([4, 9, 11, 5, 1], ['0.02', '0.55', '4.30', '18.90', '12.50']),
-      percentiles: { p50: '0.21', p90: '2.80', p99: '12.50' },
+      stats: { p50: '0.21', p90: '2.80', p99: '12.50', avg: '2.10' },
       covered_session_count: 30,
       total_session_count: 30,
       timed_out: false,
@@ -104,7 +104,7 @@ export const WideRange: Story = {
         [6, 18, 27, 14, 5, 2, 0, 0, 0, 1],
         ['0.04', '1.10', '12.40', '58.00', '210.00', '900.00', '0', '0', '0', '2100000.00'],
       ),
-      percentiles: { p50: '0.36', p90: '7.80', p99: '420.00' },
+      stats: { p50: '0.36', p90: '7.80', p99: '420.00', avg: '52.00' },
       covered_session_count: 73,
       total_session_count: 80,
       timed_out: false,
@@ -117,7 +117,7 @@ export const TimedOut: Story = {
   args: {
     data: {
       buckets: [],
-      percentiles: null,
+      stats: null,
       covered_session_count: 0,
       total_session_count: 0,
       timed_out: true,

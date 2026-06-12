@@ -168,8 +168,8 @@ func TestBuildCostDistribution_EmptyInput(t *testing.T) {
 		t.Errorf("floor count: got %d want 0", card.Buckets[0].SessionCount)
 	}
 	decEqual(t, card.Buckets[0].TotalUSD, "0")
-	if card.Percentiles != nil {
-		t.Errorf("percentiles: got %+v want nil for empty input", card.Percentiles)
+	if card.Stats != nil {
+		t.Errorf("percentiles: got %+v want nil for empty input", card.Stats)
 	}
 }
 
@@ -191,19 +191,20 @@ func TestBuildCostDistribution_BandEdges(t *testing.T) {
 // interpolation) semantics over a SORTED slice.
 func TestCostDistributionPercentiles(t *testing.T) {
 	t.Run("empty is nil", func(t *testing.T) {
-		if got := costDistributionPercentiles(nil); got != nil {
+		if got := costDistributionStats(nil); got != nil {
 			t.Errorf("got %+v want nil", got)
 		}
 	})
 
 	t.Run("single value", func(t *testing.T) {
-		got := costDistributionPercentiles(decs(t, "5.00"))
+		got := costDistributionStats(decs(t, "5.00"))
 		if got == nil {
 			t.Fatal("got nil want percentiles")
 		}
 		decEqual(t, got.P50, "5.00")
 		decEqual(t, got.P90, "5.00")
 		decEqual(t, got.P99, "5.00")
+		decEqual(t, got.Avg, "5.00") // mean of one value is itself
 	})
 
 	t.Run("interpolated", func(t *testing.T) {
@@ -211,13 +212,26 @@ func TestCostDistributionPercentiles(t *testing.T) {
 		// p50 rank=0.5*4=2.0 → 0.30
 		// p90 rank=0.9*4=3.6 → 0.40 + 0.6*0.10 = 0.46
 		// p99 rank=0.99*4=3.96 → 0.40 + 0.96*0.10 = 0.496
-		got := costDistributionPercentiles(decs(t, "0.10", "0.20", "0.30", "0.40", "0.50"))
+		// avg = 1.50 / 5 = 0.30
+		got := costDistributionStats(decs(t, "0.10", "0.20", "0.30", "0.40", "0.50"))
 		if got == nil {
 			t.Fatal("got nil want percentiles")
 		}
 		decEqual(t, got.P50, "0.30")
 		decEqual(t, got.P90, "0.46")
 		decEqual(t, got.P99, "0.496")
+		decEqual(t, got.Avg, "0.30")
+	})
+
+	t.Run("avg is the mean, distinct from the median", func(t *testing.T) {
+		// sorted [0.10,0.10,0.10,0.10,4.60], n=5: median 0.10 but mean
+		// = 5.00 / 5 = 1.00 — a right-skewed set where avg ≠ p50.
+		got := costDistributionStats(decs(t, "0.10", "0.10", "0.10", "0.10", "4.60"))
+		if got == nil {
+			t.Fatal("got nil want percentiles")
+		}
+		decEqual(t, got.P50, "0.10")
+		decEqual(t, got.Avg, "1.00")
 	})
 }
 
@@ -226,10 +240,11 @@ func TestCostDistributionPercentiles(t *testing.T) {
 func TestBuildCostDistribution_PercentilesOverUnsortedInput(t *testing.T) {
 	values := decs(t, "0.50", "0.10", "0.40", "0.20", "0.30") // unsorted
 	card := buildCostDistribution(values, 5, 5)
-	if card.Percentiles == nil {
+	if card.Stats == nil {
 		t.Fatal("percentiles: got nil want p50/p90/p99")
 	}
-	decEqual(t, card.Percentiles.P50, "0.30")
-	decEqual(t, card.Percentiles.P90, "0.46")
-	decEqual(t, card.Percentiles.P99, "0.496")
+	decEqual(t, card.Stats.P50, "0.30")
+	decEqual(t, card.Stats.P90, "0.46")
+	decEqual(t, card.Stats.P99, "0.496")
+	decEqual(t, card.Stats.Avg, "0.30") // 1.50 / 5
 }

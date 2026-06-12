@@ -10,7 +10,7 @@ The **Trends** page aggregates analytics across every session you can see, broke
 - Daily / weekly / monthly cost trends.
 - Token usage trends (input, output, cache).
 - **Cost by model** — a per-model breakdown of spend and tokens across your sessions, with each model attributed to its provider. Fast-mode usage appears as its own line, and models not yet in the pricing table roll up under "Unknown". This covers sessions that have per-model data; a caption notes the coverage.
-- **Cost distribution** — a log-scale histogram of per-session cost, surfacing the long tail of spend, with p50 / p90 / p99 percentile tiles. Buckets grow with your data: a `< $0.01` catch-all plus one bar per power of 10, up to the band holding your most expensive session. Each bar shows the total spent in that band. When a model filter is active, the bars count per-(session, model) units and reflect only the selected model's cost (a ⓘ note flags this).
+- **Cost distribution** — a log-scale histogram of per-session cost, surfacing the long tail of spend, with average / p50 / p90 / p99 stat tiles. Buckets grow with your data: a `< $0.01` catch-all plus one bar per power of 10, up to the band holding your most expensive session. A **Sessions / Total $** toggle flips bar height between the number of sessions in each band and the total spent there; the other value shows on hover. When a model filter is active, the bars count per-(session, model) units and reflect only the selected model's cost (a ⓘ note flags this).
 - Tool usage and frequency.
 - Repo activity.
 

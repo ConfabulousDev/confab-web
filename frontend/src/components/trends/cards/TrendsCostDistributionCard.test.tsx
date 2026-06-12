@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import {
   TrendsCostDistributionCard,
   CostDistributionTooltip,
@@ -27,7 +27,7 @@ function makeData(
 ): TrendsCostDistributionCardData {
   return {
     buckets: buckets([1, 2, 3, 2, 1], ['0.005', '0.06', '1.50', '12.00', '50.00']),
-    percentiles: { p50: '0.50', p90: '12.50', p99: '48.00' },
+    stats: { p50: '0.50', p90: '12.50', p99: '48.00', avg: '6.40' },
     covered_session_count: 9,
     total_session_count: 12,
     timed_out: false,
@@ -62,6 +62,36 @@ describe('TrendsCostDistributionCard', () => {
     expect(screen.getByText('Session-model pairs per cost band')).toBeInTheDocument();
   });
 
+  it('defaults to the Sessions (count) metric: Sessions pressed, chart labelled by count', () => {
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    const group = screen.getByRole('group', { name: /bar metric/i });
+    expect(within(group).getByRole('button', { name: 'Sessions' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(group).getByRole('button', { name: 'Total $' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByText('Sessions per cost band')).toBeInTheDocument();
+  });
+
+  it('switches bar metric to cost when Total $ is clicked', () => {
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Total $' }));
+    expect(screen.getByRole('button', { name: 'Total $' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Sessions' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Total cost per cost band')).toBeInTheDocument();
+    expect(screen.queryByText('Sessions per cost band')).not.toBeInTheDocument();
+  });
+
+  it('keeps the Sessions button label stable under a model filter (nuance stays in chart label)', () => {
+    render(<TrendsCostDistributionCard data={makeData()} modelFilterActive />);
+    // Button text does not become "Pairs"; the per-pair nuance lives in the chart label/caveat.
+    expect(screen.getByRole('button', { name: 'Sessions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /pairs/i })).not.toBeInTheDocument();
+  });
+
   it('does not render per-bar total-$ labels up front (they moved to hover)', () => {
     render(<TrendsCostDistributionCard data={makeData()} />);
     // These band totals are distinct from any percentile value, so their
@@ -80,8 +110,23 @@ describe('TrendsCostDistributionCard', () => {
     expect(screen.getByText('$48.00')).toBeInTheDocument();
   });
 
-  it('hides the percentile tiles when percentiles is null', () => {
-    render(<TrendsCostDistributionCard data={makeData({ percentiles: null })} />);
+  it('renders an avg tile, first in the row, with the formatted mean cost', () => {
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    const avgLabel = screen.getByText('avg');
+    expect(avgLabel).toBeInTheDocument();
+    // avg leads the tile row (avg | p50 | p90 | p99).
+    const p50Label = screen.getByText('p50');
+    expect(avgLabel.compareDocumentPosition(p50Label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('$6.40')).toBeInTheDocument();
+  });
+
+  it('hides the avg tile when stats is null', () => {
+    render(<TrendsCostDistributionCard data={makeData({ stats: null })} />);
+    expect(screen.queryByText('avg')).not.toBeInTheDocument();
+  });
+
+  it('hides the percentile tiles when stats is null', () => {
+    render(<TrendsCostDistributionCard data={makeData({ stats: null })} />);
     expect(screen.queryByText('p50')).not.toBeInTheDocument();
     // The chart still renders (its label is present).
     expect(screen.getByText('Sessions per cost band')).toBeInTheDocument();
@@ -101,7 +146,7 @@ describe('TrendsCostDistributionCard', () => {
   it('renders a timed-out notice instead of a histogram when timed_out is true', () => {
     render(
       <TrendsCostDistributionCard
-        data={makeData({ buckets: [], percentiles: null, covered_session_count: 0, total_session_count: 0, timed_out: true })}
+        data={makeData({ buckets: [], stats: null, covered_session_count: 0, total_session_count: 0, timed_out: true })}
       />,
     );
     expect(screen.getByText(/narrow/i)).toBeInTheDocument();
@@ -166,6 +211,26 @@ describe('CostDistributionTooltip', () => {
       />,
     );
     expect(screen.getByText(/34 session-model pairs/)).toBeInTheDocument();
+  });
+
+  it('leads with the count line in the count metric, total second', () => {
+    render(
+      <CostDistributionTooltip active payload={payloadFor(bucket)} unit="sessions" metric="count" />,
+    );
+    const count = screen.getByText(/34 sessions/);
+    const total = screen.getByText(/\$14\.80 total/);
+    // count appears before total in document order.
+    expect(count.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('leads with the total line in the cost metric, count second', () => {
+    render(
+      <CostDistributionTooltip active payload={payloadFor(bucket)} unit="sessions" metric="cost" />,
+    );
+    const count = screen.getByText(/34 sessions/);
+    const total = screen.getByText(/\$14\.80 total/);
+    // total appears before count in document order.
+    expect(total.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('abbreviates large band totals compactly ($M)', () => {

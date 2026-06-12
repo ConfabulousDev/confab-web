@@ -1,9 +1,17 @@
+import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendsCard } from './TrendsCard';
 import { DollarIcon } from '@/components/icons';
 import { formatCostCompact } from '@/utils/tokenStats';
-import type { TrendsCostDistributionCard as TrendsCostDistributionCardData } from '@/schemas/api';
+import type {
+  TrendsCostDistributionCard as TrendsCostDistributionCardData,
+  TrendsCostDistributionBucket,
+} from '@/schemas/api';
 import styles from './TrendsCostDistributionCard.module.css';
+
+// Which value the bars (and the tooltip's lead line) encode: per-band session
+// count, or per-band total $. Defaults to 'count' so the card is unchanged on load.
+type BarMetric = 'count' | 'cost';
 
 interface TrendsCostDistributionCardProps {
   data: TrendsCostDistributionCardData | null;
@@ -37,32 +45,56 @@ interface CostDistributionTooltipProps {
   payload?: TooltipPayloadEntry[];
   /** "sessions" or "session-model pairs" — matches the chart label / a11y wording. */
   unit: string;
+  /** Active bar metric; the matching line leads the tooltip. Defaults to 'count'. */
+  metric?: BarMetric;
 }
 
 // Hover card for a single band: label, count + unit, and the band's total $.
+// Whichever metric the bars encode leads (the other line still shows, just second).
 // Exported for unit testing (Recharts renders tooltips only on hover, which
 // jsdom can't lay out).
-export function CostDistributionTooltip({ active, payload, unit }: CostDistributionTooltipProps) {
+export function CostDistributionTooltip({
+  active,
+  payload,
+  unit,
+  metric = 'count',
+}: CostDistributionTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const first = payload[0];
   if (!first) return null;
   const row = first.payload;
 
+  const countLine = (
+    <div className={styles.tooltipValue}>
+      {row.session_count} {unit}
+    </div>
+  );
+  const totalLine = (
+    <div className={styles.tooltipTotal}>
+      {formatCostCompact(parseFloat(row.total_usd))} total
+    </div>
+  );
+
   return (
     <div className={styles.tooltip}>
       <div className={styles.tooltipTitle}>{row.label}</div>
-      <div className={styles.tooltipValue}>
-        {row.session_count} {unit}
-      </div>
-      <div className={styles.tooltipTotal}>
-        {formatCostCompact(parseFloat(row.total_usd))} total
-      </div>
+      {metric === 'cost' ? (
+        <>
+          {totalLine}
+          {countLine}
+        </>
+      ) : (
+        <>
+          {countLine}
+          {totalLine}
+        </>
+      )}
     </div>
   );
 }
 
-// Stat tile for a single percentile (cost-green via theme tokens, light + dark).
-function PercentileTile({ label, usd }: { label: string; usd: string }) {
+// Stat tile for a single summary stat (cost-green via theme tokens, light + dark).
+function StatTile({ label, usd }: { label: string; usd: string }) {
   return (
     <div className={styles.tile}>
       <span className={styles.tileLabel}>{label}</span>
@@ -71,7 +103,43 @@ function PercentileTile({ label, usd }: { label: string; usd: string }) {
   );
 }
 
+// Two-button in-card toggle flipping bar height between session count and total $.
+// Button text is stable (no sessions-vs-pairs swap under a model filter) — that
+// nuance stays in the chart label + ⓘ caveat. Mirrors TrendsTopSessionsCard's selector.
+const METRIC_OPTIONS: { value: BarMetric; label: string }[] = [
+  { value: 'count', label: 'Sessions' },
+  { value: 'cost', label: 'Total $' },
+];
+
+function MetricToggle({
+  metric,
+  onMetricChange,
+}: {
+  metric: BarMetric;
+  onMetricChange: (m: BarMetric) => void;
+}) {
+  return (
+    <span className={styles.metricToggle} role="group" aria-label="Bar metric">
+      {METRIC_OPTIONS.map(({ value, label }) => (
+        <button
+          key={value}
+          type="button"
+          className={styles.metricOption}
+          aria-pressed={value === metric}
+          onClick={() => onMetricChange(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCostDistributionCardProps) {
+  // Local-only toggle; defaults to 'count' so first render is unchanged. Resets on
+  // remount (e.g. a filter change), which is acceptable — no URL/storage plumbing.
+  const [metric, setMetric] = useState<BarMetric>('count');
+
   if (!data) return null;
 
   // A timeout degrades to an empty card; surface a distinct notice (not the
@@ -91,9 +159,24 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
   if (data.covered_session_count === 0) return null;
 
   const unit = modelFilterActive ? 'session-model pairs' : 'sessions';
-  const chartLabel = modelFilterActive
-    ? 'Session-model pairs per cost band'
-    : 'Sessions per cost band';
+  // In cost mode the bars encode total $; in count mode they encode the data-point
+  // count (sessions, or session-model pairs under a filter).
+  let chartLabel: string;
+  if (metric === 'cost') {
+    chartLabel = 'Total cost per cost band';
+  } else if (modelFilterActive) {
+    chartLabel = 'Session-model pairs per cost band';
+  } else {
+    chartLabel = 'Sessions per cost band';
+  }
+
+  // Recharts needs a numeric dataKey; total_usd is a decimal string, so cost mode
+  // reads it through an accessor (leaves the bucket rows — and the tooltip payload —
+  // untouched).
+  const barDataKey =
+    metric === 'cost'
+      ? (b: TrendsCostDistributionBucket) => parseFloat(b.total_usd)
+      : 'session_count';
 
   return (
     <div className={styles.wrapper}>
@@ -102,16 +185,20 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
         icon={DollarIcon}
         caveat={modelFilterActive ? FILTER_CAVEAT : undefined}
       >
-        {data.percentiles && (
+        {data.stats && (
           <div className={styles.tiles}>
-            <PercentileTile label="p50" usd={data.percentiles.p50} />
-            <PercentileTile label="p90" usd={data.percentiles.p90} />
-            <PercentileTile label="p99" usd={data.percentiles.p99} />
+            <StatTile label="avg" usd={data.stats.avg} />
+            <StatTile label="p50" usd={data.stats.p50} />
+            <StatTile label="p90" usd={data.stats.p90} />
+            <StatTile label="p99" usd={data.stats.p99} />
           </div>
         )}
 
         <div className={styles.chartContainer}>
-          <div className={styles.chartLabel}>{chartLabel}</div>
+          <div className={styles.chartHeader}>
+            <div className={styles.chartLabel}>{chartLabel}</div>
+            <MetricToggle metric={metric} onMetricChange={setMetric} />
+          </div>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.buckets} margin={{ top: 8, right: 0, left: 0, bottom: 24 }}>
               <XAxis
@@ -127,11 +214,11 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
               />
               <YAxis hide domain={[0, 'dataMax']} />
               <Tooltip
-                content={<CostDistributionTooltip unit={unit} />}
+                content={<CostDistributionTooltip unit={unit} metric={metric} />}
                 cursor={{ fill: 'var(--color-bg-primary)' }}
               />
               <Bar
-                dataKey="session_count"
+                dataKey={barDataKey}
                 fill="var(--color-accent)"
                 radius={[3, 3, 0, 0]}
                 isAnimationActive={false}

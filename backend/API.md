@@ -579,7 +579,7 @@ Returns aggregated analytics across sessions **visible to the authenticated user
         { "label": "$1 – $10", "lo": 1, "hi": 10, "session_count": 7, "total_usd": "24.90" },
         { "label": "$10 – $100", "lo": 10, "hi": 100, "session_count": 2, "total_usd": "38.20" }
       ],
-      "percentiles": { "p50": "0.42", "p90": "3.80", "p99": "18.60" },
+      "stats": { "p50": "0.42", "p90": "3.80", "p99": "18.60", "avg": "2.10" },
       "covered_session_count": 42,
       "total_session_count": 42,
       "timed_out": false
@@ -635,7 +635,7 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | `cards.cost_by_model.timed_out` | bool | `true` when the aggregation exceeded its dedicated budget (4s, under the 5s request budget) and degraded to an empty card — the rest of the response still succeeds, and the server logs a PII-safe WARN with the request shape for upstream debugging. |
 | `cards.cost_distribution` | object\|null | Log-scale histogram of per-session cost + p50/p90/p99 percentiles over the filtered, visible sessions that carry `tokens_v2` data (y1w5). `null` only on backends predating this card. By default each data point is one session's total cost (`tokens_v2.total_cost_usd`); when `?model=` is active the unit becomes per-(session, selected-model) — each (session, model) pair is one data point and only the selected model's cost counts (the UI flags this with a ⓘ caveat). Same partial-coverage / timeout-degradation conventions as `cost_by_model`. |
 | `cards.cost_distribution.buckets[]` | array | **Dynamic log10 bands**, low→high: a fixed `"< $0.01"` catch-all (captures `$0`/tiny/negative values that can't sit on a log axis) followed by one band per power of 10, from `$0.01` up to the band containing the most expensive data point — so the top grows with the data (e.g. a `$2M` session yields a `"$1M – $10M"` top band) while empty middle decades are still emitted. Each band: `label` (display string, render verbatim — large edges abbreviated e.g. `"$1K – $10K"`), `lo`/`hi` (dollar edges, half-open `[lo, hi)`; `hi` is the bounded top decade), `session_count` (data-point count — sessions, or (session,model) pairs under `?model=`), `total_usd` (decimal-string sum across the band). |
-| `cards.cost_distribution.percentiles` | object\|null | `{p50, p90, p99}` of the per-data-point cost values (decimal strings), computed with `percentile_cont` (linear-interpolation) semantics. `null` when there are no data points. Biased by the partial `tokens_v2` subset during backfill (the UI caption notes this). |
+| `cards.cost_distribution.stats` | object\|null | `{p50, p90, p99, avg}` of the per-data-point cost values (decimal strings): the percentiles computed with `percentile_cont` (linear-interpolation) semantics, plus the arithmetic mean (`avg`). `null` when there are no data points. Biased by the partial `tokens_v2` subset during backfill (the UI caption notes this). |
 | `cards.cost_distribution.covered_session_count` | int | Sessions with per-session cost data contributing data points. |
 | `cards.cost_distribution.total_session_count` | int | All filtered sessions in range (caption: "Covers N of M sessions with cost data"). |
 | `cards.cost_distribution.timed_out` | bool | `true` when the aggregation exceeded its budget and degraded to an empty card (same guardrail + PII-safe WARN as `cost_by_model`). |
