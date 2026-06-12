@@ -35,7 +35,7 @@ func IsKnownCardTableName(name string) bool {
 // Card version constants - increment when compute logic changes
 const (
 	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)
-	TokensV2CardVersion        = 2 // v2: per-model tree built for all providers (Claude/Codex, not just OpenCode) — 7eje
+	TokensV2CardVersion        = 3 // v3: <synthetic> excluded from the tree at compute time (xz6g)
 	SessionCardVersion         = 5 // v5: dedup assistant counts by message.id, non-exclusive breakdown
 	ToolsCardVersion           = 3 // v3: Codex spawn_agent/wait_agent excluded — surfaced via AgentsAndSkills (CF-443)
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
