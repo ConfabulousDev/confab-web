@@ -189,14 +189,16 @@ func TestGetTrends_CostDistribution_Percentiles(t *testing.T) {
 		t.Fatalf("GetTrends: %v", err)
 	}
 	card := resp.Cards.CostDistribution
-	if card.Percentiles == nil {
+	if card.Stats == nil {
 		t.Fatal("percentiles: got nil want values")
 	}
 	// sorted [0.005, 0.05, 0.50, 5.00, 50.00], n=5:
 	// p50 rank=2.0 → 0.50; p90 rank=3.6 → 5 + 0.6*45 = 32; p99 rank=3.96 → 5 + 0.96*45 = 48.2
-	cdDecEq(t, card.Percentiles.P50, "0.50")
-	cdDecEq(t, card.Percentiles.P90, "32.00")
-	cdDecEq(t, card.Percentiles.P99, "48.20")
+	// avg = 55.555 / 5 = 11.111
+	cdDecEq(t, card.Stats.P50, "0.50")
+	cdDecEq(t, card.Stats.P90, "32.00")
+	cdDecEq(t, card.Stats.P99, "48.20")
+	cdDecEq(t, card.Stats.Avg, "11.111")
 }
 
 // TestGetTrends_CostDistribution_ModelFilter: under ?model=opus-4-5 the unit

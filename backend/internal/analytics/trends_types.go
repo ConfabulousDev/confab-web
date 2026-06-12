@@ -268,7 +268,7 @@ type CostByModelRow struct {
 // TimedOut signals the same graceful degradation as Cost by Model.
 type TrendsCostDistributionCard struct {
 	Buckets             []CostDistributionBucket `json:"buckets"`
-	Percentiles         *CostPercentiles         `json:"percentiles"`
+	Stats               *CostDistributionStats   `json:"stats"`
 	CoveredSessionCount int                      `json:"covered_session_count"`
 	TotalSessionCount   int                      `json:"total_session_count"`
 	TimedOut            bool                     `json:"timed_out"`
@@ -288,13 +288,17 @@ type CostDistributionBucket struct {
 	TotalUSD     string   `json:"total_usd"`
 }
 
-// CostPercentiles holds the p50/p90/p99 of the per-data-point cost values, computed
-// with percentile_cont (linear interpolation) semantics in Go. Each is a decimal
-// string. Only present (non-nil on the card) when there is at least one data point.
-type CostPercentiles struct {
+// CostDistributionStats holds the summary statistics of the per-data-point cost
+// values: the p50/p90/p99 percentiles (percentile_cont / linear-interpolation
+// semantics) plus the arithmetic mean. Each is a decimal string, computed in one Go
+// pass. Only present (non-nil on the card) when there is at least one data point.
+// Named "stats" rather than "percentiles" because it also carries the (non-percentile) mean.
+type CostDistributionStats struct {
 	P50 string `json:"p50"`
 	P90 string `json:"p90"`
 	P99 string `json:"p99"`
+	// Avg is the arithmetic mean of the per-data-point cost values.
+	Avg string `json:"avg"`
 }
 
 // TopSessionItem represents a single session in the top sessions ranking.

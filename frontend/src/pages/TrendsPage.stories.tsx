@@ -237,7 +237,7 @@ const defaultMockData: TrendsResponse = {
         { label: '$1 – $10', lo: 1, hi: 10, session_count: 7, total_usd: '24.90' },
         { label: '$10 – $100', lo: 10, hi: 100, session_count: 2, total_usd: '38.20' },
       ],
-      percentiles: { p50: '0.42', p90: '3.80', p99: '18.60' },
+      stats: { p50: '0.42', p90: '3.80', p99: '18.60', avg: '2.10' },
       covered_session_count: 42,
       total_session_count: 42,
       timed_out: false,

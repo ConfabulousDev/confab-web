@@ -292,23 +292,25 @@ func buildCostDistribution(values []decimal.Decimal, covered, total int) *Trends
 
 	return &TrendsCostDistributionCard{
 		Buckets:             buckets,
-		Percentiles:         costDistributionPercentiles(sorted),
+		Stats:               costDistributionStats(sorted),
 		CoveredSessionCount: covered,
 		TotalSessionCount:   total,
 		TimedOut:            false,
 	}
 }
 
-// costDistributionPercentiles returns the p50/p90/p99 of the SORTED (ascending)
-// cost values, or nil when there are none.
-func costDistributionPercentiles(sorted []decimal.Decimal) *CostPercentiles {
+// costDistributionStats returns the p50/p90/p99 and arithmetic mean of the SORTED
+// (ascending) cost values, or nil when there are none. The mean is order-independent,
+// so the same sorted slice serves both.
+func costDistributionStats(sorted []decimal.Decimal) *CostDistributionStats {
 	if len(sorted) == 0 {
 		return nil
 	}
-	return &CostPercentiles{
+	return &CostDistributionStats{
 		P50: percentileCont(sorted, pctP50).String(),
 		P90: percentileCont(sorted, pctP90).String(),
 		P99: percentileCont(sorted, pctP99).String(),
+		Avg: decimal.Avg(sorted[0], sorted[1:]...).String(),
 	}
 }
 
