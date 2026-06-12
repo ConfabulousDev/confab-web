@@ -9,14 +9,15 @@ import type {
   TrendsCostDistributionBucket,
 } from '@/schemas/api';
 
-// Representative dynamic log10 bands (floor + decades up to $10–$100).
-const LABELS = ['< $0.01', '$0.01 – $0.10', '$0.10 – $1', '$1 – $10', '$10 – $100'];
+// Representative dynamic log10 bands — priced decades only ($0.01 up). Sub-cent
+// sessions are excluded at compute time (3tr4), so no '< $0.01' floor band arrives.
+const LABELS = ['$0.01 – $0.10', '$0.10 – $1', '$1 – $10', '$10 – $100'];
 
 function buckets(counts: number[], totals: string[]): TrendsCostDistributionBucket[] {
   return LABELS.map((label, i) => ({
     label,
-    lo: i,
-    hi: i < 4 ? i + 1 : null,
+    lo: i === 0 ? 0.01 : i,
+    hi: i < LABELS.length - 1 ? i + 1 : null,
     session_count: counts[i] ?? 0,
     total_usd: totals[i] ?? '0',
   }));
@@ -26,7 +27,7 @@ function makeData(
   overrides: Partial<TrendsCostDistributionCardData> = {},
 ): TrendsCostDistributionCardData {
   return {
-    buckets: buckets([1, 2, 3, 2, 1], ['0.005', '0.06', '1.50', '12.00', '50.00']),
+    buckets: buckets([2, 3, 2, 1], ['0.06', '1.50', '12.00', '50.00']),
     stats: { p50: '0.50', p90: '12.50', p99: '48.00', avg: '6.40' },
     covered_session_count: 9,
     total_session_count: 12,
@@ -132,14 +133,14 @@ describe('TrendsCostDistributionCard', () => {
     expect(screen.getByText('Sessions per cost band')).toBeInTheDocument();
   });
 
-  it('renders the coverage + backfill caption', () => {
+  it('renders the coverage + backfill caption scoped to priced sessions', () => {
     render(
       <TrendsCostDistributionCard
         data={makeData({ covered_session_count: 9, total_session_count: 12 })}
       />,
     );
     expect(
-      screen.getByText(/Covers 9 of 12 sessions with cost data; percentiles reflect this subset/i),
+      screen.getByText(/Covers 9 of 12 sessions priced ≥ \$0\.01; percentiles reflect this subset/i),
     ).toBeInTheDocument();
   });
 

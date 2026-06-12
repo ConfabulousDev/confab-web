@@ -33,21 +33,20 @@ const perSessionCostScanSQL = `
 	FROM filtered_sessions fs
 	JOIN session_card_tokens_v2 v ON v.session_id = fs.id`
 
-// Buckets are dynamic log10 decades: a fixed "< $0.01" catch-all (for $0 / tiny /
-// negative values that can't sit on a log axis) followed by one bucket per power
-// of 10, from $0.01 up to the decade that contains the most expensive data point
-// (y1w5). The low end is fixed so the axis is comparable across ranges; only the
-// top grows with the data, including any empty middle decades.
+// Buckets are dynamic log10 decades: one bucket per power of 10, from $0.01 up to
+// the decade that contains the most expensive data point (y1w5). The low end is
+// fixed so the axis is comparable across ranges; only the top grows with the data,
+// including any empty middle decades. Data points below $0.01 ($0 / tiny / negative
+// / unpriced) are EXCLUDED entirely — no floor band (3tr4).
 
-// costDistributionFloorEdge is the upper bound of the "< $0.01" catch-all band.
-var costDistributionFloorEdge = decimal.RequireFromString("0.01")
+// costDistributionMinCost is the inclusion threshold: data points below it are
+// excluded from the card (buckets, percentiles, and the covered count). It also
+// doubles as the lower edge of the first decade band.
+var costDistributionMinCost = decimal.RequireFromString("0.01")
 
-const (
-	costDistributionFloorLabel = "< $0.01"
-	// maxCostDecades caps the number of decades (~$10^13) — a defensive guard
-	// against an absurd/NaN maximum producing an unbounded bucket list.
-	maxCostDecades = 16
-)
+// maxCostDecades caps the number of decades (~$10^13) — a defensive guard against
+// an absurd/NaN maximum producing an unbounded bucket list.
+const maxCostDecades = 16
 
 // percentile points, as decimals so rank/frac arithmetic stays exact.
 var (
@@ -65,10 +64,10 @@ type costDistributionBand struct {
 
 // decadeEdges returns the power-of-10 boundaries [0.01, 0.10, 1, …, B] where B is
 // the smallest power of 10 strictly greater than max — so the last decade [.., B)
-// contains max. Returns just [0.01] when max < 0.01 (only the floor band is
-// needed). Capped at maxCostDecades decades.
+// contains max. Returns just [0.01] when max < 0.01 (no priced data → no bands).
+// Capped at maxCostDecades decades.
 func decadeEdges(max decimal.Decimal) []decimal.Decimal {
-	edges := []decimal.Decimal{costDistributionFloorEdge}
+	edges := []decimal.Decimal{costDistributionMinCost}
 	ten := decimal.NewFromInt(10)
 	for range maxCostDecades {
 		last := edges[len(edges)-1]
@@ -80,11 +79,11 @@ func decadeEdges(max decimal.Decimal) []decimal.Decimal {
 	return edges
 }
 
-// costDistributionBands resolves the bucket list (floor + one per decade) for the
-// given decade edges. Always includes the "< $0.01" floor band first.
+// costDistributionBands resolves the bucket list (one band per decade interval
+// [edges[i], edges[i+1])) for the given decade edges. There is no floor band, so
+// edges of length 1 ([0.01], i.e. no priced data) yields zero bands.
 func costDistributionBands(edges []decimal.Decimal) []costDistributionBand {
-	floorHi, _ := costDistributionFloorEdge.Float64()
-	bands := []costDistributionBand{{label: costDistributionFloorLabel, lo: 0, hi: floorHi}}
+	bands := make([]costDistributionBand, 0, len(edges)-1)
 	for i := 0; i+1 < len(edges); i++ {
 		lo, _ := edges[i].Float64()
 		hi, _ := edges[i+1].Float64()
@@ -117,18 +116,15 @@ func formatDecadeEdge(f float64) string {
 
 // costDistributionBucketIndex returns the band index for a cost value, given the
 // decade edges. Half-open [lo, hi): a value exactly on an edge belongs to the
-// HIGHER band; $0, tiny, and negative/unpriced values all fall in the floor band
-// (index 0).
+// HIGHER band. Callers pass only priced values (>= costDistributionMinCost); the
+// band list is parallel to the decade intervals, so the index maps directly.
 func costDistributionBucketIndex(v decimal.Decimal, edges []decimal.Decimal) int {
-	if v.LessThan(costDistributionFloorEdge) {
-		return 0
-	}
 	for i := 0; i+1 < len(edges); i++ {
 		if v.LessThan(edges[i+1]) {
-			return i + 1 // +1 to skip the floor band
+			return i
 		}
 	}
-	return len(edges) - 1 // top decade (edges top > max ≥ v, so normally unreached)
+	return len(edges) - 2 // top decade (edges top > max ≥ v, so normally unreached)
 }
 
 // aggregateCostDistribution builds the per-session cost histogram over the
@@ -170,8 +166,8 @@ func (s *Store) aggregateCostDistribution(ctx context.Context, tq trendsQuery, u
 }
 
 // costDistributionPerSessionValues fetches one total-cost scalar per filtered
-// session with v2 data (the no-filter path). covered = the sessions that carry a
-// data point.
+// session with v2 data (the no-filter path). covered = the sessions priced
+// >= costDistributionMinCost (sub-cent/$0 sessions are excluded from the card).
 func (s *Store) costDistributionPerSessionValues(ctx context.Context, tq trendsQuery) ([]decimal.Decimal, map[string]struct{}, error) {
 	rows, err := s.db.QueryContext(ctx, tq.cteSQL+perSessionCostScanSQL, tq.args...)
 	if err != nil {
@@ -191,7 +187,11 @@ func (s *Store) costDistributionPerSessionValues(ctx context.Context, tq trendsQ
 			cost = decimal.Zero
 		}
 		values = append(values, cost)
-		covered[sessionID] = struct{}{}
+		// A session is covered only if it is priced — sub-cent/$0 sessions are
+		// excluded from the histogram (buildCostDistribution drops their values too).
+		if cost.GreaterThanOrEqual(costDistributionMinCost) {
+			covered[sessionID] = struct{}{}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("cost-distribution per-session rows: %w", err)
@@ -202,8 +202,8 @@ func (s *Store) costDistributionPerSessionValues(ctx context.Context, tq trendsQ
 // costDistributionPerModelValues expands the v2 tree and folds cost per
 // (session, normalized-model), keeping only the rows whose normalized family is
 // in req.Models (the ?model= path). Each surviving (session, model) pair is one
-// data point. Synthetic turns are excluded. covered = the distinct sessions that
-// contributed a data point.
+// data point. Synthetic turns are excluded. covered = the distinct sessions with a
+// priced (>= costDistributionMinCost) pair — sub-cent pairs are excluded from the card.
 func (s *Store) costDistributionPerModelValues(ctx context.Context, tq trendsQuery, req TrendsRequest) ([]decimal.Decimal, map[string]struct{}, error) {
 	selected := make(map[string]struct{}, len(req.Models))
 	for _, m := range req.Models {
@@ -238,24 +238,39 @@ func (s *Store) costDistributionPerModelValues(ctx context.Context, tq trendsQue
 		}
 		k := pairKey{session: sessionID, model: norm}
 		pairCost[k] = pairCost[k].Add(cost)
-		covered[sessionID] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("cost-distribution per-model rows: %w", err)
 	}
 
+	// covered is decided on each pair's FINAL total: a session counts only if it has
+	// a priced pair (the sub-cent pairs are dropped from the histogram too).
 	values := make([]decimal.Decimal, 0, len(pairCost))
-	for _, c := range pairCost {
+	for k, c := range pairCost {
 		values = append(values, c)
+		if c.GreaterThanOrEqual(costDistributionMinCost) {
+			covered[k.session] = struct{}{}
+		}
 	}
 	return values, covered, nil
 }
 
 // buildCostDistribution folds per-data-point cost values into dynamic log10 bands
-// (a "< $0.01" floor plus one decade per power of 10 up to the band containing the
-// most expensive value) and computes percentiles. covered/total pass straight
-// through to the card's coverage caption.
+// (one decade per power of 10 up to the band containing the most expensive value)
+// and computes percentiles. Sub-cent values (< costDistributionMinCost) are excluded
+// entirely, so an all-sub-cent input yields no bands and nil stats. covered/total
+// pass straight through to the card's coverage caption.
 func buildCostDistribution(values []decimal.Decimal, covered, total int) *TrendsCostDistributionCard {
+	// Keep only priced data points; everything below $0.01 ($0 / tiny / negative /
+	// unpriced) is excluded from the buckets and percentiles alike.
+	priced := make([]decimal.Decimal, 0, len(values))
+	for _, v := range values {
+		if v.GreaterThanOrEqual(costDistributionMinCost) {
+			priced = append(priced, v)
+		}
+	}
+	values = priced
+
 	max := decimal.Zero
 	for _, v := range values {
 		if v.GreaterThan(max) {

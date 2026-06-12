@@ -7,8 +7,9 @@ import (
 )
 
 // Internal unit tests for the pure dynamic-bucketing + percentile helpers of the
-// Cost Distribution card (y1w5). No DB — these lock the log10 decade contract and
-// the percentile_cont interpolation semantics.
+// Cost Distribution card (y1w5). No DB — these lock the log10 decade contract, the
+// percentile_cont interpolation semantics, and the 3tr4 rule that sub-cent (< $0.01)
+// data points are EXCLUDED entirely (no floor band).
 
 func decs(t *testing.T, ss ...string) []decimal.Decimal {
 	t.Helper()
@@ -61,20 +62,32 @@ func eqStrings(a, b []string) bool {
 	return true
 }
 
-// TestBuildCostDistribution_FloorAndDecadesUpToMax: the bands are a "< $0.01"
-// floor plus one decade per power of 10 up to the band containing the max value.
-func TestBuildCostDistribution_FloorAndDecadesUpToMax(t *testing.T) {
-	// max = 50 → top decade [$10, $100).
-	values := decs(t, "0.005", "0.05", "0.50", "5.00", "50.00")
-	card := buildCostDistribution(values, 5, 5)
+func hasLabel(card *TrendsCostDistributionCard, label string) bool {
+	for _, l := range labelsOf(card) {
+		if l == label {
+			return true
+		}
+	}
+	return false
+}
 
-	want := []string{"< $0.01", "$0.01 – $0.10", "$0.10 – $1", "$1 – $10", "$10 – $100"}
+// TestBuildCostDistribution_DecadesUpToMax: the bands are one decade per power of 10
+// from $0.01 up to the band containing the max value. There is NO "< $0.01" floor
+// band, and the sub-cent value ($0.005) is excluded entirely.
+func TestBuildCostDistribution_DecadesUpToMax(t *testing.T) {
+	// max = 50 → top decade [$10, $100). The 0.005 value is dropped.
+	values := decs(t, "0.005", "0.05", "0.50", "5.00", "50.00")
+	card := buildCostDistribution(values, 4, 4)
+
+	want := []string{"$0.01 – $0.10", "$0.10 – $1", "$1 – $10", "$10 – $100"}
 	if !eqStrings(labelsOf(card), want) {
 		t.Fatalf("labels: got %v want %v", labelsOf(card), want)
 	}
-	// Each value lands in its own band.
+	if hasLabel(card, "< $0.01") {
+		t.Fatal("floor band '< $0.01' must not be present")
+	}
+	// Each priced value lands in its own band; the sub-cent value contributes nowhere.
 	for label, total := range map[string]string{
-		"< $0.01":       "0.005",
 		"$0.01 – $0.10": "0.05",
 		"$0.10 – $1":    "0.50",
 		"$1 – $10":      "5.00",
@@ -88,14 +101,14 @@ func TestBuildCostDistribution_FloorAndDecadesUpToMax(t *testing.T) {
 	}
 }
 
-// TestBuildCostDistribution_GrowsToLargeMax: a multi-million-dollar value extends
-// the bands all the way up, compact-labelled, with empty middle decades included.
+// TestBuildCostDistribution_GrowsToLargeMax: a multi-million-dollar value extends the
+// bands all the way up, compact-labelled, with empty middle decades included — still
+// no floor band.
 func TestBuildCostDistribution_GrowsToLargeMax(t *testing.T) {
 	values := decs(t, "0.20", "2000000.00") // $0.20 and $2M
 	card := buildCostDistribution(values, 2, 2)
 
 	want := []string{
-		"< $0.01",
 		"$0.01 – $0.10",
 		"$0.10 – $1",
 		"$1 – $10",
@@ -121,16 +134,19 @@ func TestBuildCostDistribution_GrowsToLargeMax(t *testing.T) {
 	}
 }
 
-// TestBuildCostDistribution_BoundariesAreHalfOpen pins the half-open [lo, hi)
-// rule: a value exactly on a decade edge belongs to the HIGHER band.
+// TestBuildCostDistribution_BoundariesAreHalfOpen pins the half-open [lo, hi) rule: a
+// value exactly on a decade edge belongs to the HIGHER band, $0.01 is included (it is
+// NOT < $0.01), and a sub-cent value just under the threshold is excluded.
 func TestBuildCostDistribution_BoundariesAreHalfOpen(t *testing.T) {
-	// max = 10 → top decade [$10, $100). Values sit exactly on edges.
-	values := decs(t, "0.01", "0.10", "1.00", "10.00")
+	// max = 10 → top decade [$10, $100). Values sit exactly on edges; 0.009 is dropped.
+	values := decs(t, "0.009", "0.01", "0.10", "1.00", "10.00")
 	card := buildCostDistribution(values, 4, 4)
 
+	if hasLabel(card, "< $0.01") {
+		t.Fatal("floor band '< $0.01' must not be present")
+	}
 	wantCounts := map[string]int{
-		"< $0.01":       0, // 0.01 is NOT < 0.01
-		"$0.01 – $0.10": 1, // 0.01
+		"$0.01 – $0.10": 1, // 0.01 (0.009 excluded)
 		"$0.10 – $1":    1, // 0.10
 		"$1 – $10":      1, // 1.00
 		"$10 – $100":    1, // 10.00
@@ -142,44 +158,64 @@ func TestBuildCostDistribution_BoundariesAreHalfOpen(t *testing.T) {
 	}
 }
 
-// TestBuildCostDistribution_AllSubCentOnlyFloor: when nothing reaches $0.01 the
-// only band is the floor catch-all (incl. $0 and negatives).
-func TestBuildCostDistribution_AllSubCentOnlyFloor(t *testing.T) {
-	values := decs(t, "-1.00", "0.00", "0.005")
-	card := buildCostDistribution(values, 3, 3)
+// TestBuildCostDistribution_ExcludesSubCent: $0, negative, and sub-cent values are
+// dropped from the buckets, totals, and percentiles entirely — only >= $0.01 counts.
+func TestBuildCostDistribution_ExcludesSubCent(t *testing.T) {
+	values := decs(t, "-1.00", "0.00", "0.005", "0.009", "0.05", "50.00")
+	card := buildCostDistribution(values, 2, 2)
 
-	if want := []string{"< $0.01"}; !eqStrings(labelsOf(card), want) {
+	want := []string{"$0.01 – $0.10", "$0.10 – $1", "$1 – $10", "$10 – $100"}
+	if !eqStrings(labelsOf(card), want) {
 		t.Fatalf("labels: got %v want %v", labelsOf(card), want)
 	}
-	if card.Buckets[0].SessionCount != 3 {
-		t.Errorf("floor count: got %d want 3", card.Buckets[0].SessionCount)
+	// Only the two priced values survive.
+	if b := bucketByLabelI(t, card, "$0.01 – $0.10"); b.SessionCount != 1 {
+		t.Errorf("$0.01–$0.10 count: got %d want 1", b.SessionCount)
+	}
+	if b := bucketByLabelI(t, card, "$10 – $100"); b.SessionCount != 1 {
+		t.Errorf("$10–$100 count: got %d want 1", b.SessionCount)
+	}
+	// Percentiles run over [0.05, 50.00] only — the excluded values don't drag them down.
+	if card.Stats == nil {
+		t.Fatal("stats: got nil want values over the priced subset")
+	}
+	decEqual(t, card.Stats.P50, "25.025") // mean-rank of two values: 0.05 + 0.5*(50-0.05)
+	decEqual(t, card.Stats.Avg, "25.025") // (0.05 + 50.00) / 2
+}
+
+// TestBuildCostDistribution_AllSubCent: when nothing reaches $0.01 there are NO bands
+// at all and percentiles are nil — the whole population was excluded.
+func TestBuildCostDistribution_AllSubCent(t *testing.T) {
+	values := decs(t, "-1.00", "0.00", "0.005")
+	card := buildCostDistribution(values, 0, 3)
+
+	if len(card.Buckets) != 0 {
+		t.Fatalf("buckets: got %v want none (all sub-cent)", labelsOf(card))
+	}
+	if card.Stats != nil {
+		t.Errorf("stats: got %+v want nil (all sub-cent)", card.Stats)
 	}
 }
 
-// TestBuildCostDistribution_EmptyInput: no data points → just the floor band with
-// count 0 and nil percentiles. (The card renders nothing when covered=0; this only
-// guards the shape.)
+// TestBuildCostDistribution_EmptyInput: no data points → no bands and nil percentiles.
+// (The card renders nothing when covered=0; this only guards the shape.)
 func TestBuildCostDistribution_EmptyInput(t *testing.T) {
 	card := buildCostDistribution(nil, 0, 0)
-	if want := []string{"< $0.01"}; !eqStrings(labelsOf(card), want) {
-		t.Fatalf("labels: got %v want %v", labelsOf(card), want)
+	if len(card.Buckets) != 0 {
+		t.Fatalf("buckets: got %v want none for empty input", labelsOf(card))
 	}
-	if card.Buckets[0].SessionCount != 0 {
-		t.Errorf("floor count: got %d want 0", card.Buckets[0].SessionCount)
-	}
-	decEqual(t, card.Buckets[0].TotalUSD, "0")
 	if card.Stats != nil {
-		t.Errorf("percentiles: got %+v want nil for empty input", card.Stats)
+		t.Errorf("stats: got %+v want nil for empty input", card.Stats)
 	}
 }
 
-// TestBuildCostDistribution_BandEdges checks the numeric lo/hi edges on a couple
-// of bands (floor and a decade), incl. the top band being bounded (non-nil hi).
+// TestBuildCostDistribution_BandEdges checks the numeric lo/hi edges: the FIRST band is
+// the $0.01–$0.10 decade (lo 0.01, not a 0-floor), and the top band is bounded.
 func TestBuildCostDistribution_BandEdges(t *testing.T) {
 	card := buildCostDistribution(decs(t, "5.00"), 1, 1) // max 5 → top [$1,$10)
-	floor := bucketByLabelI(t, card, "< $0.01")
-	if floor.Lo != 0 || floor.Hi == nil || *floor.Hi != 0.01 {
-		t.Errorf("floor edges: lo=%v hi=%v want lo=0 hi=0.01", floor.Lo, floor.Hi)
+	first := bucketByLabelI(t, card, "$0.01 – $0.10")
+	if first.Lo != 0.01 || first.Hi == nil || *first.Hi != 0.10 {
+		t.Errorf("first band edges: lo=%v hi=%v want lo=0.01 hi=0.10", first.Lo, first.Hi)
 	}
 	top := bucketByLabelI(t, card, "$1 – $10")
 	if top.Lo != 1 || top.Hi == nil || *top.Hi != 10 {
@@ -187,8 +223,9 @@ func TestBuildCostDistribution_BandEdges(t *testing.T) {
 	}
 }
 
-// TestCostDistributionPercentiles locks the percentile_cont (linear
-// interpolation) semantics over a SORTED slice.
+// TestCostDistributionPercentiles locks the percentile_cont (linear interpolation)
+// semantics over a SORTED slice. (costDistributionStats is a pure calc over its input;
+// sub-cent exclusion happens upstream in buildCostDistribution.)
 func TestCostDistributionPercentiles(t *testing.T) {
 	t.Run("empty is nil", func(t *testing.T) {
 		if got := costDistributionStats(nil); got != nil {
@@ -235,10 +272,11 @@ func TestCostDistributionPercentiles(t *testing.T) {
 	})
 }
 
-// TestBuildCostDistribution_PercentilesOverUnsortedInput: buildCostDistribution
-// sorts internally before computing percentiles.
-func TestBuildCostDistribution_PercentilesOverUnsortedInput(t *testing.T) {
-	values := decs(t, "0.50", "0.10", "0.40", "0.20", "0.30") // unsorted
+// TestBuildCostDistribution_PercentilesExcludeSubCent: buildCostDistribution sorts and
+// drops sub-cent values before computing percentiles, so a leading $0.005 doesn't shift
+// the result versus the priced-only set.
+func TestBuildCostDistribution_PercentilesExcludeSubCent(t *testing.T) {
+	values := decs(t, "0.005", "0.50", "0.10", "0.40", "0.20", "0.30") // unsorted + one sub-cent
 	card := buildCostDistribution(values, 5, 5)
 	if card.Stats == nil {
 		t.Fatal("percentiles: got nil want p50/p90/p99")
@@ -246,5 +284,5 @@ func TestBuildCostDistribution_PercentilesOverUnsortedInput(t *testing.T) {
 	decEqual(t, card.Stats.P50, "0.30")
 	decEqual(t, card.Stats.P90, "0.46")
 	decEqual(t, card.Stats.P99, "0.496")
-	decEqual(t, card.Stats.Avg, "0.30") // 1.50 / 5
+	decEqual(t, card.Stats.Avg, "0.30") // 1.50 / 5 priced values
 }

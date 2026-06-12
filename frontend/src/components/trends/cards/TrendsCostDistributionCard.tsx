@@ -231,10 +231,11 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
           </ResponsiveContainer>
         </div>
 
-        {/* Coverage caption — NOT a reconciliation line. Percentiles reflect the
-            partial v2 subset during backfill. */}
+        {/* Coverage caption — NOT a reconciliation line. Sub-cent sessions are
+            excluded, so the covered count is sessions priced ≥ $0.01; percentiles
+            reflect that priced subset (also partial vs v2 during backfill). */}
         <p className={styles.caption}>
-          Covers {data.covered_session_count} of {data.total_session_count} sessions with cost data;
+          Covers {data.covered_session_count} of {data.total_session_count} sessions priced ≥ $0.01;
           percentiles reflect this subset.
         </p>
       </TrendsCard>
