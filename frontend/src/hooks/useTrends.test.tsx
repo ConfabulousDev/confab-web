@@ -26,6 +26,7 @@ function makeResponse(overrides: Partial<TrendsResponse> = {}): TrendsResponse {
       agents_and_skills: null,
       top_sessions: null,
       cost_by_model: null,
+      cost_distribution: null,
     },
     ...overrides,
   };

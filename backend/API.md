@@ -570,6 +570,19 @@ Returns aggregated analytics across sessions **visible to the authenticated user
       "covered_session_count": 38,
       "total_session_count": 42,
       "timed_out": false
+    },
+    "cost_distribution": {
+      "buckets": [
+        { "label": "< $0.01", "lo": 0, "hi": 0.01, "session_count": 5, "total_usd": "0.03" },
+        { "label": "$0.01 – $0.10", "lo": 0.01, "hi": 0.1, "session_count": 12, "total_usd": "0.68" },
+        { "label": "$0.10 – $1", "lo": 0.1, "hi": 1, "session_count": 16, "total_usd": "7.40" },
+        { "label": "$1 – $10", "lo": 1, "hi": 10, "session_count": 7, "total_usd": "24.90" },
+        { "label": "$10 – $100", "lo": 10, "hi": 100, "session_count": 2, "total_usd": "38.20" }
+      ],
+      "percentiles": { "p50": "0.42", "p90": "3.80", "p99": "18.60" },
+      "covered_session_count": 42,
+      "total_session_count": 42,
+      "timed_out": false
     }
   },
   "filter_options": {
@@ -620,6 +633,12 @@ Returns aggregated analytics across sessions **visible to the authenticated user
 | `cards.cost_by_model.covered_session_count` | int | Sessions with per-model v2 data contributing to the rows. |
 | `cards.cost_by_model.total_session_count` | int | All filtered sessions in range (the caption reads "Covers N of M sessions with per-model data"). |
 | `cards.cost_by_model.timed_out` | bool | `true` when the aggregation exceeded its dedicated budget (4s, under the 5s request budget) and degraded to an empty card — the rest of the response still succeeds, and the server logs a PII-safe WARN with the request shape for upstream debugging. |
+| `cards.cost_distribution` | object\|null | Log-scale histogram of per-session cost + p50/p90/p99 percentiles over the filtered, visible sessions that carry `tokens_v2` data (y1w5). `null` only on backends predating this card. By default each data point is one session's total cost (`tokens_v2.total_cost_usd`); when `?model=` is active the unit becomes per-(session, selected-model) — each (session, model) pair is one data point and only the selected model's cost counts (the UI flags this with a ⓘ caveat). Same partial-coverage / timeout-degradation conventions as `cost_by_model`. |
+| `cards.cost_distribution.buckets[]` | array | **Dynamic log10 bands**, low→high: a fixed `"< $0.01"` catch-all (captures `$0`/tiny/negative values that can't sit on a log axis) followed by one band per power of 10, from `$0.01` up to the band containing the most expensive data point — so the top grows with the data (e.g. a `$2M` session yields a `"$1M – $10M"` top band) while empty middle decades are still emitted. Each band: `label` (display string, render verbatim — large edges abbreviated e.g. `"$1K – $10K"`), `lo`/`hi` (dollar edges, half-open `[lo, hi)`; `hi` is the bounded top decade), `session_count` (data-point count — sessions, or (session,model) pairs under `?model=`), `total_usd` (decimal-string sum across the band). |
+| `cards.cost_distribution.percentiles` | object\|null | `{p50, p90, p99}` of the per-data-point cost values (decimal strings), computed with `percentile_cont` (linear-interpolation) semantics. `null` when there are no data points. Biased by the partial `tokens_v2` subset during backfill (the UI caption notes this). |
+| `cards.cost_distribution.covered_session_count` | int | Sessions with per-session cost data contributing data points. |
+| `cards.cost_distribution.total_session_count` | int | All filtered sessions in range (caption: "Covers N of M sessions with cost data"). |
+| `cards.cost_distribution.timed_out` | bool | `true` when the aggregation exceeded its budget and degraded to an empty card (same guardrail + PII-safe WARN as `cost_by_model`). |
 | `filter_options.owners` | string[] | Lowercased owner emails from the caller's visible-session set, alphabetical. **Static across active filters** — mirrors `SessionFilterOptions` shape on `/api/v1/sessions`. Drives the owner dropdown on TrendsPage without a side-call. CF-495. |
 | `filter_options.repos` | string[] | Repo names (`owner/name`) from the caller's visible-session set, alphabetical. Fork→upstream collapsed via `db.RepoRootExpr`, resolved live per session from its own `git_info` (CF-510). Static across active filters. CF-495. |
 | `filter_options.models` | string[] | Distinct normalized model-family keys (family + `"· fast"` variants) across the caller's visible sessions, alphabetical, excluding the empty Unknown key. Static across active filters; sources the model dropdown. May be empty/sparse until the `tokens_v2` backfill (`POST /cards/invalidate` + precompute) completes. 2hh1. |

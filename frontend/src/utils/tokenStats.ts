@@ -184,6 +184,18 @@ export function formatCost(cost: number): string {
 }
 
 /**
+ * Compact cost for tight spots (e.g. histogram bar labels that can reach into the
+ * millions). Below $1,000 it matches formatCost exactly ('$12.50', '<$0.01');
+ * above it abbreviates: '$1.2K', '$3.4M', '$1.0B'.
+ */
+export function formatCostCompact(cost: number): string {
+  if (cost >= 1_000_000_000) return `$${(cost / 1_000_000_000).toFixed(1)}B`;
+  if (cost >= 1_000_000) return `$${(cost / 1_000_000).toFixed(1)}M`;
+  if (cost >= 1_000) return `$${(cost / 1_000).toFixed(1)}K`;
+  return formatCost(cost);
+}
+
+/**
  * Format token count for display. 500 → '500', 1500 → '1.5k', 1_500_000 → '1.5M'.
  */
 export function formatTokenCount(count: number): string {

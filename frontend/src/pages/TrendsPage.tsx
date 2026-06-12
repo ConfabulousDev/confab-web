@@ -15,6 +15,7 @@ import {
   TrendsAgentsAndSkillsCard,
   TrendsTopSessionsCard,
   TrendsCostByModelCard,
+  TrendsCostDistributionCard,
 } from '@/components/trends/cards';
 import Alert from '@/components/Alert';
 import CardGrid from '@/components/CardGrid';
@@ -163,6 +164,10 @@ function TrendsPage() {
               />
               <TrendsTokensCard data={data.cards.tokens} modelFilterActive={modelFilterActive} />
               <TrendsCostByModelCard data={data.cards.cost_by_model} />
+              <TrendsCostDistributionCard
+                data={data.cards.cost_distribution}
+                modelFilterActive={modelFilterActive}
+              />
               <TrendsTopSessionsCard
                 data={data.cards.top_sessions}
                 topN={Number(filters.topN)}
