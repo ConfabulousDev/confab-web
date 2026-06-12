@@ -78,3 +78,4 @@ OpenCode is **live-sync only** — it's captured automatically while you work, s
 - `--backend-url` — passed to commands that hit the backend (`setup`, `login`, `save`, `retro`, `session ...`). When omitted, the CLI uses the URL stored in `~/.confab/config.json` from the last `setup` / `login`.
 - `--api-key` — bypass the device-login flow for `setup` / `login`.
 - `--provider <claude-code|codex|opencode>` — disambiguate which provider a command targets. Defaults vary per command, and `confab list` and `save` cover Claude Code and Codex only — OpenCode is live-sync only. These commands route through the provider interface so adding a new provider doesn't require changes here.
+- `--config-dir <dir>` — on `setup`, install into a non-default provider config dir and bind it to the given backend rather than the global default. Requires `--provider`. See [Multiple backends](/providers/claude-code/#multiple-backends).
