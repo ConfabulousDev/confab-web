@@ -1,12 +1,56 @@
 package analytics
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/shopspring/decimal"
 )
+
+// parityFixturePath locates the repo-root testdata fixture from this package
+// directory (backend/internal/analytics → repo root is three levels up).
+var parityFixturePath = filepath.Join("..", "..", "..", "testdata", "model_family_parity.json")
+
+// modelFamilyParityCase mirrors one entry of testdata/model_family_parity.json.
+type modelFamilyParityCase struct {
+	Provider string `json:"provider"`
+	ID       string `json:"id"`
+	Backend  string `json:"backend"`
+	Frontend string `json:"frontend"`
+}
+
+// TestGetModelFamily_Parity loads the shared cross-language fixture (also loaded
+// by the frontend's tokenStats.test.ts) and asserts this side's getModelFamily
+// returns the pinned `backend` family key for every id. Together with the
+// frontend test it guards against the two normalizers silently drifting apart
+// (nrxr / 5x6e F7). The fixture is provider-agnostic on this side: backend
+// getModelFamily sniffs the `gpt-` prefix itself and ignores the provider field.
+func TestGetModelFamily_Parity(t *testing.T) {
+	raw, err := os.ReadFile(parityFixturePath)
+	if err != nil {
+		t.Fatalf("read parity fixture %s: %v", parityFixturePath, err)
+	}
+	var fixture struct {
+		Cases []modelFamilyParityCase `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatalf("parse parity fixture: %v", err)
+	}
+	if len(fixture.Cases) == 0 {
+		t.Fatal("parity fixture has no cases")
+	}
+	for _, c := range fixture.Cases {
+		t.Run(c.ID, func(t *testing.T) {
+			if got := getModelFamily(c.ID); got != c.Backend {
+				t.Errorf("getModelFamily(%q) = %q, want %q (parity fixture `backend`)", c.ID, got, c.Backend)
+			}
+		})
+	}
+}
 
 func TestGetModelFamily(t *testing.T) {
 	tests := []struct {
