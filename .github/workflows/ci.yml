@@ -92,12 +92,38 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.4"
           cache-dependency-path: backend/go.sum
 
       - name: Unit tests
         working-directory: backend
         run: go test -short -timeout 15m ./...
+
+  govulncheck:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+          cache-dependency-path: backend/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      # Scan only the production binary's import graph. Test-only dependencies
+      # (e.g. testcontainers' Moby chain) are excluded, so unfixed test-only
+      # advisories don't block the gate; real vulns in shipped code do.
+      - name: Run govulncheck
+        working-directory: backend
+        run: govulncheck ./cmd/server
 
   discover-packages:
     needs: changes
@@ -113,7 +139,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.4"
           cache-dependency-path: backend/go.sum
 
       - name: Discover testable packages
@@ -147,7 +173,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.3"
+          go-version: "1.26.4"
           cache-dependency-path: backend/go.sum
 
       - name: Integration tests
@@ -202,7 +228,7 @@ jobs:
 
   ci-summary:
     if: always()
-    needs: [changes, frontend, backend-unit, discover-packages, backend-integration, docker-smoke-test]
+    needs: [changes, frontend, backend-unit, govulncheck, discover-packages, backend-integration, docker-smoke-test]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
@@ -223,6 +249,7 @@ jobs:
           check "changes" "${{ needs.changes.result }}"
           check "frontend" "${{ needs.frontend.result }}"
           check "backend-unit" "${{ needs.backend-unit.result }}"
+          check "govulncheck" "${{ needs.govulncheck.result }}"
           check "discover-packages" "${{ needs.discover-packages.result }}"
           check "backend-integration" "${{ needs.backend-integration.result }}"
           check "docker-smoke-test" "${{ needs.docker-smoke-test.result }}"
