@@ -94,12 +94,12 @@ func (s *Store) orgUserAggregates(ctx context.Context, req OrgAnalyticsRequest, 
 		LEFT JOIN LATERAL (
 			SELECT
 				s.id as session_id,
-				t.estimated_cost_usd::numeric as cost,
+				COALESCE(` + db.V2TotalCostExpr("v") + `, '0')::numeric as cost,
 				COALESCE(sess.duration_ms, 0) as duration_ms,
 				cv.total_assistant_duration_ms as assistant_time_ms,
 				cv.total_user_duration_ms as user_time_ms
 			FROM sessions s
-			INNER JOIN session_card_tokens t ON s.id = t.session_id
+			INNER JOIN session_card_tokens_v2 v ON s.id = v.session_id
 			INNER JOIN session_card_conversation cv ON s.id = cv.session_id
 			LEFT JOIN session_card_session sess ON s.id = sess.session_id
 			WHERE s.user_id = u.id
@@ -197,7 +197,7 @@ func (s *Store) orgProvidersPresent(ctx context.Context, req OrgAnalyticsRequest
 	query := `
 		SELECT DISTINCT s.session_type
 		FROM sessions s
-		INNER JOIN session_card_tokens t ON s.id = t.session_id
+		INNER JOIN session_card_tokens_v2 v ON s.id = v.session_id
 		INNER JOIN session_card_conversation cv ON s.id = cv.session_id
 		INNER JOIN users u ON s.user_id = u.id AND u.status = 'active'
 		WHERE s.first_seen >= to_timestamp($1)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -691,23 +692,26 @@ func normalizeTopN(limit int) int {
 // constant, so formatting it directly into the SQL is injection-safe and — unlike
 // appending a bind arg — keeps the parallel-shared tq.args slice untouched.
 func (s *Store) aggregateTopSessions(ctx context.Context, tq trendsQuery, limit int) (*TrendsTopSessionsCard, error) {
-	query := tq.cteSQL + fmt.Sprintf(`
+	// Cost is sourced from the tokens_v2 card (37cg). The JSONB scalar is text,
+	// so it casts to numeric for the >0 filter and the descending rank, and is
+	// projected raw for the scan (parsed into a decimal below).
+	costExpr := db.V2TotalCostExpr("v")
+	query := tq.cteSQL + `
 		SELECT
 			fs.id,
 			s.external_id,
 			fs.session_type,
 			COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message) AS title,
 			NULLIF(regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1'), '') AS git_repo,
-			t.estimated_cost_usd,
+			` + costExpr + `,
 			sess.duration_ms
 		FROM filtered_sessions fs
 		JOIN sessions s ON fs.id = s.id
-		INNER JOIN session_card_tokens t ON fs.id = t.session_id
+		INNER JOIN session_card_tokens_v2 v ON fs.id = v.session_id
 		LEFT JOIN session_card_session sess ON fs.id = sess.session_id
-		WHERE t.estimated_cost_usd > 0
-		ORDER BY t.estimated_cost_usd DESC
-		LIMIT %d
-	`, normalizeTopN(limit))
+		WHERE (` + costExpr + `)::numeric > 0
+		ORDER BY (` + costExpr + `)::numeric DESC
+		LIMIT ` + strconv.Itoa(normalizeTopN(limit))
 
 	rows, err := s.db.QueryContext(ctx, query, tq.args...)
 	if err != nil {

@@ -155,6 +155,7 @@ func seedOrgSession(t *testing.T, env *testutil.TestEnvironment, userID int64, e
 			UpToLine:         100,
 			EstimatedCostUSD: decimal.NewFromFloat(costUSD),
 		},
+		TokensV2: v2CostCard(sessionID, costUSD),
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID:                sessionID,
 			Version:                  analytics.ConversationCardVersion,
@@ -166,6 +167,23 @@ func seedOrgSession(t *testing.T, env *testutil.TestEnvironment, userID int64, e
 	})
 	if err != nil {
 		t.Fatalf("UpsertCards (%s): %v", sessionID, err)
+	}
+}
+
+// v2CostCard builds a minimal tokens_v2 card carrying just the per-session total
+// cost. 37cg migrated org analytics cost + provider-presence reads onto
+// session_card_tokens_v2, so these wire tests must seed a v2 card for a session
+// to be counted.
+func v2CostCard(sessionID string, costUSD float64) *analytics.TokensV2CardRecord {
+	return &analytics.TokensV2CardRecord{
+		SessionID:  sessionID,
+		Version:    analytics.TokensV2CardVersion,
+		ComputedAt: time.Now().UTC(),
+		UpToLine:   100,
+		Data: analytics.TokensV2Data{
+			TotalCostUSD: decimal.NewFromFloat(costUSD).String(),
+			ByProvider:   map[string]analytics.TokensV2Provider{},
+		},
 	}
 }
 
@@ -361,6 +379,7 @@ func TestOrgAnalytics_HTTP_EmptyReposEqualsAllRepos(t *testing.T) {
 				UpToLine:         100,
 				EstimatedCostUSD: decimal.NewFromFloat(cost),
 			},
+			TokensV2: v2CostCard(sid, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,
 				Version:                  analytics.ConversationCardVersion,

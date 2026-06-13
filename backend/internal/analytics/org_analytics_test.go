@@ -94,6 +94,7 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 				OutputTokens:     500,
 				EstimatedCostUSD: decimal.NewFromFloat(cost),
 			},
+			TokensV2: v2CostCard(sessionID, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sessionID,
 				Version:                  analytics.ConversationCardVersion,
@@ -190,6 +191,88 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 	}
 }
 
+// TestGetOrgAnalytics_ReadsV2Cost pins 37cg: org analytics sources per-user cost
+// and provider presence from session_card_tokens_v2, not the flat v1 table. A
+// session with a v2 card (plus the required conversation card) is counted with
+// its v2 cost; a session carrying only a flat v1 card is excluded entirely —
+// proving both the cost SUM and the providers-present existence join read v2.
+func TestGetOrgAnalytics_ReadsV2Cost(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+	user := testutil.CreateTestUser(t, env, "v2org@test.com", "V2 Org User")
+
+	withV2 := testutil.CreateTestSession(t, env, user.ID, "with-v2")
+	v1Only := testutil.CreateTestSession(t, env, user.ID, "v1-only-org")
+
+	now := time.Now().UTC()
+	claudeMs := int64(10000)
+	userMs := int64(20000)
+	conversation := func(sessionID string) *analytics.ConversationCardRecord {
+		return &analytics.ConversationCardRecord{
+			SessionID:                sessionID,
+			Version:                  analytics.ConversationCardVersion,
+			ComputedAt:               now,
+			UpToLine:                 100,
+			TotalAssistantDurationMs: &claudeMs,
+			TotalUserDurationMs:      &userMs,
+		}
+	}
+
+	// with-v2: v2 cost + conversation → counted, cost sourced from v2.
+	if err := store.UpsertCards(ctx, &analytics.Cards{
+		TokensV2:     v2CostCard(withV2, 2.50),
+		Conversation: conversation(withV2),
+	}); err != nil {
+		t.Fatalf("UpsertCards (with-v2) failed: %v", err)
+	}
+
+	// v1-only-org: flat v1 tokens + conversation but NO v2 → excluded by the
+	// INNER JOIN onto session_card_tokens_v2 (its $7.00 must never be summed).
+	if err := store.UpsertCards(ctx, &analytics.Cards{
+		Tokens: &analytics.TokensCardRecord{
+			SessionID:        v1Only,
+			Version:          analytics.TokensCardVersion,
+			ComputedAt:       now,
+			UpToLine:         100,
+			EstimatedCostUSD: decimal.NewFromFloat(7.00),
+		},
+		Conversation: conversation(v1Only),
+	}); err != nil {
+		t.Fatalf("UpsertCards (v1-only-org) failed: %v", err)
+	}
+
+	req := analytics.OrgAnalyticsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		IncludeNoRepo: true,
+	}
+	response, err := store.GetOrgAnalytics(ctx, req)
+	if err != nil {
+		t.Fatalf("GetOrgAnalytics failed: %v", err)
+	}
+
+	if len(response.Users) != 1 {
+		t.Fatalf("Users length = %d, want 1", len(response.Users))
+	}
+	u := response.Users[0]
+	if u.SessionCount != 1 {
+		t.Errorf("SessionCount = %d, want 1 (v1-only session excluded by v2 join)", u.SessionCount)
+	}
+	if u.TotalCostUSD != "2.50" {
+		t.Errorf("TotalCostUSD = %s, want 2.50 (from v2, not the v1 $7.00)", u.TotalCostUSD)
+	}
+	if len(response.ProvidersPresent) != 1 || response.ProvidersPresent[0] != "claude-code" {
+		t.Errorf("ProvidersPresent = %v, want [claude-code] (only the v2-carrying session)", response.ProvidersPresent)
+	}
+}
+
 func TestGetOrgAnalytics_DateRangeFiltering(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -216,6 +299,7 @@ func TestGetOrgAnalytics_DateRangeFiltering(t *testing.T) {
 			UpToLine:         100,
 			EstimatedCostUSD: decimal.NewFromFloat(1.00),
 		},
+		TokensV2: v2CostCard(sid, 1.00),
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID:                sid,
 			Version:                  analytics.ConversationCardVersion,
@@ -299,6 +383,7 @@ func TestGetOrgAnalytics_DeactivatedUsersExcluded(t *testing.T) {
 				UpToLine:         100,
 				EstimatedCostUSD: decimal.NewFromFloat(1.00),
 			},
+			TokensV2: v2CostCard(sid, 1.00),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,
 				Version:                  analytics.ConversationCardVersion,
@@ -355,7 +440,7 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 	claudeMs := int64(10000)
 	userMs := int64(20000)
 
-	// Session 1: both cards
+	// Session 1: both the cost (v2) and conversation cards → counted.
 	err := store.UpsertCards(ctx, &analytics.Cards{
 		Tokens: &analytics.TokensCardRecord{
 			SessionID:        sid1,
@@ -364,6 +449,7 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 			UpToLine:         100,
 			EstimatedCostUSD: decimal.NewFromFloat(1.00),
 		},
+		TokensV2: v2CostCard(sid1, 1.00),
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID:                sid1,
 			Version:                  analytics.ConversationCardVersion,
@@ -377,7 +463,7 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 		t.Fatalf("UpsertCards for session 1 failed: %v", err)
 	}
 
-	// Session 2: only tokens card
+	// Session 2: cost cards but no conversation card → excluded.
 	err = store.UpsertCards(ctx, &analytics.Cards{
 		Tokens: &analytics.TokensCardRecord{
 			SessionID:        sid2,
@@ -386,6 +472,7 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 			UpToLine:         100,
 			EstimatedCostUSD: decimal.NewFromFloat(5.00),
 		},
+		TokensV2: v2CostCard(sid2, 5.00),
 	})
 	if err != nil {
 		t.Fatalf("UpsertCards for session 2 failed: %v", err)
@@ -450,6 +537,7 @@ func TestGetOrgAnalytics_ProviderFilter(t *testing.T) {
 				UpToLine:         100,
 				EstimatedCostUSD: decimal.NewFromFloat(cost),
 			},
+			TokensV2: v2CostCard(sessionID, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sessionID,
 				Version:                  analytics.ConversationCardVersion,
@@ -571,6 +659,7 @@ func TestGetOrgAnalytics_RepoFilter(t *testing.T) {
 				UpToLine:         100,
 				EstimatedCostUSD: decimal.NewFromFloat(cost),
 			},
+			TokensV2: v2CostCard(sessionID, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sessionID,
 				Version:                  analytics.ConversationCardVersion,
@@ -710,6 +799,7 @@ func TestGetOrgAnalytics_RepoAndProviderCoFilter(t *testing.T) {
 				UpToLine:         100,
 				EstimatedCostUSD: decimal.NewFromFloat(s.cost),
 			},
+			TokensV2: v2CostCard(sid, s.cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,
 				Version:                  analytics.ConversationCardVersion,

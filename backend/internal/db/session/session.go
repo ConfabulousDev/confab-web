@@ -319,7 +319,11 @@ func BuildPrefixTsquery(query string) string {
 	return strings.Join(terms, " & ")
 }
 
-const sessionSelectCols = `
+// sessionSelectCols ends with the per-session estimated cost, sourced from the
+// tokens_v2 card (session_card_tokens_v2) via the shared db.V2TotalCostExpr
+// fragment (37cg). It is read raw (nullable text) so a session without a v2 card
+// yields a nil cost — the same shape the flat v1 card produced when absent.
+var sessionSelectCols = `
 				s.id, s.external_id, s.first_seen,
 				COALESCE(sf_stats.file_count, 0) as file_count,
 				s.last_message_at, s.custom_title, s.suggested_session_title,
@@ -329,16 +333,16 @@ const sessionSelectCols = `
 				s.git_info->>'branch' as git_branch,
 				COALESCE(gpr.prs, ARRAY[]::text[]) as github_prs,
 				COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
-				sct.estimated_cost_usd`
+				` + db.V2TotalCostExpr("v")
 
-const sessionStatsJoins = `
+var sessionStatsJoins = `
 			LEFT JOIN (
 				SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
 				FROM sync_files GROUP BY session_id
 			) sf_stats ON s.id = sf_stats.session_id
 			LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
 			LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
-			LEFT JOIN session_card_tokens sct ON s.id = sct.session_id`
+			LEFT JOIN session_card_tokens_v2 v ON s.id = v.session_id`
 
 const githubRefCTEs = `
 		github_pr_refs AS (

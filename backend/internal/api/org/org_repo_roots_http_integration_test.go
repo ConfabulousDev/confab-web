@@ -115,6 +115,7 @@ func TestOrgAnalytics_HTTP_FilterByRoot_IncludesForkSessions(t *testing.T) {
 				UpToLine:         100,
 				EstimatedCostUSD: decimal.NewFromFloat(1.0),
 			},
+			TokensV2: v2CostCard(sid, 1.0),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,
 				Version:                  analytics.ConversationCardVersion,

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
@@ -2479,8 +2480,9 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 // EstimatedCostUSD Tests
 // =============================================================================
 
-// TestListUserSessionsPaginated_EstimatedCostUSD tests that estimated_cost_usd
-// from session_card_tokens propagates into the paginated session list.
+// TestListUserSessionsPaginated_EstimatedCostUSD tests that the per-session
+// estimated cost (from the tokens_v2 card) propagates into the paginated
+// session list, and that a session without a cost card reports nil.
 func TestListUserSessionsPaginated_EstimatedCostUSD(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -2503,17 +2505,12 @@ func TestListUserSessionsPaginated_EstimatedCostUSD(t *testing.T) {
 		Summary: "Session without cost analytics",
 	})
 
-	// Seed session_card_tokens for the first session
-	_, err := env.DB.Exec(env.Ctx, `
-		INSERT INTO session_card_tokens (
-			session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
-		) VALUES ($1, 2, NOW(), 100, 50000, 20000, 1000, 5000, '4.2300')
-	`, sessionWithCost)
-	if err != nil {
-		t.Fatalf("Failed to insert session_card_tokens: %v", err)
-	}
+	// Seed the tokens_v2 cost card for the first session (37cg: the session list
+	// reads cost from session_card_tokens_v2, not the flat v1 table).
+	testutil.SeedTokensV2Card(t, env, sessionWithCost, analytics.TokensV2Data{
+		TotalCostUSD: "4.2300",
+		ByProvider:   map[string]analytics.TokensV2Provider{},
+	})
 
 	ctx := context.Background()
 	result, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{PageSize: 50})
@@ -2549,5 +2546,82 @@ func TestListUserSessionsPaginated_EstimatedCostUSD(t *testing.T) {
 	}
 	if !foundWithoutCost {
 		t.Error("session-no-cost not found in results")
+	}
+}
+
+// TestListUserSessionsPaginated_EstimatedCostUSD_ReadsV2 pins 37cg: the
+// session-list cost column is sourced from session_card_tokens_v2
+// (data->>'total_cost_usd'), not the flat v1 session_card_tokens table. A
+// session carrying only a v2 card reports its cost; a session carrying only a
+// stale v1 card reports nil — proving the flat table is no longer read.
+func TestListUserSessionsPaginated_EstimatedCostUSD_ReadsV2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "v2cost@test.com", "V2 Cost User")
+
+	v2Only := testutil.CreateTestSessionFull(t, env, user.ID, "v2-only", testutil.TestSessionFullOpts{
+		Summary: "session with a v2 cost card",
+	})
+	v1Only := testutil.CreateTestSessionFull(t, env, user.ID, "v1-only", testutil.TestSessionFullOpts{
+		Summary: "session with only a stale v1 cost card",
+	})
+
+	// v2-only: cost must surface from session_card_tokens_v2.
+	testutil.SeedTokensV2Card(t, env, v2Only, analytics.TokensV2Data{
+		TotalCostUSD: "4.2300",
+		ByProvider:   map[string]analytics.TokensV2Provider{},
+	})
+
+	// v1-only: a flat card with a *different* cost; post-migration it must be
+	// ignored entirely (the session reports nil cost).
+	if _, err := env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens (
+			session_id, version, computed_at, up_to_line,
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+			estimated_cost_usd
+		) VALUES ($1, 2, NOW(), 100, 1, 1, 1, 1, '9.9900')
+	`, v1Only); err != nil {
+		t.Fatalf("Failed to insert stale session_card_tokens: %v", err)
+	}
+
+	result, err := store.ListUserSessionsPaginated(context.Background(), user.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("ListUserSessionsPaginated failed: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Fatalf("Expected 2 sessions, got %d", len(result.Sessions))
+	}
+
+	var sawV2, sawV1 bool
+	for _, s := range result.Sessions {
+		switch s.ExternalID {
+		case "v2-only":
+			sawV2 = true
+			if s.EstimatedCostUSD == nil {
+				t.Error("v2-only: expected cost from v2, got nil")
+			} else if *s.EstimatedCostUSD != "4.2300" {
+				t.Errorf("v2-only: EstimatedCostUSD = %q, want \"4.2300\" (from v2)", *s.EstimatedCostUSD)
+			}
+		case "v1-only":
+			sawV1 = true
+			if s.EstimatedCostUSD != nil {
+				t.Errorf("v1-only: expected nil (flat v1 table no longer read), got %q", *s.EstimatedCostUSD)
+			}
+		}
+	}
+	if !sawV2 {
+		t.Error("v2-only session not found in results")
+	}
+	if !sawV1 {
+		t.Error("v1-only session not found in results")
 	}
 }
