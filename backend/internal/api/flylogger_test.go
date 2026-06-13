@@ -42,10 +42,10 @@ func captureLogOutput(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// wrapWithClientIP wraps a handler with clientip.Middleware for tests
+// wrapWithClientIP wraps a handler with clientip.NewMiddleware for tests
 // This simulates the production middleware chain where clientip runs before FlyLogger
 func wrapWithClientIP(h http.Handler) http.Handler {
-	return clientip.Middleware(h)
+	return clientip.NewMiddleware(nil)(h)
 }
 
 func TestFlyLoggerMiddleware_LogsCorrectClientIP(t *testing.T) {

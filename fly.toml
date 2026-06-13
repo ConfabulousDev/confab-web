@@ -25,6 +25,11 @@ primary_region = 'sjc'
   GITHUB_REDIRECT_URL = "https://confabulous.dev/auth/github/callback"
   GOOGLE_REDIRECT_URL = "https://confabulous.dev/auth/google/callback"
 
+  # Trust only Fly.io's edge header for client IP. The Fly proxy always sets and
+  # strips Fly-Client-IP, so other proxy headers (CF-Connecting-IP, X-Real-IP,
+  # X-Forwarded-For, ...) cannot be spoofed to bypass IP-based rate limits.
+  TRUSTED_PROXY_HEADERS = "Fly-Client-IP"
+
   # S3/Tigris Configuration (Fly Object Storage)
   # Note: Fly secrets already set: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, BUCKET_NAME
   # Note: S3_ENDPOINT should NOT include protocol (http:// or https://)

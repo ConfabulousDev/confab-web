@@ -579,16 +579,31 @@ Numbers come from `NewServer()` in `internal/api/server.go` — see [`PERFORMANC
 ```go
 1. Fly-Client-IP (Fly.io proxy)
 2. CF-Connecting-IP (Cloudflare)
-3. X-Real-IP (Nginx)
-4. True-Client-IP (Akamai/Cloudflare)
+3. True-Client-IP (Akamai/Cloudflare Enterprise)
+4. X-Real-IP (nginx)
 5. X-Forwarded-For (first IP)
 6. RemoteAddr (direct connection)
 ```
 
 **Anti-Spoofing:**
-- Uses composite key from ALL headers
-- Example: `fly:1.2.3.4|cf:1.2.3.4|xff:1.2.3.4`
-- Prevents IP spoofing via single header
+- Uses composite key from ALL trusted headers plus `RemoteAddr`
+- Example: `1.2.3.4|5.6.7.8` (sorted, deduplicated)
+- `RemoteAddr` (the real TCP peer) always anchors the key, so spoofing a single header cannot fully forge a client's rate-limit identity
+
+**Trusted proxy headers (`TRUSTED_PROXY_HEADERS`):**
+
+By default every proxy header above is honored. If the server is *not* behind a
+proxy that strips these headers, an attacker can spoof them to evade IP-based
+rate limits. To close this, set `TRUSTED_PROXY_HEADERS` to the comma-separated
+list of headers your edge actually sets; any header not in the list is ignored
+(including `X-Forwarded-For`), even when present.
+
+- Fly.io: `TRUSTED_PROXY_HEADERS=Fly-Client-IP` (the Fly edge always sets and strips this header)
+- Cloudflare: `TRUSTED_PROXY_HEADERS=CF-Connecting-IP`
+- Behind nginx setting `X-Real-IP`: `TRUSTED_PROXY_HEADERS=X-Real-IP`
+
+Header names are matched case-insensitively. When unset, behavior is unchanged
+(trust all headers). See [`CONFIGURATION.md`](../CONFIGURATION.md).
 
 ### Response Headers
 
@@ -606,6 +621,14 @@ Content-Type: application/json
 **Criteria:** No requests in last 10 minutes
 
 **Memory:** ~32 bytes per active IP/user
+
+**Bucket cap:** Each limiter has a `maxBuckets` cap on the number of live per-key
+buckets (set per-tier in `NewServer()`; e.g. 100K for the global IP limiter).
+Cleanup only runs every 5 minutes, so without a cap a fast-rotating-IP attacker
+could grow the map enough to exhaust memory within that window. When the cap is
+reached, the oldest (least-recently-used) buckets are evicted to admit new keys,
+so legitimate new clients are never starved. The cap is a soft bound — it may
+transiently overshoot under concurrent inserts.
 
 ### Future: Redis-Based Limiter
 
