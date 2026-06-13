@@ -3,7 +3,10 @@
 // surface; provider-specific adjustments (Claude fast multiplier, web
 // search add-on) live on the adapter via `calculateMessageCost`.
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { type ProviderId } from './providers';
 import {
   type TokenUsage,
   calculateCost,
@@ -314,4 +317,42 @@ describe('calculateCost', () => {
     // opus-4-6: input=$5, output=$25 → 1M*5 + 100k*25 = $5 + $2.50 = $7.50
     expect(cost).toBeCloseTo(7.5, 4);
   });
+});
+
+// ---------------------------------------------------------------------------
+// getModelFamily parity — shared cross-language fixture (nrxr / 5x6e F7).
+//
+// The same testdata/model_family_parity.json is loaded by the backend
+// (pricing_test.go) and here, so the two getModelFamily implementations can't
+// silently drift. This side asserts the pinned `frontend` family key. The one
+// documented divergence (the malformed `claude-opus-4a-5`) is encoded in the
+// fixture as intentional — if any other id starts disagreeing, both sides fail.
+// ---------------------------------------------------------------------------
+
+interface ModelFamilyParityCase {
+  provider: ProviderId;
+  id: string;
+  backend: string;
+  frontend: string;
+}
+
+// Resolved from the Vitest root (the `frontend/` dir, per frontend/CLAUDE.md's
+// "always run from frontend/") up to the repo-root testdata. Read via fs rather
+// than import.meta.url because the jsdom test environment yields a non-file: URL.
+const parityFixturePath = resolve(process.cwd(), '..', 'testdata', 'model_family_parity.json');
+const parityFixture: { cases: ModelFamilyParityCase[] } = JSON.parse(
+  readFileSync(parityFixturePath, 'utf-8'),
+);
+
+describe('getModelFamily parity fixture', () => {
+  it('has cases', () => {
+    expect(parityFixture.cases.length).toBeGreaterThan(0);
+  });
+
+  it.each(parityFixture.cases)(
+    'returns $frontend for $id ($provider)',
+    ({ provider, id, frontend }) => {
+      expect(getModelFamily(provider, id)).toBe(frontend);
+    },
+  );
 });

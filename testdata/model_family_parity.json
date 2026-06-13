@@ -1,0 +1,18 @@
+{
+  "_comment": "nrxr — backend↔frontend getModelFamily() parity fixture. Loaded by BOTH backend/internal/analytics/pricing_test.go and frontend/src/utils/tokenStats.test.ts so the two normalizers can never silently drift. Each entry pins the family key each side must return for `id`: `backend` = getModelFamily(id) (provider-agnostic, sniffs gpt- prefix), `frontend` = getModelFamily(provider, id). They are equal for every well-formed id; the one deliberate divergence (the malformed claude-opus-4a-5) is encoded as intentional and carries a `note`. Add a row whenever a new family/shape ships; if a code change makes a row's two sides disagree unexpectedly, that's the drift this guard exists to catch.",
+  "cases": [
+    { "provider": "claude-code", "id": "claude-opus-4-5-20251101",  "backend": "opus-4-5",   "frontend": "opus-4-5" },
+    { "provider": "claude-code", "id": "claude-sonnet-4-5-20250929", "backend": "sonnet-4-5", "frontend": "sonnet-4-5" },
+    { "provider": "claude-code", "id": "claude-haiku-4-5-20251001",  "backend": "haiku-4-5",  "frontend": "haiku-4-5" },
+    { "provider": "claude-code", "id": "claude-sonnet-4-20250514",   "backend": "sonnet-4",   "frontend": "sonnet-4" },
+    { "provider": "claude-code", "id": "claude-fable-5",             "backend": "fable-5",    "frontend": "fable-5" },
+    { "provider": "claude-code", "id": "claude-opus-4-9-20261201",   "backend": "opus-4-9",   "frontend": "opus-4-9" },
+    { "provider": "claude-code", "id": "claude-opus-4-10",           "backend": "opus-4",     "frontend": "opus-4" },
+    {
+      "provider": "claude-code", "id": "claude-opus-4a-5",          "backend": "opus-4a-5",  "frontend": "opus-4",
+      "note": "MALFORMED id (non-digit major '4a'). Documented, intentional divergence: backend's single-digit-major check fails and returns the raw name 'opus-4a-5' ($0 — no pricing match); the frontend regex stops at 'a' and returns 'opus-4' (which could bind to real opus-4 pricing). Low severity — such ids don't occur in practice. This row pins the KNOWN divergence so any further drift fails CI; do not 'fix' it by editing the fixture (5x6e F7 / nrxr)."
+    },
+    { "provider": "codex", "id": "gpt-5-2026-05-01", "backend": "gpt-5",   "frontend": "gpt-5" },
+    { "provider": "codex", "id": "gpt-5.4",          "backend": "gpt-5.4", "frontend": "gpt-5.4" }
+  ]
+}
