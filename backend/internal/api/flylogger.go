@@ -41,7 +41,7 @@ func ParseCLIUserAgent(ua string) *CLIUserAgent {
 const maxErrorMessageLength = 200
 
 // FlyLogger is a middleware that logs HTTP requests as structured JSON.
-// Requires clientip.Middleware to run first to populate client IP in context.
+// Requires clientip.NewMiddleware to run first to populate client IP in context.
 //
 // Log fields:
 //   - method, path, proto: request info
@@ -74,7 +74,7 @@ func FlyLogger(next http.Handler) http.Handler {
 		// Calculate duration
 		duration := time.Since(start)
 
-		// Get real client IP from context (set by clientip.Middleware)
+		// Get real client IP from context (set by clientip.NewMiddleware)
 		// Falls back to r.RemoteAddr if middleware hasn't run (shouldn't happen in prod)
 		clientIP := clientip.FromRequest(r).Primary
 		if clientIP == "" {

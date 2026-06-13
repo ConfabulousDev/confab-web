@@ -15,7 +15,7 @@ func denyRequest(w http.ResponseWriter, r *http.Request, key string) {
 }
 
 // Middleware creates an HTTP middleware that applies rate limiting
-// Uses clientip.FromRequest for IP extraction (set by clientip.Middleware)
+// Uses clientip.FromRequest for IP extraction (set by clientip.NewMiddleware)
 func Middleware(limiter RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

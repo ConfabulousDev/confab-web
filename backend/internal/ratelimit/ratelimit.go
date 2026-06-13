@@ -2,7 +2,10 @@ package ratelimit
 
 import (
 	"context"
+	"log/slog"
+	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -41,17 +44,32 @@ type InMemoryRateLimiter struct {
 	// lastAccess tracks when each limiter was last used
 	lastAccess sync.Map // map[string]time.Time
 
+	// maxBuckets caps the number of live per-key limiters. When the cap is
+	// reached, the oldest entries are evicted to admit a new key. This bounds
+	// memory against a fast-rotating-IP attacker who would otherwise grow the
+	// bucket map unboundedly within the cleanup window.
+	maxBuckets int
+
+	// bucketCount is a soft (advisory) count of live limiters. It may briefly
+	// overshoot maxBuckets under concurrent inserts or drift slightly from the
+	// true map size; the cap is a bound, not a hard invariant.
+	bucketCount atomic.Int64
+
 	// stopCleanup signals cleanup goroutine to stop
 	stopCleanup chan struct{}
 }
 
 // NewInMemoryRateLimiter creates a new in-memory rate limiter
-// rate: requests per second (e.g., 10 for 10 req/sec)
+// rps: requests per second (e.g., 10 for 10 req/sec)
 // burst: maximum burst size (e.g., 20 to allow bursts up to 20 requests)
-func NewInMemoryRateLimiter(rps float64, burst int) *InMemoryRateLimiter {
+// maxBuckets: cap on the number of live per-key limiters; once reached, the
+// oldest entries are evicted to admit new keys (bounds memory under a
+// rotating-key attack). A value <= 0 disables the cap.
+func NewInMemoryRateLimiter(rps float64, burst int, maxBuckets int) *InMemoryRateLimiter {
 	limiter := &InMemoryRateLimiter{
 		rate:            rate.Limit(rps),
 		burst:           burst,
+		maxBuckets:      maxBuckets,
 		cleanupInterval: 5 * time.Minute,
 		maxAge:          10 * time.Minute,
 		stopCleanup:     make(chan struct{}),
@@ -82,6 +100,13 @@ func (l *InMemoryRateLimiter) getLimiter(key string) *rate.Limiter {
 		return v.(*rate.Limiter)
 	}
 
+	// At capacity: evict the oldest entries before admitting a new key so the
+	// bucket map stays bounded. The check is best-effort (the count is a soft
+	// bound), which is sufficient to prevent unbounded growth.
+	if l.maxBuckets > 0 && l.bucketCount.Load() >= int64(l.maxBuckets) {
+		l.evictOldest()
+	}
+
 	// Slow path: create and race to store
 	limiter := rate.NewLimiter(l.rate, l.burst)
 	actual, loaded := l.limiters.LoadOrStore(key, limiter)
@@ -89,7 +114,52 @@ func (l *InMemoryRateLimiter) getLimiter(key string) *rate.Limiter {
 		return actual.(*rate.Limiter)
 	}
 	l.lastAccess.Store(key, time.Now().UTC())
+	l.bucketCount.Add(1)
 	return limiter
+}
+
+// evictOldest removes the least-recently-accessed limiters to make room when
+// the bucket cap is reached. It evicts a small batch (~1% of the cap, at least
+// one) so a steady stream of new keys doesn't trigger a full scan on every
+// insert. Attacker-rotated stale keys are evicted before active ones.
+func (l *InMemoryRateLimiter) evictOldest() {
+	type entry struct {
+		key  string
+		when time.Time
+	}
+	var entries []entry
+	l.lastAccess.Range(func(key, value interface{}) bool {
+		entries = append(entries, entry{key.(string), value.(time.Time)})
+		return true
+	})
+	if len(entries) == 0 {
+		return
+	}
+
+	batch := l.maxBuckets / 100
+	if batch < 1 {
+		batch = 1
+	}
+	if batch > len(entries) {
+		batch = len(entries)
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].when.Before(entries[j].when)
+	})
+
+	for _, e := range entries[:batch] {
+		// Decrement only when this call actually removed the bucket, so a key
+		// concurrently evicted by cleanupOldLimiters isn't counted twice (which
+		// would drift bucketCount negative and weaken the cap over time).
+		if _, removed := l.limiters.LoadAndDelete(e.key); removed {
+			l.bucketCount.Add(-1)
+		}
+		l.lastAccess.Delete(e.key)
+	}
+
+	slog.Warn("rate limiter bucket cap reached; evicted oldest entries",
+		"evicted", batch, "max_buckets", l.maxBuckets)
 }
 
 // cleanup periodically removes old limiters to prevent memory leaks
@@ -120,7 +190,11 @@ func (l *InMemoryRateLimiter) cleanupOldLimiters() {
 	})
 
 	for _, key := range keysToDelete {
-		l.limiters.Delete(key)
+		// Decrement only on an actual removal (see evictOldest) to keep the
+		// soft bucket count from drifting under concurrent eviction.
+		if _, removed := l.limiters.LoadAndDelete(key); removed {
+			l.bucketCount.Add(-1)
+		}
 		l.lastAccess.Delete(key)
 	}
 }

@@ -67,9 +67,9 @@ func TestRateLimiter_UsesClientIPFromContext(t *testing.T) {
 				req.Header.Set(key, value)
 			}
 
-			// Simulate clientip.Middleware setting the context
+			// Simulate clientip.NewMiddleware setting the context
 			var capturedKey string
-			handler := clientip.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := clientip.NewMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				capturedKey = clientip.FromRequest(r).RateLimitKey
 			}))
 
@@ -101,7 +101,7 @@ func TestRateLimitKey_Deterministic(t *testing.T) {
 
 	var key1, key2 string
 
-	handler := clientip.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := clientip.NewMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if key1 == "" {
 			key1 = clientip.FromRequest(r).RateLimitKey
 		} else {
@@ -121,7 +121,7 @@ func TestRateLimitKey_DifferentRequests(t *testing.T) {
 	// Different clients should produce different keys
 	var key1, key2 string
 
-	handler := clientip.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := clientip.NewMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if key1 == "" {
 			key1 = clientip.FromRequest(r).RateLimitKey
 		} else {

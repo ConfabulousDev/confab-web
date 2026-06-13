@@ -19,6 +19,7 @@ See [`backend/.env.example`](backend/.env.example) for a copy-paste-ready templa
 | `STATIC_FILES_DIR` | `/app/static` | No | Directory for serving the built frontend |
 | `CSRF_SECRET_KEY` | *(none)* | Yes | CSRF protection secret; must be at least 32 characters |
 | `INSECURE_DEV_MODE` | `false` | No | Set to `true` to disable secure-cookie requirements (local dev without HTTPS) |
+| `TRUSTED_PROXY_HEADERS` | *(all)* | No | Comma-separated list of proxy header names to honor for client-IP extraction (e.g. `Fly-Client-IP,CF-Connecting-IP`). When unset, all known proxy headers are trusted. Set this to only the header your edge proxy sets so attackers can't spoof other headers to bypass IP rate limits. |
 
 ## Database
 

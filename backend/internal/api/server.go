@@ -106,23 +106,24 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
 		smartRecapEnabled:   os.Getenv("SMART_RECAP_ENABLED") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
-		// Generous limit to allow normal usage while preventing DoS
-		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200),
+		// Generous limit to allow normal usage while preventing DoS.
+		// Keyed by client IP, so the bucket cap is sized for the widest fan-out.
+		globalLimiter: ratelimit.NewInMemoryRateLimiter(100, 200, 100_000),
 		// Auth endpoints: 60 requests per minute = 1 req/sec, burst of 30
 		// Reasonable limit to prevent brute force while allowing normal dev usage
-		authLimiter: ratelimit.NewInMemoryRateLimiter(1, 30),
+		authLimiter: ratelimit.NewInMemoryRateLimiter(1, 30, 5_000),
 		// Upload endpoints: 10000 requests per hour = 2.78 req/sec, burst of 2000
 		// Keyed by user ID (not IP) to allow backfill of many sessions
-		uploadLimiter: ratelimit.NewInMemoryRateLimiter(2.78, 2000),
+		uploadLimiter: ratelimit.NewInMemoryRateLimiter(2.78, 2000, 50_000),
 		// Validation endpoint: 30 requests per minute = 0.5 req/sec, burst of 10
 		// Moderate limit for CLI validation checks while preventing abuse
-		validationLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 10),
+		validationLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 10, 5_000),
 		// Client error reporting: 0.5 req/sec, burst of 5
 		// Low limit for fire-and-forget error reports from frontend
-		clientErrorLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 5),
+		clientErrorLimiter: ratelimit.NewInMemoryRateLimiter(0.5, 5, 5_000),
 		// External API: 30 req/sec, burst of 60 per user
 		// Generous read-only limit for machine consumers (agents, CLI, scripts)
-		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60),
+		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60, 20_000),
 		updateChecker:       updatecheck.NewChecker(build.Version, updateCheckDisabled),
 		// SaaS blanks the URL so the canonical instance serves its embedded
 		// table without fetching from itself; self-host pulls from confabulous.dev.
@@ -157,6 +158,22 @@ func parseAllowedOrigins() ([]string, []string) {
 	return allowedOrigins, trustedOrigins
 }
 
+// parseTrustedProxyHeaders parses the TRUSTED_PROXY_HEADERS env var into the
+// list of proxy header names the client-IP middleware is allowed to honor.
+// Returns nil when unset/empty, which clientip.NewMiddleware treats as "trust
+// all headers" (the backward-compatible default). Operators behind a single
+// known proxy (e.g. Fly.io) should set this to that proxy's header so spoofed
+// headers from other sources are ignored.
+func parseTrustedProxyHeaders() []string {
+	var headers []string
+	for _, h := range strings.Split(os.Getenv("TRUSTED_PROXY_HEADERS"), ",") {
+		if trimmed := strings.TrimSpace(h); trimmed != "" {
+			headers = append(headers, trimmed)
+		}
+	}
+	return headers
+}
+
 // SetupRoutes configures HTTP routes
 func (s *Server) SetupRoutes() http.Handler {
 	r := chi.NewRouter()
@@ -165,8 +182,10 @@ func (s *Server) SetupRoutes() http.Handler {
 	// 1. Recoverer: catch panics first
 	r.Use(middleware.Recoverer)
 	// 2. ClientIP: extract real client IP early (replaces chi's RealIP)
-	//    Sets r.RemoteAddr and stores IP info in context for rate limiter, logger
-	r.Use(clientip.Middleware)
+	//    Sets r.RemoteAddr and stores IP info in context for rate limiter, logger.
+	//    TRUSTED_PROXY_HEADERS restricts which proxy headers are honored; unset
+	//    means trust all known headers (default).
+	r.Use(clientip.NewMiddleware(parseTrustedProxyHeaders()))
 	// 3. Rate limiter: reject abusive requests early, before expensive work
 	//    Intentionally before RequestID - rejected requests don't need IDs allocated
 	r.Use(ratelimit.Middleware(s.globalLimiter))

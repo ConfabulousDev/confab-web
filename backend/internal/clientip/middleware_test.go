@@ -3,6 +3,7 @@ package clientip
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -65,10 +66,10 @@ func TestExtract_Primary(t *testing.T) {
 			name:       "Fly-Client-IP takes highest priority",
 			remoteAddr: "172.16.29.234:54686",
 			headers: map[string]string{
-				"Fly-Client-IP":     "203.0.113.45",
-				"CF-Connecting-IP":  "198.51.100.1",
-				"X-Real-IP":         "192.0.2.1",
-				"X-Forwarded-For":   "10.0.0.1",
+				"Fly-Client-IP":    "203.0.113.45",
+				"CF-Connecting-IP": "198.51.100.1",
+				"X-Real-IP":        "192.0.2.1",
+				"X-Forwarded-For":  "10.0.0.1",
 			},
 			expected: "203.0.113.45",
 		},
@@ -157,7 +158,7 @@ func TestExtract_Primary(t *testing.T) {
 				req.Header.Set(key, value)
 			}
 
-			info := extract(req)
+			info := extract(req, nil)
 			if info.Primary != tt.expected {
 				t.Errorf("extract().Primary = %q, want %q", info.Primary, tt.expected)
 			}
@@ -227,7 +228,7 @@ func TestExtract_RateLimitKey(t *testing.T) {
 				req.Header.Set(key, value)
 			}
 
-			info := extract(req)
+			info := extract(req, nil)
 			if info.RateLimitKey != tt.expected {
 				t.Errorf("extract().RateLimitKey = %q, want %q", info.RateLimitKey, tt.expected)
 			}
@@ -243,7 +244,7 @@ func TestMiddleware_SetsRemoteAddr(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	wrapped := Middleware(handler)
+	wrapped := NewMiddleware(nil)(handler)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "172.16.29.234:54686"
@@ -265,7 +266,7 @@ func TestMiddleware_SetsContext(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	wrapped := Middleware(handler)
+	wrapped := NewMiddleware(nil)(handler)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.RemoteAddr = "172.16.29.234:54686"
@@ -293,5 +294,84 @@ func TestFromContext_ReturnsZeroWhenNotSet(t *testing.T) {
 	}
 	if info.RateLimitKey != "" {
 		t.Errorf("FromRequest().RateLimitKey = %q, want empty", info.RateLimitKey)
+	}
+}
+
+// ---------- trusted-header allowlist ----------
+
+// TestNewMiddleware_AllHeadersTrusted verifies that a nil/empty trusted set
+// preserves the legacy behavior: every proxy header is honored.
+func TestNewMiddleware_AllHeadersTrusted(t *testing.T) {
+	for _, trusted := range [][]string{nil, {}} {
+		var captured Info
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			captured = FromRequest(r)
+		})
+		wrapped := NewMiddleware(trusted)(handler)
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.RemoteAddr = "172.16.29.234:54686"
+		req.Header.Set("CF-Connecting-IP", "198.51.100.1")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if captured.Primary != "198.51.100.1" {
+			t.Errorf("trusted=%v: Primary = %q, want %q", trusted, captured.Primary, "198.51.100.1")
+		}
+	}
+}
+
+// TestNewMiddleware_FilteredHeaders verifies that only the listed headers are
+// consulted: a Fly-only allowlist must ignore a present CF header.
+func TestNewMiddleware_FilteredHeaders(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "172.16.29.234:54686"
+	req.Header.Set("Fly-Client-IP", "203.0.113.45")
+	req.Header.Set("CF-Connecting-IP", "198.51.100.1")
+
+	info := extract(req, makeHeaderSet([]string{"Fly-Client-IP"}))
+
+	if info.Primary != "203.0.113.45" {
+		t.Errorf("Primary = %q, want %q (only Fly header trusted)", info.Primary, "203.0.113.45")
+	}
+	// The untrusted CF IP must not appear in the composite rate-limit key.
+	if strings.Contains(info.RateLimitKey, "198.51.100.1") {
+		t.Errorf("RateLimitKey = %q, must not contain untrusted CF IP", info.RateLimitKey)
+	}
+}
+
+// TestNewMiddleware_UntrustedHeader verifies that when the only header present
+// is not in the allowlist, Primary falls through to RemoteAddr.
+func TestNewMiddleware_UntrustedHeader(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+	req.Header.Set("CF-Connecting-IP", "198.51.100.1")
+
+	info := extract(req, makeHeaderSet([]string{"Fly-Client-IP"}))
+
+	if info.Primary != "192.168.1.100" {
+		t.Errorf("Primary = %q, want RemoteAddr fallback %q", info.Primary, "192.168.1.100")
+	}
+}
+
+// TestNewMiddleware_XForwardedForGated verifies X-Forwarded-For is also subject
+// to the allowlist — it is honored only when explicitly trusted.
+func TestNewMiddleware_XForwardedForGated(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "192.168.1.100:12345"
+	req.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2")
+
+	// Not trusted → ignored.
+	gated := extract(req, makeHeaderSet([]string{"Fly-Client-IP"}))
+	if gated.Primary != "192.168.1.100" {
+		t.Errorf("untrusted XFF: Primary = %q, want %q", gated.Primary, "192.168.1.100")
+	}
+	if strings.Contains(gated.RateLimitKey, "10.0.0.1") {
+		t.Errorf("untrusted XFF leaked into key %q", gated.RateLimitKey)
+	}
+
+	// Trusted → first hop honored.
+	trusted := extract(req, makeHeaderSet([]string{"X-Forwarded-For"}))
+	if trusted.Primary != "10.0.0.1" {
+		t.Errorf("trusted XFF: Primary = %q, want %q", trusted.Primary, "10.0.0.1")
 	}
 }

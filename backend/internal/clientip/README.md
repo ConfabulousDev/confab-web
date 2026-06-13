@@ -15,16 +15,27 @@ Middleware for extracting real client IPs from reverse proxy headers in a platfo
 
 ## Key API
 
-- **`Middleware(next http.Handler) http.Handler`** -- Extracts client IPs, overwrites `r.RemoteAddr` with the primary IP, and stores `Info` in context.
+- **`NewMiddleware(trustedHeaders []string) func(http.Handler) http.Handler`** -- Returns middleware that extracts client IPs, overwrites `r.RemoteAddr` with the primary IP, and stores `Info` in context. `trustedHeaders` restricts which proxy headers are honored; pass `nil`/empty to trust all known headers (default). Header names are matched case-insensitively (HTTP-canonicalized).
 - **`FromContext(ctx context.Context) Info`** -- Retrieves `Info` from context. Returns zero value if middleware has not run.
 - **`FromRequest(r *http.Request) Info`** -- Convenience wrapper around `FromContext`.
+
+## Trust model
+
+By default the middleware honors every proxy header it knows about. If the
+server is not fronted by a proxy that strips these headers, an attacker can
+spoof them to forge their client IP and evade IP-based rate limits. Operators
+close this by setting the `TRUSTED_PROXY_HEADERS` env var (parsed in
+`internal/api/server.go` and passed to `NewMiddleware`) to only the header their
+edge proxy sets — e.g. `Fly-Client-IP` on Fly.io, `CF-Connecting-IP` on
+Cloudflare. Any header not in the allowlist (including `X-Forwarded-For`) is
+ignored even when present.
 
 ## How to Extend
 
 ### Adding support for a new proxy header
 
-1. Add a new block in the `extract` function in `middleware.go`, following the existing pattern: read the header, add to `allIPs`, and set `primary` if it is still empty (respecting priority order).
-2. Update the doc comment on `Middleware` to include the new header in the priority list.
+1. Add the header name to the `proxyHeaders` priority list in `middleware.go` (or, for a multi-value header like `X-Forwarded-For`, add a dedicated block in `extract`). Each entry is gated by the `isTrusted` check automatically.
+2. Update the doc comment on `NewMiddleware` to include the new header in the priority list.
 3. Add test cases in `middleware_test.go`.
 
 ## Invariants
@@ -40,7 +51,7 @@ Middleware for extracting real client IPs from reverse proxy headers in a platfo
 
 **Platform-agnostic header support.** The middleware checks headers from Fly.io, Cloudflare, Akamai, and nginx so the application works behind any of these proxies without configuration changes.
 
-**No configuration required.** The middleware checks all headers unconditionally. In production, only the headers set by the actual proxy will be present. This avoids requiring operators to specify which proxy they use.
+**Trust all headers by default, allowlist opt-in.** With no `TRUSTED_PROXY_HEADERS` configured the middleware checks all headers unconditionally — in production, only the headers set by the actual proxy are normally present, so no config is required for the common case. Operators who cannot guarantee their edge strips spoofable headers set `TRUSTED_PROXY_HEADERS` to restrict the set, trading zero-config for spoofing resistance.
 
 ## Testing
 

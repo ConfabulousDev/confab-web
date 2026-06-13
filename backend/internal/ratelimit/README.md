@@ -6,10 +6,10 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 
 | File | Role |
 |------|------|
-| `ratelimit.go` | `RateLimiter` interface and `InMemoryRateLimiter` implementation with background cleanup |
+| `ratelimit.go` | `RateLimiter` interface and `InMemoryRateLimiter` implementation with background cleanup and a bucket-count cap |
 | `middleware.go` | HTTP middleware and handler wrappers that enforce rate limits |
 | `middleware_test.go` | Tests for `clientip` integration and rate-limit key derivation |
-| `ratelimit_test.go` | Tests for the token-bucket implementation (`Allow`, `AllowN`, burst, per-key isolation, concurrent `getLimiter`, `cleanupOldLimiters`, `Stop`) plus middleware behavior (`Middleware`, `MiddlewareWithKey`, `HandlerFunc`, `UserKeyFunc`) |
+| `ratelimit_test.go` | Tests for the token-bucket implementation (`Allow`, `AllowN`, burst, per-key isolation, concurrent `getLimiter`, `cleanupOldLimiters`, bucket-cap eviction, `Stop`) plus middleware behavior (`Middleware`, `MiddlewareWithKey`, `HandlerFunc`, `UserKeyFunc`) |
 
 ## Key Types
 
@@ -20,7 +20,7 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 
 ### Rate limiter
 
-- **`NewInMemoryRateLimiter(rps float64, burst int) *InMemoryRateLimiter`** -- Creates a limiter. `rps` is requests per second; `burst` is the maximum burst size. Starts a background cleanup goroutine.
+- **`NewInMemoryRateLimiter(rps float64, burst int, maxBuckets int) *InMemoryRateLimiter`** -- Creates a limiter. `rps` is requests per second; `burst` is the maximum burst size; `maxBuckets` caps the number of live per-key buckets (a value `<= 0` disables the cap). Starts a background cleanup goroutine.
 - **`(*InMemoryRateLimiter).Allow(ctx, key) bool`** -- Checks if one request is allowed for the given key.
 - **`(*InMemoryRateLimiter).AllowN(ctx, key, n) bool`** -- Checks if `n` requests are allowed.
 - **`(*InMemoryRateLimiter).Stop()`** -- Stops the background cleanup goroutine.
@@ -47,8 +47,9 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 
 ## Invariants
 
-- **Middleware depends on `clientip.Middleware`.** The default `Middleware` reads `clientip.FromRequest(r).RateLimitKey` from context. If `clientip.Middleware` has not run, the key will be empty and all requests will share a single bucket.
+- **Middleware depends on `clientip.NewMiddleware`.** The default `Middleware` reads `clientip.FromRequest(r).RateLimitKey` from context. If the clientip middleware has not run, the key will be empty and all requests will share a single bucket.
 - **Background cleanup prevents memory leaks.** Stale buckets (unused for 10 minutes) are cleaned up every 5 minutes by a background goroutine.
+- **Bucket cap bounds memory between cleanups.** Cleanup only runs every 5 minutes, so `maxBuckets` caps live buckets in the meantime; on overflow the oldest (least-recently-used) buckets are evicted to admit new keys. `bucketCount` (an `atomic.Int64`) tracks the live count; it is a **soft** bound that may transiently overshoot the cap under concurrent inserts or drift slightly from the true map size — acceptable, since the cap only needs to prevent unbounded growth.
 - **`Stop()` must be called on shutdown.** Failing to call `Stop` will leak the cleanup goroutine.
 - **Concurrent safety.** `sync.Map` is used for the limiter and last-access stores; no external locking is needed.
 
@@ -60,13 +61,15 @@ In-memory token-bucket rate limiter with HTTP middleware for per-IP and per-user
 
 **Composite IP key from `clientip`.** Using the composite key (all observed IPs joined with `|`) instead of a single header makes rate limiting resistant to IP spoofing via proxy headers.
 
+**Evict-oldest on overflow, not refuse.** When the bucket cap is hit the limiter evicts the least-recently-used buckets rather than refusing to create new ones. Refusing would let an attacker who fills the map block all *new* IPs from being rate-limited at all; evicting stale entries keeps coverage for active clients.
+
 ## Testing
 
 ```bash
 go test ./internal/ratelimit/...
 ```
 
-Tests cover the token-bucket implementation (burst handling, per-key isolation, the `LoadOrStore` race in `getLimiter`, `cleanupOldLimiters` eviction, and `Stop` termination), middleware behavior (allowed and blocked requests), the `MiddlewareWithKey` custom-key path and IP fallback, the `HandlerFunc` wrapper, and `UserKeyFunc` extraction.
+Tests cover the token-bucket implementation (burst handling, per-key isolation, the `LoadOrStore` race in `getLimiter`, `cleanupOldLimiters` eviction, bucket-cap eviction of the oldest key and the bounded-map guarantee under sequential and concurrent load, and `Stop` termination), middleware behavior (allowed and blocked requests), the `MiddlewareWithKey` custom-key path and IP fallback, the `HandlerFunc` wrapper, and `UserKeyFunc` extraction.
 
 ## Dependencies
 
