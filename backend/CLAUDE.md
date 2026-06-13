@@ -57,3 +57,12 @@ OpenAI prices: https://developers.openai.com/api/docs/pricing
 - `deadcode -test ./...` — whole-program reachability from `main()` and tests.
 
 Neither catches unused **exported** identifiers.
+
+## Vulnerability scanning
+
+CI runs `govulncheck ./cmd/server` as a required check (the `govulncheck` job in
+`.github/workflows/ci.yml`). It scans only the production binary's import graph,
+so test-only advisories (e.g. testcontainers' Moby chain) don't block the gate.
+Run it locally before pushing: `govulncheck ./cmd/server` from `backend/`. Most
+stdlib findings are cleared by a Go patch bump — update the `go` directive in
+`go.mod` and the `go-version` fields in `ci.yml` together.

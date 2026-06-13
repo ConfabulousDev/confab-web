@@ -39,8 +39,10 @@ ARG TARGETARCH
 ARG VERSION
 ARG COMMIT
 ARG BUILD_TIME
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -installsuffix cgo \
-    -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" -o confab ./cmd/server
+# -trimpath strips absolute build paths from the binary; -s -w drops the symbol
+# table and DWARF for a smaller, less introspectable production binary.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -a -installsuffix cgo \
+    -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" -o confab ./cmd/server
 
 # Stage 3: Migrate CLI
 FROM migrate/migrate:v4.19.1 AS migrate-cli
