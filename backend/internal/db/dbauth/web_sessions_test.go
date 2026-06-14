@@ -305,14 +305,17 @@ func TestGetWebSession_ThrottleSuppressesWrite(t *testing.T) {
 
 	sessionID := "throttle_session"
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, time.Now().UTC().Add(7*24*time.Hour))
-	recent := time.Now().UTC().Add(-10 * time.Second) // inside the 60s window
-	setLastActivity(t, env, sessionID, recent)
+	setLastActivity(t, env, sessionID, time.Now().UTC().Add(-10*time.Second)) // inside the 60s window
+	// Baseline is read back from the DB so the comparison is microsecond-vs-
+	// microsecond (Postgres truncates to µs; an in-memory Go time has ns and
+	// would spuriously differ on platforms with ns-resolution clocks).
+	before := getLastActivity(t, env, sessionID)
 
 	if _, err := store.GetWebSession(context.Background(), sessionID, time.Hour); err != nil {
 		t.Fatalf("session should be accepted: %v", err)
 	}
-	if got := getLastActivity(t, env, sessionID); !got.Equal(recent) {
-		t.Errorf("last_activity_at = %v, want unchanged %v (throttle should suppress write)", got, recent)
+	if got := getLastActivity(t, env, sessionID); !got.Equal(before) {
+		t.Errorf("last_activity_at = %v, want unchanged %v (throttle should suppress write)", got, before)
 	}
 }
 
@@ -370,16 +373,18 @@ func TestGetWebSession_DemoExempt(t *testing.T) {
 
 	sessionID := "demo_shared_session"
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, time.Now().UTC().Add(100*365*24*time.Hour))
-	veryStale := time.Now().UTC().Add(-365 * 24 * time.Hour) // a year idle
-	setLastActivity(t, env, sessionID, veryStale)
+	setLastActivity(t, env, sessionID, time.Now().UTC().Add(-365*24*time.Hour)) // a year idle
+	// Baseline read back from the DB (µs precision) so the unchanged-comparison
+	// isn't tripped by ns-resolution clocks (see ThrottleSuppressesWrite).
+	before := getLastActivity(t, env, sessionID)
 
 	// idleTimeout = 0 → exempt: accepted despite a year of inactivity.
 	if _, err := store.GetWebSession(context.Background(), sessionID, 0); err != nil {
 		t.Fatalf("demo session (idleTimeout=0) should be accepted despite long idle: %v", err)
 	}
 	// And the touch must be skipped (no write thrash on the shared row).
-	if got := getLastActivity(t, env, sessionID); !got.Equal(veryStale) {
-		t.Errorf("last_activity_at = %v, want unchanged %v (touch must be skipped for demo)", got, veryStale)
+	if got := getLastActivity(t, env, sessionID); !got.Equal(before) {
+		t.Errorf("last_activity_at = %v, want unchanged %v (touch must be skipped for demo)", got, before)
 	}
 }
 
