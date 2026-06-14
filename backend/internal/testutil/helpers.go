@@ -12,6 +12,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/google/uuid"
 )
@@ -318,8 +319,10 @@ func CreateTestDeviceCode(t *testing.T, env *TestEnvironment, deviceCode, userCo
 		RETURNING id
 	`
 
+	// device_code is hashed at rest (40hj); mirror the store so lookups by the
+	// raw device code round-trip. user_code stays plaintext.
 	var id int64
-	row := env.DB.QueryRow(env.Ctx, query, deviceCode, userCode, keyName, expiresAt.UTC())
+	row := env.DB.QueryRow(env.Ctx, query, db.HashToken(deviceCode), userCode, keyName, expiresAt.UTC())
 	err := row.Scan(&id)
 	if err != nil {
 		t.Fatalf("failed to create test device code: %v", err)
@@ -348,7 +351,9 @@ func CreateTestWebSession(t *testing.T, env *TestEnvironment, sessionID string, 
 		VALUES ($1, $2, $3, NOW())
 	`
 
-	_, err := env.DB.Exec(env.Ctx, query, sessionID, userID, expiresAt)
+	// web_sessions.id is the hash of the cookie value (40hj); mirror the store
+	// so GetWebSession(rawSessionID) round-trips.
+	_, err := env.DB.Exec(env.Ctx, query, db.HashToken(sessionID), userID, expiresAt)
 	if err != nil {
 		t.Fatalf("failed to create test web session: %v", err)
 	}

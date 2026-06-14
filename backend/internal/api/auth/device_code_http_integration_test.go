@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -75,11 +76,12 @@ func TestDeviceCode_HTTP_Integration(t *testing.T) {
 			t.Errorf("expected expires_in 300, got %d", result.ExpiresIn)
 		}
 
-		// Verify in database
+		// Verify in database. device_code is hashed at rest (40hj), so look it
+		// up by the hash of the raw value returned to the client.
 		var count int
 		row := env.DB.QueryRow(env.Ctx,
 			"SELECT COUNT(*) FROM device_codes WHERE device_code = $1",
-			result.DeviceCode)
+			db.HashToken(result.DeviceCode))
 		if err := row.Scan(&count); err != nil {
 			t.Fatalf("failed to query: %v", err)
 		}
@@ -402,14 +404,14 @@ func TestDeviceVerify_HTTP_Integration(t *testing.T) {
 		// Test various dash-like characters that users might paste:
 		// - en-dash (–), em-dash (—), hyphen (‐), minus (−), non-breaking hyphen (‑)
 		dashVariants := []struct {
-			name string
-			code string // stored in DB with regular hyphen
+			name  string
+			code  string // stored in DB with regular hyphen
 			input string // what user pastes with alternative dash
 		}{
-			{"en-dash", "DASH-EN12", "DASH–EN12"},  // U+2013
-			{"em-dash", "DASH-EM34", "DASH—EM34"},  // U+2014
-			{"hyphen", "DASH-HY56", "DASH‐HY56"},   // U+2010
-			{"minus", "DASH-MI78", "DASH−MI78"},    // U+2212
+			{"en-dash", "DASH-EN12", "DASH–EN12"},             // U+2013
+			{"em-dash", "DASH-EM34", "DASH—EM34"},             // U+2014
+			{"hyphen", "DASH-HY56", "DASH‐HY56"},              // U+2010
+			{"minus", "DASH-MI78", "DASH−MI78"},               // U+2212
 			{"non-breaking hyphen", "DASH-NB90", "DASH‑NB90"}, // U+2011
 		}
 

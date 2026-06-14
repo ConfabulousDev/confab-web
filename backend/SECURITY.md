@@ -550,13 +550,19 @@ http.SetCookie(w, &http.Cookie{
 - Strict mode would drop session cookie on redirect
 - Lax mode allows cookies on GET redirects
 
+**Hashed at rest (40hj):**
+- ✅ `web_sessions.id` stores **SHA-256(cookie value)**, never the raw token — mirroring the API-key pattern (`db.HashToken`).
+- ✅ A read of the database (backup leak, SQLi, replica, support tooling) yields only digests, not replayable session tokens; the raw high-entropy value lives only in the HttpOnly cookie.
+- ✅ Lookups stay a single indexed exact-match on the hash.
+- The same applies to `device_codes.device_code`. The human-typed `device_codes.user_code` stays plaintext (low-entropy, 5-minute expiry — its defense is the per-verifier verify throttle, 8epk — not at-rest hashing).
+
 ### Session Lifecycle
 
 **Creation:**
 1. User completes GitHub OAuth
 2. Server generates random session ID (32 bytes, hex)
-3. Session stored in database with expiry (7 days)
-4. Session ID returned in HttpOnly cookie
+3. Session stored in database (as `sha256(id)`) with expiry (7 days)
+4. Session ID returned in HttpOnly cookie (raw value)
 
 **Validation:**
 ```go

@@ -51,8 +51,13 @@ func TestCreateDeviceCode(t *testing.T) {
 		t.Fatalf("GetDeviceCodeByDeviceCode failed: %v", err)
 	}
 
-	if dc.DeviceCode != deviceCode {
-		t.Errorf("DeviceCode = %q, want %q", dc.DeviceCode, deviceCode)
+	// device_code is hashed at rest (40hj): the stored/returned value is
+	// sha256(raw), and lookup-by-raw (above) round-trips.
+	if dc.DeviceCode != db.HashToken(deviceCode) {
+		t.Errorf("DeviceCode = %q, want sha256(raw) %q", dc.DeviceCode, db.HashToken(deviceCode))
+	}
+	if dc.DeviceCode == deviceCode {
+		t.Error("device_code must not be stored raw")
 	}
 	if dc.UserCode != userCode {
 		t.Errorf("UserCode = %q, want %q", dc.UserCode, userCode)
@@ -89,8 +94,9 @@ func TestGetDeviceCodeByUserCode(t *testing.T) {
 		t.Fatalf("GetDeviceCodeByUserCode failed: %v", err)
 	}
 
-	if dc.DeviceCode != deviceCode {
-		t.Errorf("DeviceCode = %q, want %q", dc.DeviceCode, deviceCode)
+	// Returned device_code is the stored hash (40hj).
+	if dc.DeviceCode != db.HashToken(deviceCode) {
+		t.Errorf("DeviceCode = %q, want sha256(raw) %q", dc.DeviceCode, db.HashToken(deviceCode))
 	}
 }
 

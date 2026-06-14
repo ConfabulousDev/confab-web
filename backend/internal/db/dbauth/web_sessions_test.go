@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -35,8 +36,13 @@ func TestCreateWebSession(t *testing.T) {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
 
-	if session.ID != sessionID {
-		t.Errorf("session.ID = %s, want %s", session.ID, sessionID)
+	// session.ID is stored/returned as the hash of the cookie value (40hj);
+	// lookup-by-raw (above) round-trips.
+	if session.ID == sessionID {
+		t.Error("session.ID must be the hash, not the raw cookie value")
+	}
+	if session.ID != db.HashToken(sessionID) {
+		t.Errorf("session.ID = %s, want sha256(raw) %s", session.ID, db.HashToken(sessionID))
 	}
 	if session.UserID != user.ID {
 		t.Errorf("session.UserID = %d, want %d", session.UserID, user.ID)

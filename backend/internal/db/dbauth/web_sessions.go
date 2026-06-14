@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
@@ -19,8 +20,10 @@ func (s *Store) CreateWebSession(ctx context.Context, sessionID string, userID i
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
+	// Store sha256(cookie value), never the raw token, so a DB read can't
+	// replay the session (40hj). The cookie keeps the raw value.
 	query := `INSERT INTO web_sessions (id, user_id, created_at, expires_at) VALUES ($1, $2, NOW(), $3)`
-	_, err := s.conn().ExecContext(ctx, query, sessionID, userID, expiresAt)
+	_, err := s.conn().ExecContext(ctx, query, db.HashToken(sessionID), userID, expiresAt)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -42,7 +45,7 @@ func (s *Store) GetWebSession(ctx context.Context, sessionID string) (*models.We
 	`
 
 	var session models.WebSession
-	err := s.conn().QueryRowContext(ctx, query, sessionID).Scan(
+	err := s.conn().QueryRowContext(ctx, query, db.HashToken(sessionID)).Scan(
 		&session.ID,
 		&session.UserID,
 		&session.UserEmail,
@@ -71,7 +74,7 @@ func (s *Store) DeleteWebSession(ctx context.Context, sessionID string) error {
 	defer span.End()
 
 	query := `DELETE FROM web_sessions WHERE id = $1`
-	_, err := s.conn().ExecContext(ctx, query, sessionID)
+	_, err := s.conn().ExecContext(ctx, query, db.HashToken(sessionID))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -94,7 +97,7 @@ func (s *Store) UpsertSharedSession(ctx context.Context, sessionID string, userI
 		VALUES ($1, $2, NOW(), $3)
 		ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at
 	`
-	if _, err := s.conn().ExecContext(ctx, query, sessionID, userID, expiresAt); err != nil {
+	if _, err := s.conn().ExecContext(ctx, query, db.HashToken(sessionID), userID, expiresAt); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("upsert shared web session: %w", err)
@@ -112,7 +115,7 @@ func (s *Store) DeleteOtherSessionsForUser(ctx context.Context, userID int64, ke
 	defer span.End()
 
 	query := `DELETE FROM web_sessions WHERE user_id = $1 AND id <> $2`
-	res, err := s.conn().ExecContext(ctx, query, userID, keepSessionID)
+	res, err := s.conn().ExecContext(ctx, query, userID, db.HashToken(keepSessionID))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
