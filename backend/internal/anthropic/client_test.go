@@ -202,3 +202,15 @@ func TestMessagesResponse_GetTextContent(t *testing.T) {
 		t.Errorf("expected 'Hello world!', got %s", resp.GetTextContent())
 	}
 }
+
+func TestAPIError_Error(t *testing.T) {
+	err := &APIError{
+		Type:        "error",
+		ErrorDetail: ErrorDetails{Type: "invalid_request_error", Message: "Invalid model specified"},
+		StatusCode:  http.StatusBadRequest,
+	}
+	want := "anthropic API error (status 400, type invalid_request_error): Invalid model specified"
+	if got := err.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}

@@ -139,6 +139,11 @@ func (s *Store) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey,
 		}
 		keys = append(keys, key)
 	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("error iterating API keys: %w", err)
+	}
 
 	span.SetAttributes(attribute.Int("keys.count", len(keys)))
 	return keys, nil
