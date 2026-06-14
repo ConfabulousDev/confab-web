@@ -296,6 +296,15 @@ func loadConfig() Config {
 	if len(csrfSecretKey) < 32 {
 		logFatal("invalid env var", "var", "CSRF_SECRET_KEY", "error", "must be at least 32 characters")
 	}
+	// Refuse to run with a public default secret outside local eval. The shipped
+	// docker-compose.yml / .env.example defaults are fine for `docker compose up`
+	// (INSECURE_DEV_MODE=true), but become a serious hole the moment the instance
+	// is exposed. See security_guard.go.
+	if reason := insecureDefaultReason(os.Getenv("INSECURE_DEV_MODE") == "true", os.Getenv("FRONTEND_URL"), csrfSecretKey, os.Getenv("ADMIN_BOOTSTRAP_PASSWORD")); reason != "" {
+		logFatal("refusing to start: insecure default in production mode",
+			"error", reason,
+			"hint", "set a unique CSRF_SECRET_KEY (openssl rand -base64 32) and ADMIN_BOOTSTRAP_PASSWORD, or set INSECURE_DEV_MODE=true for local evaluation only")
+	}
 	oauthConfig.CSRFSecretKey = csrfSecretKey
 
 	// CF-483: optional demo identity. When set, the named user is the

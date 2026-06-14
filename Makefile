@@ -25,13 +25,13 @@ dev: up ## Run the full stack (infra + backend + frontend) in one terminal
 		wait
 
 up: ## Start local infra (Postgres + MinIO) and apply migrations
-	docker compose up -d --build
+	docker compose -f docker-compose.infra.yml up -d --build
 
 down: ## Stop and remove infra containers
-	docker compose down
+	docker compose -f docker-compose.infra.yml down
 
 logs: ## Tail infra logs
-	docker compose logs -f
+	docker compose -f docker-compose.infra.yml logs -f
 
 backend: ## Run the backend, hot-compiled (http://localhost:8080)
 	@cp -n backend/.env.example backend/.env 2>/dev/null || true

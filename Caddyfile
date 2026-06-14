@@ -1,0 +1,16 @@
+# Caddy reverse proxy for the `caddy` profile in docker-compose.yml.
+# The domain comes from CONFAB_DOMAIN in your .env; Caddy provisions a TLS
+# certificate for it automatically via Let's Encrypt.
+{$CONFAB_DOMAIN} {
+    reverse_proxy app:8080
+
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 50mb
+            roll_keep 5
+            roll_keep_for 168h    # 7 days
+        }
+    }
+
+    encode gzip zstd
+}

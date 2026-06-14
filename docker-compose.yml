@@ -1,23 +1,42 @@
-# Local development infrastructure for Confabulous.
+# Canonical self-host deploy stack for Confabulous.
 #
-# This file's only job is to back the local dev loop: Postgres, MinIO, and a
-# one-shot migration runner. You run the backend (`go run`) and frontend
-# (`npm run dev`) natively for hot reload — see "Local development" in README.md.
+#   Eval / quickstart:   docker compose up -d            → dashboard at :8080
+#   Production:          edit .env, then
+#                        docker compose --profile caddy up -d   → HTTPS via Caddy
 #
-#   docker compose up -d --build      # start infra + apply your local migrations
+# Every operator-facing value is ${VAR:-default}, so this file runs with NO .env
+# (safe localhost defaults) and is customized entirely through a `.env` file next
+# to it — copy .env.example to .env and edit. The long tail of optional settings
+# (OAuth, OIDC, smart recap, email, …) is passed through from .env automatically
+# via `env_file` below, so you never edit this file to enable a feature.
 #
-# It does NOT run the app itself. To run the full product in Docker from the
-# prebuilt image, see SELF-HOSTING.md.
+# Default admin login (eval only): admin@local.dev / localdevpassword
+#
+# For local SOURCE development (hot-reload backend/frontend) use the dev-infra
+# stack instead: `make up` (docker-compose.infra.yml).
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+# Optional .env overlay: passes any KEY=VALUE in ./.env into the app/worker
+# containers, so optional features can be enabled from .env without editing this
+# file. `required: false` keeps zero-config `docker compose up` working with no .env.
+x-env-file: &env-file
+  - path: .env
+    required: false
 
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: confab
-      POSTGRES_PASSWORD: confab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-confab}
       POSTGRES_DB: confab
-    ports:
-      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,13 +47,12 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
+    logging: *default-logging
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio_data:/data
     healthcheck:
@@ -45,32 +63,104 @@ services:
 
   minio-setup:
     image: minio/mc:latest
+    logging: *default-logging
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb minio/confab --ignore-existing;
+      /usr/bin/mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      /usr/bin/mc mb minio/${BUCKET_NAME:-confab} --ignore-existing;
       exit 0;
       "
 
-  # One-shot migration runner. Builds a tiny image (migrate CLI + your local SQL
-  # files) in seconds via the `migrate-runner` Dockerfile target — no app build.
-  # Use `--build` to pick up newly added migrations: docker compose up -d --build
   migrate:
-    build:
-      context: .
-      target: migrate-runner
+    image: ghcr.io/confabulousdev/confab-web:latest
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
     command: ["./migrate_db.sh"]
     environment:
-      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
-      # Optional: use a separate admin user for migrations
-      # MIGRATE_DATABASE_URL: postgres://admin:pass@postgres:5432/confab?sslmode=disable
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:-${DATABASE_URL:-postgres://confab:${POSTGRES_PASSWORD:-confab}@postgres:5432/confab?sslmode=disable}}
+
+  app:
+    image: ghcr.io/confabulousdev/confab-web:latest
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: *env-file
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-setup:
+        condition: service_completed_successfully
+    ports:
+      # Localhost-only by default: not reachable from the network without a
+      # reverse proxy (see the `caddy` profile) or an explicit change.
+      - "127.0.0.1:${PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: ${DATABASE_URL:-postgres://confab:${POSTGRES_PASSWORD:-confab}@postgres:5432/confab?sslmode=disable}
+      S3_ENDPOINT: ${S3_ENDPOINT:-minio:9000}
+      S3_USE_SSL: "${S3_USE_SSL:-false}"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-${MINIO_ROOT_USER:-minioadmin}}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
+      BUCKET_NAME: ${BUCKET_NAME:-confab}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      CSRF_SECRET_KEY: ${CSRF_SECRET_KEY:-local-dev-csrf-secret-change-me-32chars}
+      INSECURE_DEV_MODE: "${INSECURE_DEV_MODE:-true}"
+      AUTH_PASSWORD_ENABLED: "${AUTH_PASSWORD_ENABLED:-true}"
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-admin@local.dev}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-localdevpassword}
+      SUPER_ADMIN_EMAILS: ${SUPER_ADMIN_EMAILS:-admin@local.dev}
+      ENABLE_SHARE_CREATION: "${ENABLE_SHARE_CREATION:-true}"
+
+  worker:
+    image: ghcr.io/confabulousdev/confab-web:latest
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["./confab", "worker"]
+    env_file: *env-file
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-setup:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://confab:${POSTGRES_PASSWORD:-confab}@postgres:5432/confab?sslmode=disable}
+      S3_ENDPOINT: ${S3_ENDPOINT:-minio:9000}
+      S3_USE_SSL: "${S3_USE_SSL:-false}"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-${MINIO_ROOT_USER:-minioadmin}}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
+      BUCKET_NAME: ${BUCKET_NAME:-confab}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-1m}
+      WORKER_MAX_SESSIONS: "${WORKER_MAX_SESSIONS:-10}"
+
+  # HTTPS via Caddy (Let's Encrypt). Opt-in: `docker compose --profile caddy up -d`.
+  # Requires CONFAB_DOMAIN in .env and an A record pointing at this host.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    profiles: [caddy]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CONFAB_DOMAIN: ${CONFAB_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      - app
 
 volumes:
   postgres_data:
   minio_data:
+  caddy_data:
+  caddy_config:
+  caddy_logs:

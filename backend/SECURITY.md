@@ -207,6 +207,14 @@ CSRF_SECRET_KEY=<random-32-byte-key>
 INSECURE_DEV_MODE=true
 ```
 
+**Startup guard against default secrets:** the shipped `docker-compose.yml` and
+`.env.example` use a public default `CSRF_SECRET_KEY` so `docker compose up` works
+with zero config for local evaluation. To prevent that default (or the default
+`ADMIN_BOOTSTRAP_PASSWORD`) from reaching an exposed instance, the server refuses
+to start when it detects **production intent** — `INSECURE_DEV_MODE` not `true`,
+or an `https://` `FRONTEND_URL` — while a known template default is still in use.
+See `cmd/server/security_guard.go`.
+
 **How It Works:**
 
 The library validates CSRF using browser-set Fetch metadata headers, which cannot be forged by cross-origin requests:
