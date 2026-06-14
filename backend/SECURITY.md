@@ -144,6 +144,11 @@ curl -H "Authorization: Bearer confab_abc123..." \
 
 Headless flow: the same key can also be obtained via the OAuth 2.0 device-code flow (`POST /auth/device/code` + `POST /auth/device/token`) — useful for CI runners and remote dev environments where no browser is available on the same host.
 
+**Device-code verification hardening (8epk):**
+
+- ✅ **Unbiased user codes.** The human-friendly `user_code` is generated with rejection sampling over its 31-symbol alphabet, so every symbol is equiprobable (a plain `byte % 31` would favor the first 8 symbols, shrinking the effective keyspace).
+- ✅ **Per-verifier brute-force lockout.** `POST /auth/device/verify` binds a logged-in viewer's session to a pending device code. Beyond the shared per-IP rate limit, each verifier (keyed by user ID) is locked out for 15 minutes after 5 failed `user_code` submissions, mirroring the password-auth lockout — defense-in-depth against a logged-in attacker brute-forcing outstanding codes within the short expiry window. The lockout is in-memory (no DB write per attempt) and resets on a successful authorization. Keying on user ID (not session ID) means it cannot be bypassed by re-logging-in.
+
 ---
 
 ## Cross-Origin & CSRF Protection
