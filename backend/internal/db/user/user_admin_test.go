@@ -77,6 +77,62 @@ func TestListAllUsers_WithUsers(t *testing.T) {
 	}
 }
 
+// TestListEffectiveAdminIDs verifies the effective-admin set (g0bq): active
+// column admins + active env super-admins (by email); inactive users and
+// env-super-admin emails with no matching user row are excluded.
+func TestListEffectiveAdminIDs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	ctx := context.Background()
+
+	columnAdmin := testutil.CreateTestUser(t, env, "col-admin@example.com", "Col Admin")
+	envAdmin := testutil.CreateTestUser(t, env, "env-admin@example.com", "Env Admin")
+	regular := testutil.CreateTestUser(t, env, "regular@example.com", "Regular")
+	inactiveColAdmin := testutil.CreateTestUser(t, env, "inactive-admin@example.com", "Inactive Admin")
+
+	if err := store.SetUserAdmin(ctx, columnAdmin.ID, true); err != nil {
+		t.Fatalf("SetUserAdmin(columnAdmin): %v", err)
+	}
+	if err := store.SetUserAdmin(ctx, inactiveColAdmin.ID, true); err != nil {
+		t.Fatalf("SetUserAdmin(inactiveColAdmin): %v", err)
+	}
+	if err := store.UpdateUserStatus(ctx, inactiveColAdmin.ID, models.UserStatusInactive); err != nil {
+		t.Fatalf("UpdateUserStatus(inactiveColAdmin): %v", err)
+	}
+
+	// env super-admins: envAdmin (has an active row) + a ghost email (no row).
+	superAdmins := []string{"env-admin@example.com", "ghost@example.com"}
+	ids, err := store.ListEffectiveAdminIDs(ctx, superAdmins)
+	if err != nil {
+		t.Fatalf("ListEffectiveAdminIDs: %v", err)
+	}
+
+	got := map[int64]bool{}
+	for _, id := range ids {
+		got[id] = true
+	}
+	if !got[columnAdmin.ID] {
+		t.Error("column admin (active, is_admin) should be effective")
+	}
+	if !got[envAdmin.ID] {
+		t.Error("env super-admin with an active row should be effective")
+	}
+	if got[regular.ID] {
+		t.Error("regular user must not be effective")
+	}
+	if got[inactiveColAdmin.ID] {
+		t.Error("inactive column admin must be excluded")
+	}
+	if len(ids) != 2 {
+		t.Errorf("effective admin count = %d, want 2 (ghost email with no user row excluded)", len(ids))
+	}
+}
+
 // TestListAllUsers_IncludesInactiveUsers tests that inactive users are included
 func TestListAllUsers_IncludesInactiveUsers(t *testing.T) {
 	if testing.Short() {

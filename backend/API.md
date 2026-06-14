@@ -1096,6 +1096,7 @@ POST /api/v1/admin/users
 POST /api/v1/admin/users/{id}/deactivate
 ```
 **Response:** `{ "id": 1, "status": "inactive" }`
+**Errors:** 409 (Conflict — would deactivate the last effective admin; g0bq)
 
 ### Activate User
 ```
@@ -1108,9 +1109,9 @@ POST /api/v1/admin/users/{id}/activate
 POST /api/v1/admin/users/{id}/grant-admin
 POST /api/v1/admin/users/{id}/revoke-admin
 ```
-Toggles the `users.is_admin` column (one half of the admin union; `SUPER_ADMIN_EMAILS` is unaffected). Any admin may toggle any user (flat union, no tiers); there is no last-admin/self-demote lockout — recovery from a zero-column-admin state is via `SUPER_ADMIN_EMAILS` env + restart.
+Toggles the `users.is_admin` column (one half of the admin union; `SUPER_ADMIN_EMAILS` is unaffected). Any admin may toggle any user (flat union, no tiers). Revoke is guarded against orphaning the last effective admin (g0bq): it returns 409 when no other effective admin (column or env super-admin) would remain. Revoking a user who is also an env super-admin is allowed (they keep access via `SUPER_ADMIN_EMAILS`), preserving the env-recovery path.
 **Response:** `{ "id": 1, "is_admin": true }`
-**Errors:** 400 (grant on a `read_only` user is rejected — demo-site defense-in-depth), 404 (user not found)
+**Errors:** 400 (grant on a `read_only` user is rejected — demo-site defense-in-depth), 404 (user not found), 409 (revoke would remove the last effective admin)
 
 In the user-list response, `is_admin` is the raw column and `is_super_admin` is whether the email is in `SUPER_ADMIN_EMAILS`. `GET /api/v1/me` returns `is_admin` as the **union** of both.
 
@@ -1118,9 +1119,9 @@ In the user-list response, `is_admin` is the raw column and `is_super_admin` is 
 ```
 DELETE /api/v1/admin/users/{id}
 ```
-Deletes S3 data first, then DB record (CASCADE). Uses 60s timeout.
+Deletes S3 data first, then DB record (CASCADE). Uses 60s timeout. The last-effective-admin guard runs **before** the S3 wipe, so a blocked delete mutates nothing.
 **Response:** 204 No Content
-**Errors:** 404 (not found)
+**Errors:** 404 (not found), 409 (would delete the last effective admin; g0bq)
 
 ### List System Shares
 ```
