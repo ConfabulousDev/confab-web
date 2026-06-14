@@ -14,7 +14,7 @@ Per-provider transcript adapters (CF-417). `SessionViewer` and
 | `registry.ts` | `getAdapter(provider: string): OpaqueAdapter`. Normalizes `provider` (lowercase, whitespace → `-`), then looks up in a record keyed by `PROVIDER_VALUES`. **Throws on unknown providers** — backend already normalizes on read, so this only fires on a backend-first rollout. |
 | `useTranscriptData.ts` | Shared hook: initial fetch + visibility-gated polling. Single hook, both providers. Skipped when a Storybook `seed` is supplied. |
 | `registry.test.ts` | Drift guard: every `PROVIDER_VALUES` entry must resolve to a distinct adapter; unknown providers must throw. |
-| `claudeAdapter.test.ts` / `codexAdapter.test.ts` | Per-adapter delegation + pure-method tests. Services are mocked with `vi.mock`. |
+| `claudeAdapter.test.ts` / `codexAdapter.test.ts` / `opencodeAdapter.test.ts` | Per-adapter delegation + pure-method tests. Services are mocked with `vi.mock`. |
 
 ## `ProviderAdapter` interface
 
