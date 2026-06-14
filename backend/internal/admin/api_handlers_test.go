@@ -291,6 +291,84 @@ func TestAdminDeactivateActivateUserAPI(t *testing.T) {
 	})
 }
 
+// TestAdminLastAdminGuard verifies the last-effective-admin guard (g0bq):
+// deactivate/delete/revoke that would orphan the system returns 409; with a
+// second admin present the action is allowed.
+func TestAdminLastAdminGuard(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("deactivate last (env super-)admin → 409", func(t *testing.T) {
+		env.CleanDB(t)
+		solo := testutil.CreateTestUser(t, env, "solo@example.com", "Solo Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "solo@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, solo.ID)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", solo.ID), map[string]string{})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusConflict)
+	})
+
+	t.Run("delete last (env super-)admin → 409 (no mutation)", func(t *testing.T) {
+		env.CleanDB(t)
+		solo := testutil.CreateTestUser(t, env, "solo@example.com", "Solo Admin")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "solo@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, solo.ID)
+		resp, err := client.Delete(fmt.Sprintf("/api/v1/admin/users/%d", solo.ID))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusConflict)
+
+		// Guard runs before the irreversible delete — the user must still exist.
+		userStore := &dbuser.Store{DB: env.DB}
+		if _, err := userStore.GetUserByID(env.Ctx, solo.ID); err != nil {
+			t.Errorf("user must NOT be deleted when the guard blocks: %v", err)
+		}
+	})
+
+	t.Run("revoke last column-admin → 409", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "") // no env super-admins
+		solo := testutil.CreateTestUser(t, env, "colsolo@example.com", "Col Solo")
+		userStore := &dbuser.Store{DB: env.DB}
+		if err := userStore.SetUserAdmin(env.Ctx, solo.ID, true); err != nil {
+			t.Fatalf("SetUserAdmin: %v", err)
+		}
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, solo.ID)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/revoke-admin", solo.ID), map[string]string{})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusConflict)
+	})
+
+	t.Run("deactivate one of two admins → allowed", func(t *testing.T) {
+		env.CleanDB(t)
+		admin1 := testutil.CreateTestUser(t, env, "admin1@example.com", "Admin One")
+		admin2 := testutil.CreateTestUser(t, env, "admin2@example.com", "Admin Two")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin1@example.com,admin2@example.com")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, admin1.ID)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", admin2.ID), map[string]string{})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+	})
+}
+
 // ===================================================================
 // POST /api/v1/admin/users — create user
 // ===================================================================

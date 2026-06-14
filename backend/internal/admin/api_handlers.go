@@ -271,6 +271,14 @@ func (h *Handlers) setUserStatusAPI(w http.ResponseWriter, r *http.Request, stat
 		targetEmail = targetUser.Email
 	}
 
+	// Deactivating a user removes them from the effective-admin set; refuse if it
+	// would leave zero admins (g0bq). Activation is always safe.
+	if status == "inactive" {
+		if h.guardLastAdmin(w, r, ctx, userStore, userID, false) {
+			return
+		}
+	}
+
 	modelStatus := models.UserStatus(status)
 	if err := userStore.UpdateUserStatus(ctx, userID, modelStatus); err != nil {
 		log.Error("Failed to update user status", "error", err, "user_id", userID, "status", status)
@@ -307,9 +315,11 @@ func (h *Handlers) HandleRevokeAdminAPI(w http.ResponseWriter, r *http.Request) 
 
 // setUserAdminAPI toggles the users.is_admin column (one half of the admin
 // union; SUPER_ADMIN_EMAILS is unaffected). Mirrors setUserStatusAPI. Grant on
-// a read-only user is rejected (D-S2, demo-site defense-in-depth). No
-// last-admin / self-demote lockout (explicitly rejected in 5k4v) — recovery
-// from a zero-column-admin state is via SUPER_ADMIN_EMAILS env + restart.
+// a read-only user is rejected (D-S2, demo-site defense-in-depth). Revoke is
+// guarded against orphaning the last effective admin (g0bq): it is refused with
+// 409 when no other effective admin (column or env super-admin) would remain. A
+// user who is also an env super-admin can still be revoked (they keep panel
+// access via SUPER_ADMIN_EMAILS), preserving the env-recovery path.
 func (h *Handlers) setUserAdminAPI(w http.ResponseWriter, r *http.Request, isAdmin bool, action AdminAction) {
 	log := logger.Ctx(r.Context())
 
@@ -341,6 +351,15 @@ func (h *Handlers) setUserAdminAPI(w http.ResponseWriter, r *http.Request, isAdm
 		return
 	}
 
+	// Revoking the column flag removes the target from the effective-admin set
+	// UNLESS they are also an env super-admin (they keep panel access via the
+	// union gate). Refuse if it would leave zero admins (g0bq).
+	if !isAdmin {
+		if h.guardLastAdmin(w, r, ctx, userStore, userID, IsSuperAdmin(targetUser.Email)) {
+			return
+		}
+	}
+
 	if err := userStore.SetUserAdmin(ctx, userID, isAdmin); err != nil {
 		log.Error("Failed to set user admin", "error", err, "user_id", userID, "is_admin", isAdmin)
 		httputil.RespondError(w, http.StatusInternalServerError, "Failed to update admin status")
@@ -356,6 +375,27 @@ func (h *Handlers) setUserAdminAPI(w http.ResponseWriter, r *http.Request, isAdm
 		ID:      userID,
 		IsAdmin: isAdmin,
 	})
+}
+
+// guardLastAdmin blocks (409 Conflict) an action that would leave the system
+// with zero effective admins (g0bq, audit E5). Effective admins are active users
+// who can reach the panel via the union gate (is_admin OR SUPER_ADMIN_EMAILS).
+// targetRemainsEffective is true when the action does NOT remove the target from
+// that set (revoke on a user who is also an env super-admin). Returns true when
+// the request has already been answered (blocked or errored) and the caller must
+// return without mutating.
+func (h *Handlers) guardLastAdmin(w http.ResponseWriter, r *http.Request, ctx context.Context, userStore *dbuser.Store, targetUserID int64, targetRemainsEffective bool) bool {
+	ids, err := userStore.ListEffectiveAdminIDs(ctx, SuperAdminEmails())
+	if err != nil {
+		logger.Ctx(r.Context()).Error("Failed to list effective admins for last-admin guard", "error", err)
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to verify admin protection")
+		return true
+	}
+	if wouldOrphanLastAdmin(ids, targetUserID, targetRemainsEffective) {
+		httputil.RespondError(w, http.StatusConflict, "Cannot remove the last admin")
+		return true
+	}
+	return false
 }
 
 // HandleDeleteUserAPI permanently deletes a user and all their data.
@@ -377,6 +417,12 @@ func (h *Handlers) HandleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
 	targetUser, err := userStore.GetUserByID(ctx, userID)
 	if err != nil {
 		httputil.RespondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	// Last-admin guard MUST run before the irreversible S3 wipe + DB delete
+	// (g0bq). Deleting a user removes them from the effective-admin set.
+	if h.guardLastAdmin(w, r, ctx, userStore, userID, false) {
 		return
 	}
 

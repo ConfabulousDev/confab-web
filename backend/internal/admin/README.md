@@ -6,9 +6,9 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 
 | File | Role |
 |------|------|
-| `admin.go` | `IsSuperAdmin` check against the `SUPER_ADMIN_EMAILS` env var |
-| `admin_test.go` | Unit tests for `IsSuperAdmin` |
-| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, grant/revoke-admin (5k4v), delete, system shares, and smart recap prompt settings |
+| `admin.go` | Super-admin handling: `ParseSuperAdminEmails` (validate + normalize + dedup, returning warnings), `SetSuperAdmins` (install the startup-validated cached set), `SuperAdminEmails` (sorted list), `IsSuperAdmin` (reads the cached set; falls back to a live `SUPER_ADMIN_EMAILS` parse when uninitialized), and `wouldOrphanLastAdmin` (the pure last-effective-admin guard decision). The set is validated + logged once at startup in `cmd/server/main.go` (g0bq). |
+| `admin_test.go` / `admin_internal_test.go` | Unit tests for `IsSuperAdmin`, the env parser, and the last-admin guard decision |
+| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, grant/revoke-admin (5k4v), delete, system shares, and smart recap prompt settings. Revoke/deactivate/delete run `guardLastAdmin` — 409 Conflict if the action would orphan the last effective admin (g0bq); for delete the guard runs before the S3 wipe. |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
 | `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`) |

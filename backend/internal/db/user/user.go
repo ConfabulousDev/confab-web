@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/lib/pq"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -115,6 +116,43 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	}
 	span.SetAttributes(attribute.Int("users.count", count))
 	return count, nil
+}
+
+// ListEffectiveAdminIDs returns the IDs of active users who can reach the admin
+// panel: those with is_admin=true OR whose (lowercased) email is in
+// superAdminEmails (the normalized SUPER_ADMIN_EMAILS set). Inactive users and
+// env super-admins without a matching user row are excluded — they can't
+// actually log in. Used by the last-effective-admin guard (g0bq).
+func (s *Store) ListEffectiveAdminIDs(ctx context.Context, superAdminEmails []string) ([]int64, error) {
+	ctx, span := tracer.Start(ctx, "db.list_effective_admin_ids")
+	defer span.End()
+
+	query := `
+		SELECT id FROM users
+		WHERE status = 'active' AND (is_admin = true OR LOWER(email) = ANY($1))`
+	rows, err := s.conn().QueryContext(ctx, query, pq.Array(superAdminEmails))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("failed to list effective admin ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan effective admin id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("effective admin id rows: %w", err)
+	}
+	span.SetAttributes(attribute.Int("admins.effective_count", len(ids)))
+	return ids, nil
 }
 
 // UserExistsByEmail checks if a user exists with the given email

@@ -7,7 +7,7 @@ User CRUD and admin operations: lookup, listing with stats, status management, a
 | File | Role |
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
-| `user.go` | All user operations: `GetUserByID`, `CountUsers`, `UserExistsByEmail`, `ListAllUsers`, `UpdateUserStatus`, `DeleteUser`, `HasOwnSessions`, `HasAPIKeys`, `GetUserSessionIDs`, `UpsertDemoIdentity` + `DeletePasswordIdentitiesForUser` (CF-483 demo bootstrap helpers) |
+| `user.go` | All user operations: `GetUserByID`, `CountUsers`, `ListEffectiveAdminIDs` (active users with `is_admin=true` OR an email in `SUPER_ADMIN_EMAILS`; powers the last-effective-admin guard, g0bq), `UserExistsByEmail`, `ListAllUsers`, `UpdateUserStatus`, `DeleteUser`, `SetUserAdmin`, `HasOwnSessions`, `HasAPIKeys`, `GetUserSessionIDs`, `UpsertDemoIdentity` + `DeletePasswordIdentitiesForUser` (CF-483 demo bootstrap helpers) |
 
 ## Key API
 

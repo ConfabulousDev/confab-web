@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
@@ -63,6 +64,16 @@ func main() {
 	if os.Getenv("INSECURE_DEV_MODE") == "true" {
 		logger.Warn("INSECURE_DEV_MODE=true: session/CSRF cookies will not require HTTPS and HSTS is disabled — do NOT use in production")
 	}
+
+	// Validate SUPER_ADMIN_EMAILS once at startup and cache the normalized set so
+	// a typo is surfaced loudly (a malformed entry silently fails to match
+	// otherwise) and IsSuperAdmin avoids re-parsing on every request (g0bq).
+	superAdmins, superAdminWarnings := admin.ParseSuperAdminEmails(os.Getenv("SUPER_ADMIN_EMAILS"))
+	for _, w := range superAdminWarnings {
+		logger.Warn(w)
+	}
+	admin.SetSuperAdmins(superAdmins)
+	logger.Info("super-admins configured", "count", len(superAdmins), "emails", admin.SuperAdminEmails())
 
 	// Initialize database connection with retry (handles DB not yet ready in containers)
 	// Note: Migrations are run separately via CLI before starting the server

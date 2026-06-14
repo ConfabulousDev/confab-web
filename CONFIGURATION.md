@@ -138,7 +138,7 @@ AI-powered session summaries. Requires an [Anthropic API key](https://console.an
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `SUPER_ADMIN_EMAILS` | *(none)* | No | Comma-separated email addresses with admin panel access. Admin authorization is the **union** of this list and the per-user `is_admin` column (5k4v) — env super-admins are always admins (recovery path); other admins can be granted/revoked at runtime from the admin UI without an env edit + restart. Keep any demo identity's email out of this list. |
+| `SUPER_ADMIN_EMAILS` | *(none)* | No | Comma-separated email addresses with admin panel access. Admin authorization is the **union** of this list and the per-user `is_admin` column (5k4v) — env super-admins are always admins (recovery path); other admins can be granted/revoked at runtime from the admin UI without an env edit + restart. Validated at startup: malformed/duplicate entries are logged as warnings and the normalized list is logged. Keep any demo identity's email out of this list. |
 | `MAX_USERS` | `50` | No | Maximum number of registered users; set to `0` to block new registrations |
 
 ## Instance Customization
