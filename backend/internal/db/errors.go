@@ -16,8 +16,8 @@ var (
 	ErrFileNotFound = errors.New("file not found")
 
 	// User errors
-	ErrUserNotFound   = errors.New("user not found")
-	ErrOwnerInactive  = errors.New("session owner is inactive")
+	ErrUserNotFound  = errors.New("user not found")
+	ErrOwnerInactive = errors.New("session owner is inactive")
 
 	// API key errors
 	ErrAPIKeyNotFound      = errors.New("API key not found")
@@ -33,6 +33,13 @@ var (
 	// Password authentication errors
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrAccountLocked      = errors.New("account is temporarily locked")
+
+	// OAuth account-linking errors
+	// ErrAutoLinkDisabled is returned when a first-time OAuth login matches an
+	// existing account by email but email auto-linking is disabled
+	// (OAUTH_AUTO_LINK_EMAIL=false, the default) — prevents account takeover via
+	// an attacker-controlled IdP email (cm4f).
+	ErrAutoLinkDisabled = errors.New("oauth email auto-linking is disabled")
 
 	// Codex rollout errors
 	ErrRolloutNotFound = errors.New("rollout not found")

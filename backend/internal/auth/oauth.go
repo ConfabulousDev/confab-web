@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -224,6 +225,13 @@ type OAuthConfig struct {
 	// Email domain restrictions (optional, for on-prem deployments)
 	AllowedEmailDomains []string
 
+	// AutoLinkEmail (OAUTH_AUTO_LINK_EMAIL, default false) controls whether a
+	// first-time OAuth login whose email matches an existing account is
+	// automatically linked to it. Default OFF prevents account takeover when an
+	// attacker controls a matching IdP email; when off, the collision errors to
+	// the login page instead of linking (cm4f).
+	AutoLinkEmail bool
+
 	// CF-483: Demo mode. When DemoIdentityEmail is set, anonymous web
 	// visitors on auth-required routes are auto-impersonated as the
 	// designated demo user (which is per-user read-only). CSRFSecretKey
@@ -386,8 +394,16 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			Name:             displayName,
 			AvatarURL:        user.AvatarURL,
 		}
-		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo, config.AutoLinkEmail)
 		if err != nil {
+			if errors.Is(err, db.ErrAutoLinkDisabled) {
+				log.Warn("OAuth auto-link disabled; refusing to link to existing account", "email", oauthInfo.Email, "provider", "github")
+				errorURL := fmt.Sprintf("%s/login?error=account_exists&error_description=%s",
+					frontendURL,
+					url.QueryEscape("An account with this email already exists. Sign in with your original method."))
+				http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+				return
+			}
 			log.Error("Failed to create/find user in database", "error", err, "github_id", oauthInfo.ProviderID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
@@ -941,8 +957,16 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 			Name:       user.Name,
 			AvatarURL:  user.Picture,
 		}
-		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo, config.AutoLinkEmail)
 		if err != nil {
+			if errors.Is(err, db.ErrAutoLinkDisabled) {
+				log.Warn("OAuth auto-link disabled; refusing to link to existing account", "email", oauthInfo.Email, "provider", "google")
+				errorURL := fmt.Sprintf("%s/login?error=account_exists&error_description=%s",
+					frontendURL,
+					url.QueryEscape("An account with this email already exists. Sign in with your original method."))
+				http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+				return
+			}
 			log.Error("Failed to create/find user in database", "error", err, "google_id", user.ID)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
@@ -1327,8 +1351,16 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			Name:       user.Name,
 			AvatarURL:  user.Picture,
 		}
-		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo)
+		dbUser, err := authStore.FindOrCreateUserByOAuth(ctx, oauthInfo, config.AutoLinkEmail)
 		if err != nil {
+			if errors.Is(err, db.ErrAutoLinkDisabled) {
+				log.Warn("OAuth auto-link disabled; refusing to link to existing account", "email", oauthInfo.Email, "provider", "oidc")
+				errorURL := fmt.Sprintf("%s/login?error=account_exists&error_description=%s",
+					frontendURL,
+					url.QueryEscape("An account with this email already exists. Sign in with your original method."))
+				http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+				return
+			}
 			log.Error("Failed to create/find user in database", "error", err, "oidc_sub", user.Sub)
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return

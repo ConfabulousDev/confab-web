@@ -409,7 +409,7 @@ func TestUpdateUserPassword(t *testing.T) {
 
 	t.Run("fails for user without password identity", func(t *testing.T) {
 		// Create an OAuth user (no password identity)
-		oauthUser, err := store.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-only"))
+		oauthUser, err := store.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-only"), true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -526,7 +526,7 @@ func TestIsUserAdmin(t *testing.T) {
 	})
 
 	t.Run("returns false for OAuth user (default)", func(t *testing.T) {
-		oauthUser, err := store.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-admin-check"))
+		oauthUser, err := store.FindOrCreateUserByOAuth(ctx, testutil.TestGitHubUser("oauth-admin-check"), true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}

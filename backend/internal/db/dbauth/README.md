@@ -7,7 +7,7 @@ Authentication and authorization database operations: OAuth identity management,
 | File | Role |
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
-| `oauth.go` | `FindOrCreateUserByOAuth` -- finds user by provider identity, links new identities to existing accounts by email match, or creates new users. Resolves pending share recipients on user creation. |
+| `oauth.go` | `FindOrCreateUserByOAuth(ctx, info, autoLinkEmail)` -- finds user by provider identity, optionally links new identities to existing accounts by email match, or creates new users. When `autoLinkEmail` is false (the default), an email match with no existing identity returns `db.ErrAutoLinkDisabled` instead of linking (cm4f — prevents account takeover). Resolves pending share recipients on user creation. |
 | `password.go` | `AuthenticatePassword`, `CreatePasswordUser`, `UpdateUserPassword`, `GetUserByEmail`, `IsUserAdmin`. Includes bcrypt verification, account lockout after failed attempts, and timing-attack mitigation. |
 | `web_sessions.go` | `CreateWebSession`, `GetWebSession`, `DeleteWebSession` -- browser session management with expiration. `UpsertSharedSession` + `DeleteOtherSessionsForUser` (CF-483) keep the demo identity at exactly one persistent session row keyed by `auth.DemoSessionCookieID`. `GetWebSession` also returns `users.read_only` for `EnforceReadOnly`. |
 | `api_keys.go` | `ValidateAPIKey`, `CreateAPIKeyWithReturn`, `ReplaceAPIKey`, `ListAPIKeys`, `DeleteAPIKey`, `CountAPIKeys`, `UpdateAPIKeyLastUsed` -- API key lifecycle with per-user limits. `ValidateAPIKey` also returns `users.read_only` (CF-483) so the auth middleware can stash the flag in request context. |
@@ -15,7 +15,7 @@ Authentication and authorization database operations: OAuth identity management,
 
 ## Key API
 
-- **`FindOrCreateUserByOAuth(ctx, info)`** -- Three-step flow: (1) find by provider+provider_id, (2) find by email and link identity, (3) create new user+identity. Resolves pending share recipients on new user creation (step 3).
+- **`FindOrCreateUserByOAuth(ctx, info, autoLinkEmail)`** -- Three-step flow: (1) find by provider+provider_id, (2) find by email and link identity, (3) create new user+identity. Step 2 only links when `autoLinkEmail` is true; otherwise it returns `db.ErrAutoLinkDisabled` (cm4f, default — prevents OAuth→existing-account takeover). The OAuth callbacks map that sentinel to a `/login?error=account_exists` redirect. Resolves pending share recipients on new user creation (step 3).
 - **`AuthenticatePassword(ctx, email, password)`** -- Verifies credentials with bcrypt. Tracks failed attempts and locks accounts after 5 failures for 15 minutes. Uses constant-time comparison even for nonexistent users.
 - **`CreatePasswordUser(ctx, email, hash, isAdmin)`** -- Creates user, password identity, and credentials in one transaction. Derives display name from email prefix. Resolves pending share recipients.
 - **`ReplaceAPIKey(ctx, userID, keyHash, name)`** -- Atomically replaces an existing key with the same name or creates a new one (subject to `MaxAPIKeysPerUser`). Used by CLI device code flow.

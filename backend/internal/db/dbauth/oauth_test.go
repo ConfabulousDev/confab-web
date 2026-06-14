@@ -2,8 +2,10 @@ package dbauth_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -31,7 +33,7 @@ func TestFindOrCreateUserByOAuth_NewUser(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	user, err := store.FindOrCreateUserByOAuth(ctx, info)
+	user, err := store.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestFindOrCreateUserByOAuth_ExistingIdentity(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar1.png",
 	}
 
-	user1, err := store.FindOrCreateUserByOAuth(ctx, info)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("First FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -106,7 +108,7 @@ func TestFindOrCreateUserByOAuth_ExistingIdentity(t *testing.T) {
 	info.AvatarURL = "https://github.com/avatar2.png"
 	info.ProviderUsername = "newusername"
 
-	user2, err := store.FindOrCreateUserByOAuth(ctx, info)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("Second FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -177,7 +179,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GitHubFirst(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	githubUser, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
+	githubUser, err := store.FindOrCreateUserByOAuth(ctx, githubInfo, true)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -192,7 +194,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GitHubFirst(t *testing.T) {
 		AvatarURL:        "https://google.com/avatar.png",
 	}
 
-	googleUser, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
+	googleUser, err := store.FindOrCreateUserByOAuth(ctx, googleInfo, true)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -254,7 +256,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GoogleFirst(t *testing.T) {
 		AvatarURL:        "https://google.com/avatar.png",
 	}
 
-	googleUser, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
+	googleUser, err := store.FindOrCreateUserByOAuth(ctx, googleInfo, true)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -269,7 +271,7 @@ func TestFindOrCreateUserByOAuth_AccountLinking_GoogleFirst(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	githubUser, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
+	githubUser, err := store.FindOrCreateUserByOAuth(ctx, githubInfo, true)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -315,7 +317,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 		AvatarURL:        "https://github.com/avatar.png",
 	}
 
-	user1, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, githubInfo, true)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -330,7 +332,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 		AvatarURL:        "https://google.com/avatar.png",
 	}
 
-	user2, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, googleInfo, true)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -341,7 +343,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 	}
 
 	// Now login again with GitHub - should find via identity, not email
-	user3, err := store.FindOrCreateUserByOAuth(ctx, githubInfo)
+	user3, err := store.FindOrCreateUserByOAuth(ctx, githubInfo, true)
 	if err != nil {
 		t.Fatalf("Second GitHub login failed: %v", err)
 	}
@@ -350,7 +352,7 @@ func TestFindOrCreateUserByOAuth_MultipleIdentitiesLogin(t *testing.T) {
 	}
 
 	// Login with Google - should find via identity, not email
-	user4, err := store.FindOrCreateUserByOAuth(ctx, googleInfo)
+	user4, err := store.FindOrCreateUserByOAuth(ctx, googleInfo, true)
 	if err != nil {
 		t.Fatalf("Second Google login failed: %v", err)
 	}
@@ -392,7 +394,7 @@ func TestFindOrCreateUserByOAuth_DifferentEmailsDifferentUsers(t *testing.T) {
 		AvatarURL:        "https://github.com/user1.png",
 	}
 
-	user1, err := store.FindOrCreateUserByOAuth(ctx, user1Info)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, user1Info, true)
 	if err != nil {
 		t.Fatalf("User1 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -407,7 +409,7 @@ func TestFindOrCreateUserByOAuth_DifferentEmailsDifferentUsers(t *testing.T) {
 		AvatarURL:        "https://github.com/user2.png",
 	}
 
-	user2, err := store.FindOrCreateUserByOAuth(ctx, user2Info)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, user2Info, true)
 	if err != nil {
 		t.Fatalf("User2 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -449,7 +451,7 @@ func TestFindOrCreateUserByOAuth_SameProviderDifferentIDs(t *testing.T) {
 		AvatarURL:        "https://github.com/account1.png",
 	}
 
-	user1, err := store.FindOrCreateUserByOAuth(ctx, account1)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, account1, true)
 	if err != nil {
 		t.Fatalf("Account1 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -463,7 +465,7 @@ func TestFindOrCreateUserByOAuth_SameProviderDifferentIDs(t *testing.T) {
 		AvatarURL:        "https://github.com/account2.png",
 	}
 
-	user2, err := store.FindOrCreateUserByOAuth(ctx, account2)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, account2, true)
 	if err != nil {
 		t.Fatalf("Account2 FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -498,7 +500,7 @@ func TestFindOrCreateUserByOAuth_ProviderIDUniqueness(t *testing.T) {
 		AvatarURL:        "https://github.com/unique.png",
 	}
 
-	user1, err := store.FindOrCreateUserByOAuth(ctx, githubUser)
+	user1, err := store.FindOrCreateUserByOAuth(ctx, githubUser, true)
 	if err != nil {
 		t.Fatalf("GitHub FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -512,7 +514,7 @@ func TestFindOrCreateUserByOAuth_ProviderIDUniqueness(t *testing.T) {
 		AvatarURL:        "https://google.com/unique.png",
 	}
 
-	user2, err := store.FindOrCreateUserByOAuth(ctx, googleUser)
+	user2, err := store.FindOrCreateUserByOAuth(ctx, googleUser, true)
 	if err != nil {
 		t.Fatalf("Google FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -533,5 +535,126 @@ func TestFindOrCreateUserByOAuth_ProviderIDUniqueness(t *testing.T) {
 	}
 	if identityCount != 2 {
 		t.Errorf("Expected 2 identities with same provider_id (different providers), got %d", identityCount)
+	}
+}
+
+// providerIdentityCount returns how many user_identities rows of a given
+// provider exist for a user. (CreatePasswordUser already creates a 'password'
+// identity, so these tests assert on the specific provider being linked.)
+func providerIdentityCount(t *testing.T, env *testutil.TestEnvironment, userID int64, provider models.OAuthProvider) int {
+	t.Helper()
+	var n int
+	if err := env.DB.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM user_identities WHERE user_id = $1 AND provider = $2`, userID, provider).Scan(&n); err != nil {
+		t.Fatalf("count identities: %v", err)
+	}
+	return n
+}
+
+// TestFindOrCreateUserByOAuth_AutoLinkDisabled_EmailCollisionRejected is the
+// core cm4f guard: with auto-link OFF, a first-time OAuth login whose email
+// matches an existing (password) account must NOT link — it returns
+// ErrAutoLinkDisabled and inserts no identity row (no account takeover).
+func TestFindOrCreateUserByOAuth_AutoLinkDisabled_EmailCollisionRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
+	ctx := context.Background()
+
+	// Existing local password account.
+	pwUser, err := store.CreatePasswordUser(ctx, "victim@example.com", "bcrypt-hash", false)
+	if err != nil {
+		t.Fatalf("CreatePasswordUser: %v", err)
+	}
+
+	// Attacker-controlled OAuth identity with the SAME email, auto-link OFF.
+	info := models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "github-attacker",
+		Email:      "victim@example.com",
+		Name:       "Attacker",
+	}
+	_, err = store.FindOrCreateUserByOAuth(ctx, info, false)
+	if !errors.Is(err, db.ErrAutoLinkDisabled) {
+		t.Fatalf("expected ErrAutoLinkDisabled, got %v", err)
+	}
+
+	// The password account must have gained NO github identity (no link).
+	if n := providerIdentityCount(t, env, pwUser.ID, models.ProviderGitHub); n != 0 {
+		t.Errorf("expected no github identity linked to the password account, got %d", n)
+	}
+}
+
+// TestFindOrCreateUserByOAuth_AutoLinkEnabled_LinksToPasswordAccount confirms
+// that with the flag ON the historical behavior is preserved: an email match
+// links the new OAuth identity to the existing account.
+func TestFindOrCreateUserByOAuth_AutoLinkEnabled_LinksToPasswordAccount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
+	ctx := context.Background()
+
+	pwUser, err := store.CreatePasswordUser(ctx, "owner@example.com", "bcrypt-hash", false)
+	if err != nil {
+		t.Fatalf("CreatePasswordUser: %v", err)
+	}
+
+	info := models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "github-owner",
+		Email:      "owner@example.com",
+		Name:       "Owner",
+	}
+	linked, err := store.FindOrCreateUserByOAuth(ctx, info, true)
+	if err != nil {
+		t.Fatalf("expected link to succeed with auto-link enabled, got %v", err)
+	}
+	if linked.ID != pwUser.ID {
+		t.Errorf("expected to link to existing account %d, got %d", pwUser.ID, linked.ID)
+	}
+	if n := providerIdentityCount(t, env, pwUser.ID, models.ProviderGitHub); n != 1 {
+		t.Errorf("expected 1 linked github identity, got %d", n)
+	}
+}
+
+// TestFindOrCreateUserByOAuth_AutoLinkDisabled_ExistingIdentityUnaffected
+// confirms the flag only gates first-time email linking: a user who ALREADY
+// has the OAuth identity logs in fine even with auto-link OFF (step-1 path).
+func TestFindOrCreateUserByOAuth_AutoLinkDisabled_ExistingIdentityUnaffected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping database test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	store := &dbauth.Store{DB: env.DB}
+	ctx := context.Background()
+
+	info := models.OAuthUserInfo{
+		Provider:   models.ProviderGitHub,
+		ProviderID: "github-returning",
+		Email:      "returning@example.com",
+		Name:       "Returning User",
+	}
+	// First login creates the identity (auto-link irrelevant — no collision).
+	first, err := store.FindOrCreateUserByOAuth(ctx, info, false)
+	if err != nil {
+		t.Fatalf("first login: %v", err)
+	}
+	// Second login with the SAME identity must still succeed with auto-link OFF.
+	second, err := store.FindOrCreateUserByOAuth(ctx, info, false)
+	if err != nil {
+		t.Fatalf("returning login with auto-link off should succeed, got %v", err)
+	}
+	if first.ID != second.ID {
+		t.Errorf("expected same user on return, got %d then %d", first.ID, second.ID)
 	}
 }

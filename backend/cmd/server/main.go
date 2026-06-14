@@ -224,6 +224,15 @@ func loadConfig() Config {
 		logger.Info("password authentication enabled")
 	}
 
+	// OAuth → existing-account email auto-linking. Default OFF (cm4f): a
+	// first-time OAuth login whose email matches an existing account is NOT
+	// auto-linked unless explicitly enabled, preventing account takeover when an
+	// attacker controls a matching IdP email.
+	oauthConfig.AutoLinkEmail = os.Getenv("OAUTH_AUTO_LINK_EMAIL") == "true"
+	if oauthConfig.AutoLinkEmail {
+		logger.Info("OAuth email auto-linking enabled (OAUTH_AUTO_LINK_EMAIL=true)")
+	}
+
 	// GitHub OAuth (optional)
 	githubClientID := os.Getenv("GITHUB_CLIENT_ID")
 	githubClientSecret := os.Getenv("GITHUB_CLIENT_SECRET")

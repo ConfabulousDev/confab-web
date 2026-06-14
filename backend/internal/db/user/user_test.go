@@ -53,7 +53,7 @@ func TestCountUsers_WithUsers(t *testing.T) {
 	}
 
 	for _, info := range users {
-		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed for %s: %v", info.Email, err)
 		}
@@ -89,7 +89,7 @@ func TestCountUsers_AccountLinkingDoesNotDoubleCount(t *testing.T) {
 		Email:      "linked@example.com",
 		Name:       "Linked User",
 	}
-	_, err := authStore.FindOrCreateUserByOAuth(ctx, githubInfo)
+	_, err := authStore.FindOrCreateUserByOAuth(ctx, githubInfo, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth (GitHub) failed: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestCountUsers_AccountLinkingDoesNotDoubleCount(t *testing.T) {
 		Email:      "linked@example.com",
 		Name:       "Linked User",
 	}
-	_, err = authStore.FindOrCreateUserByOAuth(ctx, googleInfo)
+	_, err = authStore.FindOrCreateUserByOAuth(ctx, googleInfo, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth (Google) failed: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestUserExistsByEmail_Exists(t *testing.T) {
 		Email:      "exists@example.com",
 		Name:       "Existing User",
 	}
-	_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestUserExistsByEmail_EmailsStoredLowercase(t *testing.T) {
 		Email:      "testuser@example.com",
 		Name:       "Case Test User",
 	}
-	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestUserExistsByEmail_MultipleUsers(t *testing.T) {
 	}
 
 	for _, info := range users {
-		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -305,7 +305,7 @@ func TestHasOwnSessions_NoSessions(t *testing.T) {
 		ProviderID: "gh-no-sessions",
 		Email:      "nosessions@example.com",
 		Name:       "No Sessions User",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestHasOwnSessions_WithSessions(t *testing.T) {
 		ProviderID: "gh-with-sessions",
 		Email:      "withsessions@example.com",
 		Name:       "With Sessions User",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestHasOwnSessions_OtherUserSessions(t *testing.T) {
 		ProviderID: "gh-user1",
 		Email:      "user1-sessions@example.com",
 		Name:       "User 1",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestHasOwnSessions_OtherUserSessions(t *testing.T) {
 		ProviderID: "gh-user2",
 		Email:      "user2-sessions@example.com",
 		Name:       "User 2",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -418,7 +418,7 @@ func TestHasAPIKeys_NoKeys(t *testing.T) {
 		ProviderID: "gh-no-keys",
 		Email:      "nokeys@example.com",
 		Name:       "No Keys User",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestHasAPIKeys_WithKeys(t *testing.T) {
 		ProviderID: "gh-with-keys",
 		Email:      "withkeys@example.com",
 		Name:       "With Keys User",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -485,7 +485,7 @@ func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
 		ProviderID: "gh-key-user1",
 		Email:      "user1-keys@example.com",
 		Name:       "User 1",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -495,7 +495,7 @@ func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
 		ProviderID: "gh-key-user2",
 		Email:      "user2-keys@example.com",
 		Name:       "User 2",
-	})
+	}, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}

@@ -54,7 +54,7 @@ func TestListAllUsers_WithUsers(t *testing.T) {
 	}
 
 	for _, info := range oauthUsers {
-		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed for %s: %v", info.Email, err)
 		}
@@ -97,7 +97,7 @@ func TestListAllUsers_IncludesInactiveUsers(t *testing.T) {
 		Email:      "inactive-list@example.com",
 		Name:       "Inactive List User",
 	}
-	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestUpdateUserStatus_Deactivate(t *testing.T) {
 		Email:      "deactivate@example.com",
 		Name:       "Deactivate User",
 	}
-	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestUpdateUserStatus_Reactivate(t *testing.T) {
 		Email:      "reactivate@example.com",
 		Name:       "Reactivate User",
 	}
-	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestDeleteUser_Success(t *testing.T) {
 		Email:      "delete@example.com",
 		Name:       "Delete User",
 	}
-	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestGetUserSessionIDs_NoSessions(t *testing.T) {
 		Email:      "no-sessions@example.com",
 		Name:       "No Sessions User",
 	}
-	user, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	user, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}

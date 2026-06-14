@@ -105,6 +105,17 @@ ALLOWED_EMAIL_DOMAINS=company.com,partner.com
 
 Implementation lives in `internal/auth/` per provider; the domain allow-list is applied consistently across GitHub, Google, OIDC, and password auth.
 
+**Account linking (`OAUTH_AUTO_LINK_EMAIL`, default `false`) — cm4f:**
+
+When a first-time OAuth login presents an email that already belongs to an account (e.g. a local password account, or an account created via a different provider) but carries no matching identity, the email match alone is **not** enough to link the new identity by default.
+
+- **Default (`false`):** the login is refused and redirected to `/login?error=account_exists` ("An account with this email already exists. Sign in with your original method."). No identity is linked. This prevents **account takeover**: if an attacker controls a mailbox matching an existing user (a weakly-verified IdP, a look-alike domain in `ALLOWED_EMAIL_DOMAINS`, subdomain takeover), they otherwise could click "Login with GitHub/Google" and inherit that user's account.
+- **Opt-in (`true`):** restores the previous behavior — a matching email auto-links the new identity to the existing account. Only enable this when you trust every configured IdP to strictly verify email ownership.
+
+The gate is enforced at the store layer (`FindOrCreateUserByOAuth`, returning `ErrAutoLinkDisabled`) so all three providers behave identically. The already-linked path (returning users) and brand-new-email path are unaffected.
+
+> **Operator note (behavior change):** deployments that ran both password auth and OAuth, or multiple OAuth providers, and relied on automatic email-based linking must set `OAUTH_AUTO_LINK_EMAIL=true` to keep that behavior. A user-initiated "Linked accounts" settings flow is tracked as a follow-up.
+
 ### API Keys (CLI Authentication)
 
 **Format:** `confab_<32 hex chars>` (e.g., `confab_a1b2c3d4...`)
