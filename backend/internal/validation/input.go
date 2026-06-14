@@ -30,6 +30,13 @@ const (
 	MaxSearchQueryLen = 1024 // max length of the search query
 )
 
+// errMaxLength builds the standard "<field> exceeds maximum length" error used
+// by the single-field length validators below (and the codex metadata loop).
+// Centralizing the format keeps the wire-facing message identical across fields.
+func errMaxLength(field string, max int) error {
+	return fmt.Errorf("%s exceeds maximum length of %d characters", field, max)
+}
+
 // ValidateFilterValues validates a filter parameter's value count and individual lengths.
 func ValidateFilterValues(name string, values []string) error {
 	if len(values) > MaxFilterCount {
@@ -58,7 +65,7 @@ func ValidateExternalID(externalID string) error {
 		return fmt.Errorf("external_id is required")
 	}
 	if len(externalID) > MaxExternalIDLength {
-		return fmt.Errorf("external_id exceeds maximum length of %d characters", MaxExternalIDLength)
+		return errMaxLength("external_id", MaxExternalIDLength)
 	}
 	if !utf8.ValidString(externalID) {
 		return fmt.Errorf("external_id must be valid UTF-8")
@@ -69,7 +76,7 @@ func ValidateExternalID(externalID string) error {
 // ValidateCWD validates a working directory path
 func ValidateCWD(cwd string) error {
 	if len(cwd) > MaxCWDLength {
-		return fmt.Errorf("cwd exceeds maximum length of %d characters", MaxCWDLength)
+		return errMaxLength("cwd", MaxCWDLength)
 	}
 	return nil
 }
@@ -77,7 +84,7 @@ func ValidateCWD(cwd string) error {
 // ValidateTranscriptPath validates a transcript file path
 func ValidateTranscriptPath(path string) error {
 	if len(path) > MaxTranscriptPathLength {
-		return fmt.Errorf("transcript_path exceeds maximum length of %d characters", MaxTranscriptPathLength)
+		return errMaxLength("transcript_path", MaxTranscriptPathLength)
 	}
 	return nil
 }
@@ -85,7 +92,7 @@ func ValidateTranscriptPath(path string) error {
 // ValidateSyncFileName validates a sync file name
 func ValidateSyncFileName(fileName string) error {
 	if len(fileName) > MaxSyncFileNameLength {
-		return fmt.Errorf("file_name exceeds maximum length of %d characters", MaxSyncFileNameLength)
+		return errMaxLength("file_name", MaxSyncFileNameLength)
 	}
 	return nil
 }
@@ -93,7 +100,7 @@ func ValidateSyncFileName(fileName string) error {
 // ValidateSummary validates a session summary
 func ValidateSummary(summary string) error {
 	if len(summary) > MaxSummaryLength {
-		return fmt.Errorf("summary exceeds maximum length of %d characters", MaxSummaryLength)
+		return errMaxLength("summary", MaxSummaryLength)
 	}
 	return nil
 }
@@ -101,7 +108,7 @@ func ValidateSummary(summary string) error {
 // ValidateFirstUserMessage validates a first user message
 func ValidateFirstUserMessage(msg string) error {
 	if len(msg) > MaxFirstUserMessageLength {
-		return fmt.Errorf("first_user_message exceeds maximum length of %d characters", MaxFirstUserMessageLength)
+		return errMaxLength("first_user_message", MaxFirstUserMessageLength)
 	}
 	return nil
 }
@@ -109,7 +116,7 @@ func ValidateFirstUserMessage(msg string) error {
 // ValidateAPIKeyName validates an API key name
 func ValidateAPIKeyName(name string) error {
 	if len(name) > MaxAPIKeyNameLength {
-		return fmt.Errorf("key name exceeds maximum length of %d characters", MaxAPIKeyNameLength)
+		return errMaxLength("key name", MaxAPIKeyNameLength)
 	}
 	return nil
 }
@@ -117,7 +124,7 @@ func ValidateAPIKeyName(name string) error {
 // ValidateHostname validates a client hostname
 func ValidateHostname(hostname string) error {
 	if len(hostname) > MaxHostnameLength {
-		return fmt.Errorf("hostname exceeds maximum length of %d characters", MaxHostnameLength)
+		return errMaxLength("hostname", MaxHostnameLength)
 	}
 	return nil
 }
@@ -125,7 +132,7 @@ func ValidateHostname(hostname string) error {
 // ValidateUsername validates a client username
 func ValidateUsername(username string) error {
 	if len(username) > MaxUsernameLength {
-		return fmt.Errorf("username exceeds maximum length of %d characters", MaxUsernameLength)
+		return errMaxLength("username", MaxUsernameLength)
 	}
 	return nil
 }
@@ -268,7 +275,7 @@ func ValidateCodexRolloutMetadata(
 	}
 	for _, c := range maxChecks {
 		if len(c.value) > c.max {
-			return fmt.Errorf("%s exceeds maximum length of %d characters", c.name, c.max)
+			return errMaxLength(c.name, c.max)
 		}
 	}
 	return nil

@@ -112,6 +112,9 @@ func main() {
 			files = append(files, f)
 		}
 		rows.Close()
+		if err := rows.Err(); err != nil {
+			log.Fatalf("Error iterating sync_files rows: %v", err)
+		}
 
 		if len(files) == 0 {
 			break

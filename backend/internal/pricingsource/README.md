@@ -20,7 +20,7 @@ confabulous.dev at runtime; only the canonical instance ships the authoritative
 
 | File | Contents |
 |------|----------|
-| `pricing.json` | The single source of truth: `{ schema_version, updated_at, pricing }`, provider-nested (`claude-code` / `codex` → family → rates, USD per million tokens). Each rate has `input`, `output`, `cacheWrite` (5-minute cache writes), `cacheWrite1h` (1-hour cache writes, 2x input; `0` ⇒ consumers fall back to `cacheWrite`), and `cacheRead`. **Edit this and bump `updated_at` to change a price.** `cacheWrite1h` is additive/optional — do **not** bump `schema_version` for it. |
+| `pricing.json` | The single source of truth: `{ schema_version, updated_at, pricing }`, provider-nested (`claude-code` / `codex` / `opencode` → family → rates, USD per million tokens). Each rate has `input`, `output`, `cacheWrite` (5-minute cache writes), `cacheWrite1h` (1-hour cache writes, 2x input; `0` ⇒ consumers fall back to `cacheWrite`), and `cacheRead`. **Edit this and bump `updated_at` to change a price.** `cacheWrite1h` is additive/optional — do **not** bump `schema_version` for it. |
 | `source.go` | `Rate`, `Document`, `Source`; `Embedded()`, `NewSource`, `NewFromEnv`, `Effective`, `RefreshInterval`; validation + fetch. |
 | `source_test.go` | Freshest-wins, fallback, validation, TTL, and env-wiring tests. |
 
