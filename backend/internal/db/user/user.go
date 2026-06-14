@@ -19,7 +19,7 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 		trace.WithAttributes(attribute.Int64("user.id", userID)))
 	defer span.End()
 
-	query := `SELECT id, email, name, avatar_url, status, read_only, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, email, name, avatar_url, status, read_only, is_admin, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(
@@ -29,6 +29,7 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 		&user.AvatarURL,
 		&user.Status,
 		&user.ReadOnly,
+		&user.IsAdmin,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -140,7 +141,7 @@ func (s *Store) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, erro
 
 	query := `
 		SELECT
-			u.id, u.email, u.name, u.avatar_url, u.status, u.created_at, u.updated_at,
+			u.id, u.email, u.name, u.avatar_url, u.status, u.created_at, u.updated_at, u.is_admin,
 			COUNT(DISTINCT s.id) AS session_count,
 			MAX(ak.last_used_at) AS last_api_key_used,
 			MAX(ws.created_at) AS last_logged_in
@@ -170,6 +171,7 @@ func (s *Store) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, erro
 			&user.Status,
 			&user.CreatedAt,
 			&user.UpdatedAt,
+			&user.IsAdmin,
 			&user.SessionCount,
 			&user.LastAPIKeyUsed,
 			&user.LastLoggedIn,
@@ -325,4 +327,38 @@ func (s *Store) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, 
 
 	span.SetAttributes(attribute.Int("sessions.count", len(sessionIDs)))
 	return sessionIDs, nil
+}
+
+// SetUserAdmin sets the users.is_admin column (5k4v). Returns ErrUserNotFound
+// when no row matches. This controls one half of the admin union; the
+// SUPER_ADMIN_EMAILS env half is unaffected.
+func (s *Store) SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error {
+	ctx, span := tracer.Start(ctx, "db.set_user_admin",
+		trace.WithAttributes(
+			attribute.Int64("user.id", userID),
+			attribute.Bool("user.is_admin", isAdmin),
+		))
+	defer span.End()
+
+	query := `UPDATE users SET is_admin = $1, updated_at = NOW() WHERE id = $2`
+
+	result, err := s.conn().ExecContext(ctx, query, isAdmin, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("failed to set user admin: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return db.ErrUserNotFound
+	}
+
+	return nil
 }

@@ -1164,3 +1164,214 @@ func TestAdminSmartRecapPrompt_RegenerateAll(t *testing.T) {
 
 // Suppress unused import warning
 var _ = json.Marshal
+
+// ===================================================================
+// 5k4v: union authz — SUPER_ADMIN_EMAILS (env) OR users.is_admin (column)
+// ===================================================================
+
+// setAdminColumn flips the users.is_admin column directly (bypassing the
+// grant endpoint) so union tests don't depend on it.
+func setAdminColumn(t *testing.T, env *testutil.TestEnvironment, userID int64) {
+	t.Helper()
+	if _, err := env.DB.Exec(env.Ctx, `UPDATE users SET is_admin = true WHERE id = $1`, userID); err != nil {
+		t.Fatalf("set is_admin column: %v", err)
+	}
+}
+
+func TestAdminUnion_ColumnAdminGetsAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+
+	t.Run("column admin (not in SUPER_ADMIN_EMAILS) reaches admin route", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "someone-else@example.com")
+		user := testutil.CreateTestUser(t, env, "columnadmin@example.com", "Column Admin")
+		setAdminColumn(t, env, user.ID)
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, user.ID)
+
+		resp, err := client.Get("/api/v1/admin/users")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+	})
+
+	t.Run("column admin sees /me is_admin true", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "someone-else@example.com")
+		user := testutil.CreateTestUser(t, env, "columnadmin@example.com", "Column Admin")
+		setAdminColumn(t, env, user.ID)
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, user.ID)
+
+		resp, err := client.Get("/api/v1/me")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		var body map[string]interface{}
+		testutil.ParseJSON(t, resp, &body)
+		if body["is_admin"] != true {
+			t.Errorf("expected is_admin=true for column admin, got %v", body["is_admin"])
+		}
+	})
+
+	t.Run("plain user (neither env nor column) is 403", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "someone-else@example.com")
+		user := testutil.CreateTestUser(t, env, "plain@example.com", "Plain")
+
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, user.ID)
+
+		resp, err := client.Get("/api/v1/admin/users")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusForbidden)
+	})
+}
+
+// ===================================================================
+// 5k4v: grant/revoke admin endpoints + admin-list flags
+// ===================================================================
+
+func setReadOnly(t *testing.T, env *testutil.TestEnvironment, userID int64) {
+	t.Helper()
+	if _, err := env.DB.Exec(env.Ctx, `UPDATE users SET read_only = true WHERE id = $1`, userID); err != nil {
+		t.Fatalf("set read_only: %v", err)
+	}
+}
+
+func TestAdminGrantRevoke(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	emptyBody := map[string]string{}
+
+	t.Run("grant gives column-admin access; revoke removes it", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "super@example.com")
+		super := testutil.CreateTestUser(t, env, "super@example.com", "Super")
+		target := testutil.CreateTestUser(t, env, "target@example.com", "Target")
+
+		ts := setupTestServer(t, env)
+		superClient := adminClient(t, env, ts, super.ID)
+		targetClient := adminClient(t, env, ts, target.ID)
+
+		// target starts with no admin access
+		resp, _ := targetClient.Get("/api/v1/admin/users")
+		testutil.RequireStatus(t, resp, http.StatusForbidden)
+
+		// super grants admin to target
+		resp, err := superClient.Post(fmt.Sprintf("/api/v1/admin/users/%d/grant-admin", target.ID), emptyBody)
+		if err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// target now reaches the admin route (middleware reads the column live)
+		resp, _ = targetClient.Get("/api/v1/admin/users")
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// super revokes
+		resp, err = superClient.Post(fmt.Sprintf("/api/v1/admin/users/%d/revoke-admin", target.ID), emptyBody)
+		if err != nil {
+			t.Fatalf("revoke: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// target is 403 again
+		resp, _ = targetClient.Get("/api/v1/admin/users")
+		testutil.RequireStatus(t, resp, http.StatusForbidden)
+	})
+
+	t.Run("grant on read-only user is rejected", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "super@example.com")
+		super := testutil.CreateTestUser(t, env, "super@example.com", "Super")
+		demo := testutil.CreateTestUser(t, env, "demo@example.com", "Demo")
+		setReadOnly(t, env, demo.ID)
+
+		ts := setupTestServer(t, env)
+		superClient := adminClient(t, env, ts, super.ID)
+
+		resp, err := superClient.Post(fmt.Sprintf("/api/v1/admin/users/%d/grant-admin", demo.ID), emptyBody)
+		if err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
+
+	t.Run("non-admin caller cannot grant", func(t *testing.T) {
+		env.CleanDB(t)
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "super@example.com")
+		plain := testutil.CreateTestUser(t, env, "plain@example.com", "Plain")
+		victim := testutil.CreateTestUser(t, env, "victim@example.com", "Victim")
+
+		ts := setupTestServer(t, env)
+		plainClient := adminClient(t, env, ts, plain.ID)
+
+		resp, err := plainClient.Post(fmt.Sprintf("/api/v1/admin/users/%d/grant-admin", victim.ID), emptyBody)
+		if err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusForbidden)
+	})
+
+	// Auditing is log-based (a structured `ADMIN_AUDIT` line with
+	// action=user.grant_admin / user.revoke_admin), not a DB table — the
+	// handlers call AuditLogFromRequest, same as activate/deactivate.
+}
+
+func TestAdminList_AdminFlags(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "super@example.com")
+
+	super := testutil.CreateTestUser(t, env, "super@example.com", "Super") // env super-admin
+	colAdmin := testutil.CreateTestUser(t, env, "col@example.com", "Col")  // column admin
+	setAdminColumn(t, env, colAdmin.ID)
+	_ = testutil.CreateTestUser(t, env, "plain@example.com", "Plain") // neither
+
+	ts := setupTestServer(t, env)
+	client := adminClient(t, env, ts, super.ID)
+
+	resp, err := client.Get("/api/v1/admin/users")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	var body struct {
+		Users []struct {
+			Email        string `json:"email"`
+			IsAdmin      bool   `json:"is_admin"`
+			IsSuperAdmin bool   `json:"is_super_admin"`
+		} `json:"users"`
+	}
+	testutil.ParseJSON(t, resp, &body)
+
+	byEmail := map[string]struct{ IsAdmin, IsSuperAdmin bool }{}
+	for _, u := range body.Users {
+		byEmail[u.Email] = struct{ IsAdmin, IsSuperAdmin bool }{u.IsAdmin, u.IsSuperAdmin}
+	}
+	if got := byEmail["super@example.com"]; got.IsAdmin || !got.IsSuperAdmin {
+		t.Errorf("super: is_admin=%v is_super_admin=%v, want false/true", got.IsAdmin, got.IsSuperAdmin)
+	}
+	if got := byEmail["col@example.com"]; !got.IsAdmin || got.IsSuperAdmin {
+		t.Errorf("column admin: is_admin=%v is_super_admin=%v, want true/false", got.IsAdmin, got.IsSuperAdmin)
+	}
+	if got := byEmail["plain@example.com"]; got.IsAdmin || got.IsSuperAdmin {
+		t.Errorf("plain: is_admin=%v is_super_admin=%v, want false/false", got.IsAdmin, got.IsSuperAdmin)
+	}
+}

@@ -18,6 +18,8 @@ const (
 	ActionUserDeactivate    AdminAction = "user.deactivate"
 	ActionUserActivate      AdminAction = "user.activate"
 	ActionUserDelete        AdminAction = "user.delete"
+	ActionUserGrantAdmin    AdminAction = "user.grant_admin"
+	ActionUserRevokeAdmin   AdminAction = "user.revoke_admin"
 	ActionSystemShareCreate AdminAction = "system_share.create"
 
 	ActionSettingUpdate           AdminAction = "setting.update"

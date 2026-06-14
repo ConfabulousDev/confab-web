@@ -160,6 +160,14 @@ Headless flow: the same key can also be obtained via the OAuth 2.0 device-code f
 - ✅ **Unbiased user codes.** The human-friendly `user_code` is generated with rejection sampling over its 31-symbol alphabet, so every symbol is equiprobable (a plain `byte % 31` would favor the first 8 symbols, shrinking the effective keyspace).
 - ✅ **Per-verifier brute-force lockout.** `POST /auth/device/verify` binds a logged-in viewer's session to a pending device code. Beyond the shared per-IP rate limit, each verifier (keyed by user ID) is locked out for 15 minutes after 5 failed `user_code` submissions, mirroring the password-auth lockout — defense-in-depth against a logged-in attacker brute-forcing outstanding codes within the short expiry window. The lockout is in-memory (no DB write per attempt) and resets on a successful authorization. Keying on user ID (not session ID) means it cannot be bypassed by re-logging-in.
 
+### Admin authorization (5k4v)
+
+Access to the `/api/v1/admin/` panel is gated by the **union** of two signals: the `SUPER_ADMIN_EMAILS` env allowlist OR the per-user `users.is_admin` column. Either grants admin; neither is a 403. The column is toggleable at runtime by any admin via `POST /admin/users/{id}/grant-admin` / `revoke-admin` (CSRF-protected, audit-logged), so admins are managed without an env edit + restart.
+
+- ✅ **Env super-admins are the recovery path.** There is no last-admin/self-demote lockout (a deliberate decision); if the column is cleared for everyone, a `SUPER_ADMIN_EMAILS` entry + restart restores access.
+- ✅ **Demo-site safety.** The grant endpoint rejects promoting a `read_only` user, the demo identity is re-asserted `is_admin=false` every boot, and operators are instructed to keep the demo email out of `SUPER_ADMIN_EMAILS` — so the demo user can never become an admin.
+- The raw `is_admin` column is never serialized as a user field (`json:"-"`); clients see admin status only via the `/me` union flag and the admin list's explicit `is_admin` / `is_super_admin` fields.
+
 ---
 
 ## Cross-Origin & CSRF Protection

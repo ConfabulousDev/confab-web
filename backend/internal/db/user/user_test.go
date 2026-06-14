@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -510,5 +511,55 @@ func TestHasAPIKeys_OtherUserKeys(t *testing.T) {
 	}
 	if has {
 		t.Error("expected user2 to not have API keys")
+	}
+}
+
+// TestSetUserAdmin_RoundTrip guards the GetUserByID is_admin SELECT/Scan
+// addition (subset-of-columns drift, per backend/CLAUDE.md) and the
+// SetUserAdmin store method (5k4v).
+func TestSetUserAdmin_RoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	store := &dbuser.Store{DB: env.DB}
+	ctx := context.Background()
+
+	user := testutil.CreateTestUser(t, env, "admincol@example.com", "Admin Col")
+
+	// Fresh user: is_admin false, round-trips through GetUserByID.
+	got, err := store.GetUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if got.IsAdmin {
+		t.Error("new user should have IsAdmin=false")
+	}
+
+	// Grant → column flips, GetUserByID reflects it.
+	if err := store.SetUserAdmin(ctx, user.ID, true); err != nil {
+		t.Fatalf("SetUserAdmin(true): %v", err)
+	}
+	got, err = store.GetUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID after grant: %v", err)
+	}
+	if !got.IsAdmin {
+		t.Error("expected IsAdmin=true after SetUserAdmin(true)")
+	}
+
+	// Revoke → back to false.
+	if err := store.SetUserAdmin(ctx, user.ID, false); err != nil {
+		t.Fatalf("SetUserAdmin(false): %v", err)
+	}
+	got, _ = store.GetUserByID(ctx, user.ID)
+	if got.IsAdmin {
+		t.Error("expected IsAdmin=false after SetUserAdmin(false)")
+	}
+
+	// Missing user → ErrUserNotFound.
+	if err := store.SetUserAdmin(ctx, 999999, true); err != db.ErrUserNotFound {
+		t.Errorf("expected ErrUserNotFound for missing user, got %v", err)
 	}
 }

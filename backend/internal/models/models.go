@@ -18,8 +18,13 @@ type User struct {
 	AvatarURL *string    `json:"avatar_url,omitempty"`
 	Status    UserStatus `json:"status"`
 	ReadOnly  bool       `json:"read_only"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	// IsAdmin is the raw users.is_admin column — an internal authz input
+	// (unioned with SUPER_ADMIN_EMAILS), never serialized (`json:"-"`, D-K1).
+	// Clients learn admin status only via the /me union field and the admin
+	// list's explicit flags (5k4v).
+	IsAdmin   bool      `json:"-"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // AdminUserStats extends User with admin-visible statistics
@@ -100,4 +105,3 @@ type GitHubLink struct {
 	Source    GitHubLinkSource `json:"source"`
 	CreatedAt time.Time        `json:"created_at"`
 }
-

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +44,12 @@ type AdminUserJSON struct {
 	LastAPIKeyUsed  *string `json:"last_api_key_used"`
 	LastLoggedIn    *string `json:"last_logged_in"`
 	CreatedAt       string  `json:"created_at"`
+	// IsAdmin is the raw users.is_admin column (runtime-toggleable). IsSuperAdmin
+	// is whether the user's email is in SUPER_ADMIN_EMAILS (env, not toggleable).
+	// The frontend shows a toggle for column admins and a read-only indicator for
+	// env super-admins (5k4v).
+	IsAdmin      bool `json:"is_admin"`
+	IsSuperAdmin bool `json:"is_super_admin"`
 }
 
 // AdminTotals are system-wide aggregate stats
@@ -156,6 +163,8 @@ func (h *Handlers) HandleListUsersAPI(w http.ResponseWriter, r *http.Request) {
 			LastAPIKeyUsed:  formatTimePtr(user.LastAPIKeyUsed),
 			LastLoggedIn:    formatTimePtr(user.LastLoggedIn),
 			CreatedAt:       user.CreatedAt.Format(time.RFC3339),
+			IsAdmin:         user.IsAdmin,
+			IsSuperAdmin:    IsSuperAdmin(user.Email),
 		})
 	}
 
@@ -277,6 +286,75 @@ func (h *Handlers) setUserStatusAPI(w http.ResponseWriter, r *http.Request, stat
 	httputil.RespondJSON(w, http.StatusOK, StatusChangeResponse{
 		ID:     userID,
 		Status: status,
+	})
+}
+
+// AdminChangeResponse is returned by the grant/revoke-admin endpoints.
+type AdminChangeResponse struct {
+	ID      int64 `json:"id"`
+	IsAdmin bool  `json:"is_admin"`
+}
+
+// HandleGrantAdminAPI sets a user's is_admin column to true.
+func (h *Handlers) HandleGrantAdminAPI(w http.ResponseWriter, r *http.Request) {
+	h.setUserAdminAPI(w, r, true, ActionUserGrantAdmin)
+}
+
+// HandleRevokeAdminAPI sets a user's is_admin column to false.
+func (h *Handlers) HandleRevokeAdminAPI(w http.ResponseWriter, r *http.Request) {
+	h.setUserAdminAPI(w, r, false, ActionUserRevokeAdmin)
+}
+
+// setUserAdminAPI toggles the users.is_admin column (one half of the admin
+// union; SUPER_ADMIN_EMAILS is unaffected). Mirrors setUserStatusAPI. Grant on
+// a read-only user is rejected (D-S2, demo-site defense-in-depth). No
+// last-admin / self-demote lockout (explicitly rejected in 5k4v) — recovery
+// from a zero-column-admin state is via SUPER_ADMIN_EMAILS env + restart.
+func (h *Handlers) setUserAdminAPI(w http.ResponseWriter, r *http.Request, isAdmin bool, action AdminAction) {
+	log := logger.Ctx(r.Context())
+
+	userID, err := parseUserID(r)
+	if err != nil {
+		httputil.RespondError(w, http.StatusBadRequest, "Invalid user ID")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+	defer cancel()
+
+	userStore := &dbuser.Store{DB: h.DB}
+
+	targetUser, err := userStore.GetUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrUserNotFound) {
+			httputil.RespondError(w, http.StatusNotFound, "User not found")
+			return
+		}
+		log.Error("Failed to load target user", "error", err, "user_id", userID)
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to load user")
+		return
+	}
+
+	// D-S2: never grant admin to a read-only (e.g. demo) user.
+	if isAdmin && targetUser.ReadOnly {
+		httputil.RespondError(w, http.StatusBadRequest, "Cannot grant admin to a read-only user")
+		return
+	}
+
+	if err := userStore.SetUserAdmin(ctx, userID, isAdmin); err != nil {
+		log.Error("Failed to set user admin", "error", err, "user_id", userID, "is_admin", isAdmin)
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to update admin status")
+		return
+	}
+
+	AuditLogFromRequest(r, h.DB, action, map[string]interface{}{
+		"target_user_id":    userID,
+		"target_user_email": targetUser.Email,
+	})
+
+	httputil.RespondJSON(w, http.StatusOK, AdminChangeResponse{
+		ID:      userID,
+		IsAdmin: isAdmin,
 	})
 }
 
@@ -612,4 +690,3 @@ func (h *Handlers) countSmartRecapCards(ctx context.Context) (int, error) {
 	).Scan(&count)
 	return count, err
 }
-

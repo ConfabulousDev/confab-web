@@ -65,6 +65,20 @@
   display: flex;
   gap: var(--spacing-xs);
   white-space: nowrap;
+  align-items: center;
+}
+
+/* Non-interactive "admin via env" indicator for super-admins (5k4v). */
+.adminBadge {
+  display: inline-block;
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
 /* Confirm modal */

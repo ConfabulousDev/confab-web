@@ -1046,7 +1046,7 @@ When `email` is provided:
 
 ## Admin Endpoints (Super Admin Only)
 
-Admin API endpoints under `/api/v1/admin/`. Requires web session authentication + CSRF + super admin privileges (configured via `SUPER_ADMIN_EMAILS` environment variable). All admin actions are audit logged.
+Admin API endpoints under `/api/v1/admin/`. Requires web session authentication + CSRF + admin privileges. **Admin = the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column** (5k4v) — the column is toggleable at runtime via the grant/revoke endpoints below, so admins can be managed without an env edit + restart. All admin actions are audit logged.
 
 ### List Users
 ```
@@ -1067,7 +1067,9 @@ GET /api/v1/admin/users
       "recaps_this_month": 3,
       "last_api_key_used": "2024-01-15T10:30:00Z",
       "last_logged_in": "2024-01-20T14:00:00Z",
-      "created_at": "2024-01-01T00:00:00Z"
+      "created_at": "2024-01-01T00:00:00Z",
+      "is_admin": false,
+      "is_super_admin": false
     }
   ],
   "totals": {
@@ -1098,6 +1100,17 @@ POST /api/v1/admin/users/{id}/deactivate
 POST /api/v1/admin/users/{id}/activate
 ```
 **Response:** `{ "id": 1, "status": "active" }`
+
+### Grant / Revoke Admin (5k4v)
+```
+POST /api/v1/admin/users/{id}/grant-admin
+POST /api/v1/admin/users/{id}/revoke-admin
+```
+Toggles the `users.is_admin` column (one half of the admin union; `SUPER_ADMIN_EMAILS` is unaffected). Any admin may toggle any user (flat union, no tiers); there is no last-admin/self-demote lockout — recovery from a zero-column-admin state is via `SUPER_ADMIN_EMAILS` env + restart.
+**Response:** `{ "id": 1, "is_admin": true }`
+**Errors:** 400 (grant on a `read_only` user is rejected — demo-site defense-in-depth), 404 (user not found)
+
+In the user-list response, `is_admin` is the raw column and `is_super_admin` is whether the email is in `SUPER_ADMIN_EMAILS`. `GET /api/v1/me` returns `is_admin` as the **union** of both.
 
 ### Delete User
 ```
