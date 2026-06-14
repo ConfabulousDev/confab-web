@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,11 +29,34 @@ import (
 
 const (
 	SessionCookieName = "confab_session"
-	SessionDuration   = 7 * 24 * time.Hour // 7 days
+	SessionDuration   = 7 * 24 * time.Hour // 7 days, absolute cap
+	// DefaultSessionIdleTimeout is the sliding idle window (60j6). A session
+	// inactive longer than this is rejected even within the 7-day absolute cap.
+	// Overridable via SESSION_IDLE_TIMEOUT (time.ParseDuration format).
+	DefaultSessionIdleTimeout = 48 * time.Hour
 	// OAuthAPITimeout is the timeout for GitHub OAuth API calls
 	// Protects against hanging indefinitely if GitHub API is slow/unresponsive
 	OAuthAPITimeout = 30 * time.Second
 )
+
+// resolveSessionIdleTimeout reads SESSION_IDLE_TIMEOUT (time.ParseDuration
+// format, e.g. "48h", "30m"), falling back to DefaultSessionIdleTimeout on an
+// empty, unparseable, or non-positive value (warn + default, mirroring the
+// MAX_USERS pattern). A non-positive resolved value never escapes this helper,
+// so only the explicit demo sentinel (0) disables the idle gate in GetWebSession.
+func resolveSessionIdleTimeout(log *slog.Logger) time.Duration {
+	raw := os.Getenv("SESSION_IDLE_TIMEOUT")
+	if raw == "" {
+		return DefaultSessionIdleTimeout
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		log.Warn("Invalid SESSION_IDLE_TIMEOUT value, using default",
+			"value", raw, "default", DefaultSessionIdleTimeout, "error", err)
+		return DefaultSessionIdleTimeout
+	}
+	return parsed
+}
 
 // cookieSecure returns whether cookies should have Secure flag
 // Secure by default (HTTPS only), can be disabled for local dev
@@ -556,7 +580,7 @@ func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 	}
 
 	authStore := &dbauth.Store{DB: database}
-	session, err := authStore.GetWebSession(r.Context(), cookie.Value)
+	session, err := authStore.GetWebSession(r.Context(), cookie.Value, resolveSessionIdleTimeout(logger.Ctx(r.Context())))
 	if err != nil {
 		return nil
 	}
@@ -1586,7 +1610,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		}
 
 		// Validate session
-		session, err := authStore.GetWebSession(ctx, cookie.Value)
+		session, err := authStore.GetWebSession(ctx, cookie.Value, resolveSessionIdleTimeout(log))
 		if err != nil {
 			// Session is invalid or expired - clear the stale cookie and redirect to login
 			clearCookie(w, SessionCookieName)
@@ -1975,7 +1999,7 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 		loggedIn := err == nil && cookie.Value != ""
 
 		if loggedIn {
-			_, err := authStore.GetWebSession(r.Context(), cookie.Value)
+			_, err := authStore.GetWebSession(r.Context(), cookie.Value, resolveSessionIdleTimeout(logger.Ctx(r.Context())))
 			if err != nil {
 				loggedIn = false
 			}
@@ -2034,7 +2058,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 			return
 		}
 
-		session, err := authStore.GetWebSession(ctx, cookie.Value)
+		session, err := authStore.GetWebSession(ctx, cookie.Value, resolveSessionIdleTimeout(logger.Ctx(ctx)))
 		if err != nil {
 			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
 			return

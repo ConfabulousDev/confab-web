@@ -42,10 +42,10 @@ func TestWebSessionStoredHashed(t *testing.T) {
 	}
 
 	// Lookup by the raw value round-trips; a wrong value does not.
-	if _, err := store.GetWebSession(ctx, raw); err != nil {
+	if _, err := store.GetWebSession(ctx, raw, time.Hour); err != nil {
 		t.Errorf("GetWebSession(raw) should succeed, got %v", err)
 	}
-	if _, err := store.GetWebSession(ctx, "some-other-value"); err == nil {
+	if _, err := store.GetWebSession(ctx, "some-other-value", time.Hour); err == nil {
 		t.Error("GetWebSession(wrong) should fail")
 	}
 
@@ -53,7 +53,7 @@ func TestWebSessionStoredHashed(t *testing.T) {
 	if err := store.DeleteWebSession(ctx, raw); err != nil {
 		t.Fatalf("DeleteWebSession: %v", err)
 	}
-	if _, err := store.GetWebSession(ctx, raw); err == nil {
+	if _, err := store.GetWebSession(ctx, raw, time.Hour); err == nil {
 		t.Error("GetWebSession after delete should fail")
 	}
 }

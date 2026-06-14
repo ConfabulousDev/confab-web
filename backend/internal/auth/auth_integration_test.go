@@ -485,7 +485,7 @@ func TestGetWebSession_ActiveUser(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Get the session - should succeed with active status
-	session, err := authStore.GetWebSession(ctx, sessionID)
+	session, err := authStore.GetWebSession(ctx, sessionID, auth.DefaultSessionIdleTimeout)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestGetWebSession_InactiveUser(t *testing.T) {
 	testutil.CreateTestWebSession(t, env, sessionID, user.ID, expiresAt)
 
 	// Get the session - should return inactive status
-	session, err := authStore.GetWebSession(ctx, sessionID)
+	session, err := authStore.GetWebSession(ctx, sessionID, auth.DefaultSessionIdleTimeout)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -570,7 +570,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 		t.Errorf("initial API key status = %s, want %s", apiStatus, models.UserStatusActive)
 	}
 
-	webSession, err := authStore.GetWebSession(ctx, sessionID)
+	webSession, err := authStore.GetWebSession(ctx, sessionID, auth.DefaultSessionIdleTimeout)
 	if err != nil {
 		t.Fatalf("GetWebSession failed: %v", err)
 	}
@@ -593,7 +593,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 		t.Errorf("deactivated API key status = %s, want %s", apiStatus, models.UserStatusInactive)
 	}
 
-	webSession, err = authStore.GetWebSession(ctx, sessionID)
+	webSession, err = authStore.GetWebSession(ctx, sessionID, auth.DefaultSessionIdleTimeout)
 	if err != nil {
 		t.Fatalf("GetWebSession after deactivation failed: %v", err)
 	}
@@ -616,7 +616,7 @@ func TestUserReactivation_FullLifecycle(t *testing.T) {
 		t.Errorf("reactivated API key status = %s, want %s", apiStatus, models.UserStatusActive)
 	}
 
-	webSession, err = authStore.GetWebSession(ctx, sessionID)
+	webSession, err = authStore.GetWebSession(ctx, sessionID, auth.DefaultSessionIdleTimeout)
 	if err != nil {
 		t.Fatalf("GetWebSession after reactivation failed: %v", err)
 	}

@@ -574,15 +574,21 @@ http.SetCookie(w, &http.Cookie{
 3. Session stored in database (as `sha256(id)`) with expiry (7 days)
 4. Session ID returned in HttpOnly cookie (raw value)
 
-**Validation:**
-```go
-// internal/auth/auth.go:SessionMiddleware()
-sessionID := cookie.Value
-session := db.GetWebSession(ctx, sessionID)
-if session.ExpiresAt.Before(time.Now()) {
-    return 401 Unauthorized
-}
-```
+**Validation:** sessions are gated by **two independent timeouts** (60j6):
+- **Absolute cap (7 days):** `expires_at > NOW()`. The browser cookie also has a
+  7-day `MaxAge`, so the cookie itself disappears at the cap.
+- **Sliding idle timeout (default 48h, `SESSION_IDLE_TIMEOUT`):** a session
+  inactive longer than the window is rejected even within the 7-day cap, so a
+  stolen cookie is no longer usable for the full week if the victim stops using
+  it. Enforced inside `GetWebSession` (`COALESCE(last_activity_at, created_at) >
+  NOW() - idle`), so every entry point — middleware and the CLI/device flows —
+  inherits it. On a valid request `last_activity_at` is refreshed, throttled to
+  at most one write per 60s. Both comparisons use server-side `NOW()` (no client
+  clock). An idle session is treated identically to an expired one (401 →
+  re-login); there is no grace UI or refresh token. **Note:** the cookie's 7-day
+  browser `MaxAge` is unchanged — the server simply rejects idle sessions earlier.
+  The CF-483 demo shared session is exempt from the idle gate (it sits idle
+  between anonymous visitors by design).
 
 **Cleanup:**
 - Automatic: `db.CleanupExpiredSessions()` removes sessions older than 7 days
