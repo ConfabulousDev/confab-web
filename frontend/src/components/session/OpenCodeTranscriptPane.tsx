@@ -1,12 +1,12 @@
 // Renders the transcript-tab content for OpenCode sessions.
 //
 // A virtualized list of render items (user / assistant / tool) with a
-// turn-based minimap / timeline bar alongside (the shared `TimelineBar`,
-// reaching parity with Claude/Codex). Still leaner than the others — no cost
-// side-rail or Cmd-F search yet — but real: it fetches nothing itself
-// (SessionViewer drives fetch/poll via the adapter) and renders the three
-// categories with reasoning, tool I/O, status, deep-link scroll, and
-// per-message cost badges in cost mode.
+// turn-based minimap / timeline bar alongside (the shared `TimelineBar`) and,
+// in cost mode, the shared green `CostBar` side rail (hfk7) — reaching parity
+// with Claude/Codex. Still leaner than the others (no Cmd-F search yet) but
+// real: it fetches nothing itself (SessionViewer drives fetch/poll via the
+// adapter) and renders the three categories with reasoning, tool I/O, status,
+// deep-link scroll, and per-message cost badges in cost mode.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -14,6 +14,9 @@ import { CostAmount } from '@/components/CostAmount';
 import { cx } from '@/utils/utils';
 import { retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import TimelineBar from '@/components/transcript/TimelineBar';
+import { CostBar } from '@/components/transcript/CostBar';
+import { opencodeAdapter } from '@/providers/opencodeAdapter';
+import type { TokenUsage } from '@/utils/tokenStats';
 import type { OpenCodeRenderItem } from './opencodeCategories';
 import { useOpenCodeSegmentLayout } from './opencodeTimelineSegments';
 import OpenCodeUnknownItem from './OpenCodeUnknownItem';
@@ -35,6 +38,16 @@ export interface OpenCodeTranscriptPaneProps {
 }
 
 const ESTIMATED_ROW_HEIGHT = 120;
+
+// Zero-cost usage shim for assistant items that carry no `usage` — keeps the
+// adapter's `calculateMessageCost` total-type happy; resolves to $0, skipped.
+const EMPTY_USAGE: TokenUsage = {
+  input: 0,
+  output: 0,
+  cacheWrite: 0,
+  cacheWrite1h: 0,
+  cacheRead: 0,
+};
 
 function ToolRow({ item }: { item: Extract<OpenCodeRenderItem, { kind: 'tool' }> }) {
   const isError = item.status === 'error';
@@ -61,17 +74,26 @@ function ToolRow({ item }: { item: Extract<OpenCodeRenderItem, { kind: 'tool' }>
 function AssistantRow({
   item,
   isCostMode,
+  messageCost,
 }: {
   item: Extract<OpenCodeRenderItem, { kind: 'assistant' }>;
   isCostMode?: boolean;
+  /**
+   * hfk7: pre-computed $ cost for this row, routed through
+   * `opencodeAdapter.calculateMessageCost` so the badge and the CostBar rail
+   * total agree (a fallback-priced message with no `info.cost` still shows a
+   * badge and counts toward the rail). `undefined` when cost mode is off or
+   * the cost is zero.
+   */
+  messageCost?: number;
 }) {
   return (
     <div className={cx(styles.row, styles.assistantRow)}>
       <div className={styles.rowHeader}>
         <span className={styles.roleLabel}>Assistant</span>
         {item.model ? <span className={styles.model}>{item.model}</span> : null}
-        {isCostMode && typeof item.cost === 'number' ? (
-          <CostAmount usd={item.cost} className={styles.cost} />
+        {isCostMode && typeof messageCost === 'number' && messageCost > 0 ? (
+          <CostAmount usd={messageCost} className={styles.cost} />
         ) : null}
       </div>
       {item.reasoning ? (
@@ -85,7 +107,15 @@ function AssistantRow({
   );
 }
 
-function Row({ item, isCostMode }: { item: OpenCodeRenderItem; isCostMode?: boolean }) {
+function Row({
+  item,
+  isCostMode,
+  messageCost,
+}: {
+  item: OpenCodeRenderItem;
+  isCostMode?: boolean;
+  messageCost?: number;
+}) {
   if (item.kind === 'user') {
     return (
       <div className={cx(styles.row, styles.userRow)}>
@@ -97,7 +127,7 @@ function Row({ item, isCostMode }: { item: OpenCodeRenderItem; isCostMode?: bool
     );
   }
   if (item.kind === 'assistant') {
-    return <AssistantRow item={item} isCostMode={isCostMode} />;
+    return <AssistantRow item={item} isCostMode={isCostMode} messageCost={messageCost} />;
   }
   if (item.kind === 'tool') {
     return <ToolRow item={item} />;
@@ -167,6 +197,51 @@ export default function OpenCodeTranscriptPane({
   }, [filteredItems, effectiveSelectedIndex, idToUnfilteredIndex]);
 
   const segmentLayout = useOpenCodeSegmentLayout(items, selectedUnfilteredIndex);
+
+  // hfk7: cost map keyed by UNFILTERED items index — the same axis the segment
+  // layout speaks, so the rail and bar line up. Built only in cost mode (skips
+  // pricing lookups otherwise). Routed through the adapter's
+  // `calculateMessageCost` (prefers reported `info.cost`, else the pricing
+  // fallback) so the rail total and per-row badges share one source of truth.
+  // Records strictly-positive costs only; zero-cost rows render no badge.
+  // NOTE: a filtered-out assistant row STILL contributes here — keying by the
+  // unfiltered index is load-bearing.
+  const { costByIndex, totalCost } = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!isCostMode) return { costByIndex: map, totalCost: 0 };
+    let total = 0;
+    items.forEach((item, idx) => {
+      if (item.kind !== 'assistant') return;
+      // `model`/`usage` are optional on OpenCode assistant items; the adapter
+      // prefers the reported `info.cost` and otherwise prices via the table
+      // (an absent model/usage there resolves to $0, which we then skip).
+      const cost = opencodeAdapter.calculateMessageCost(
+        item.model ?? '',
+        item.usage ?? EMPTY_USAGE,
+        item,
+      );
+      if (cost > 0) {
+        map.set(idx, cost);
+        total += cost;
+      }
+    });
+    return { costByIndex: map, totalCost: total };
+  }, [items, isCostMode]);
+
+  // hfk7: assistant-render-items per segment, for the CostBar's density math.
+  // OpenCode assistant items are 1:1 with API calls, so no dedup is needed
+  // (cf. Claude, where multiple JSONL lines share `message.id`). Order matches
+  // `segmentLayout.segments`.
+  const costSegmentUniqueCounts = useMemo<number[]>(() => {
+    if (!isCostMode) return [];
+    return segmentLayout.segments.map((seg) => {
+      let n = 0;
+      for (let i = seg.startIndex; i <= seg.endIndex; i++) {
+        if (items[i]?.kind === 'assistant') n++;
+      }
+      return n;
+    });
+  }, [isCostMode, segmentLayout.segments, items]);
 
   // Track the first visible row so the bar indicator has something to point at
   // when the user hasn't hovered a row.
@@ -263,6 +338,13 @@ export default function OpenCodeTranscriptPane({
             const item = filteredItems[virtualItem.index];
             if (!item) return null;
             const isTarget = targetId !== undefined && item.id === targetId;
+            // hfk7: cost badges read the SAME unfiltered-keyed map the rail
+            // uses, so badge and rail always agree.
+            const unfilteredIdx = idToUnfilteredIndex.get(item.id);
+            const messageCost =
+              isCostMode && unfilteredIdx !== undefined
+                ? costByIndex.get(unfilteredIdx)
+                : undefined;
             return (
               <div
                 key={virtualItem.key}
@@ -272,11 +354,28 @@ export default function OpenCodeTranscriptPane({
                 onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                 style={{ transform: `translateY(${virtualItem.start}px)` }}
               >
-                <Row item={item} isCostMode={isCostMode} />
+                <Row item={item} isCostMode={isCostMode} messageCost={messageCost} />
               </div>
             );
           })}
         </div>
+      </div>
+
+      {/* hfk7: shared green cost rail, gated on cost mode. CostBar.onSeek
+          passes (start, end); only start matters, so reuse onSeekFromBar (it
+          maps unfiltered→first-visible-filtered→scrollToIndex). */}
+      <div
+        className={cx(styles.costBarWrapper, isCostMode && styles.costBarWrapperVisible)}
+      >
+        {isCostMode && (
+          <CostBar
+            layout={segmentLayout}
+            costByIndex={costByIndex}
+            segmentUniqueCounts={costSegmentUniqueCounts}
+            totalCost={totalCost}
+            onSeek={onSeekFromBar}
+          />
+        )}
       </div>
 
       <TimelineBar

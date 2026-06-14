@@ -15,6 +15,20 @@
   padding: 0.5rem 0.75rem;
 }
 
+/* hfk7: slide-in cost-bar wrapper, sits between the scroll area and the
+   TimelineBar. Mirrors codex/CodexMessageTimeline.module.css for visual
+   parity across providers. */
+.costBarWrapper {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s ease;
+  flex-shrink: 0;
+}
+
+.costBarWrapperVisible {
+  width: 22px;
+}
+
 .virtualizer {
   position: relative;
   width: 100%;
