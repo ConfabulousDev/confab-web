@@ -27,7 +27,7 @@ const items: OpenCodeRenderItem[] = [
     reasoning: 'The user wants a count across *.go files. Use Glob then read each.',
     model: 'claude-sonnet-4-20250514',
     cost: 0.0152,
-    usage: { input: 10000, output: 5000, cacheWrite: 2000, cacheRead: 3000 },
+    usage: { input: 10000, output: 5000, cacheWrite: 2000, cacheWrite1h: 0, cacheRead: 3000 },
     timeCreated: 1717689600000,
   },
   {
@@ -54,7 +54,7 @@ const items: OpenCodeRenderItem[] = [
     text: 'Found 3 Go files. Let me count lines with the correct paths.',
     model: 'gpt-4o',
     cost: 0.004,
-    usage: { input: 6000, output: 1200, cacheWrite: 0, cacheRead: 2000 },
+    usage: { input: 6000, output: 1200, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 2000 },
     timeCreated: 1717689603000,
   },
 ];

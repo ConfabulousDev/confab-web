@@ -7,7 +7,7 @@ import ContentBlockComponent from '@/components/transcript/claude/ContentBlock';
 import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
 import { computeKeyFingerprint } from '@/utils/reportUnknown';
 import { AttachmentContent, AwaySummary } from '@/components/transcript/claude/attachments';
-import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed } from '@/utils/tokenStats';
+import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed, cacheWriteTotal } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
 import { getClaudeRoleLabel, isUnknownClaudeMessage } from '@/components/session/claudeCategories';
 import styles from './ClaudeTimelineMessage.module.css';
@@ -281,13 +281,18 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
               <span className={styles.tokenPill} title={tooltipText}>
                 {formatTokenCount(displayUsage.input)} in · {formatTokenCount(displayUsage.output)} out
               </span>
-              {(displayUsage.cacheWrite || displayUsage.cacheRead) ? (
-                <span className={styles.cachePill} title={tooltipText}>
-                  {displayUsage.cacheWrite ? `${formatTokenCount(displayUsage.cacheWrite)} write` : null}
-                  {displayUsage.cacheWrite && displayUsage.cacheRead ? ' · ' : null}
-                  {displayUsage.cacheRead ? `${formatTokenCount(displayUsage.cacheRead)} hit` : null}
-                </span>
-              ) : null}
+              {(() => {
+                // Full cache-creation count (5m + 1h); the tier split is a
+                // billing detail, not shown as a separate pill (rd9v).
+                const cacheWrite = cacheWriteTotal(displayUsage);
+                return (cacheWrite || displayUsage.cacheRead) ? (
+                  <span className={styles.cachePill} title={tooltipText}>
+                    {cacheWrite ? `${formatTokenCount(cacheWrite)} write` : null}
+                    {cacheWrite && displayUsage.cacheRead ? ' · ' : null}
+                    {displayUsage.cacheRead ? `${formatTokenCount(displayUsage.cacheRead)} hit` : null}
+                  </span>
+                ) : null;
+              })()}
               {messageSpeed != null && (
                 <span
                   className={styles.tokenPill}

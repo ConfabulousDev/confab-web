@@ -49,7 +49,7 @@ components and arithmetic all read one shape downstream.
 
 | Export | Signature | Description |
 |--------|-----------|-------------|
-| `TokenUsage` (type) | `{ input, output, cacheWrite, cacheRead }` | Canonical per-message token usage. `input` is uncached; `output` includes reasoning where applicable; `cacheRead`/`cacheWrite` are split out (cacheWrite is `0` for Codex models, which don't charge for writes). |
+| `TokenUsage` (type) | `{ input, output, cacheWrite, cacheWrite1h, cacheRead }` | Canonical per-message token usage. `input` is uncached; `output` includes reasoning where applicable; `cacheWrite` is the 5-minute cache-creation count and `cacheWrite1h` the 1-hour count (split by tier for billing — Anthropic charges 2x input for 1h). Both are `0` for Codex/OpenCode. Use `cacheWriteTotal(usage)` for display surfaces that show a single cache-write number. |
 | `calculateCost` | `(provider: ProviderId, model: string, usage: TokenUsage) => number` | Base arithmetic. Pure: no fast multiplier, no server-tool add-on (those live on the provider adapter). Throws on unknown provider; warns and returns 0 on unknown model within a known provider. |
 | `getModelFamily` | `(provider: ProviderId, modelName: string) => string` | Strip date suffixes / `claude-` prefix to produce a pricing-table key. Claude branch matches `opus\|sonnet\|haiku-N(-N)?`; Codex branch strips OpenAI's pinned `-YYYY-MM-DD` suffix. A cross-language parity test in `tokenStats.test.ts` loads the repo-root `testdata/model_family_parity.json` (shared with the backend's `pricing_test.go`) so this and the Go `getModelFamily` can't silently drift (nrxr / 5x6e F7). |
 | `buildCostTooltip` | `(adapter, usage, cost, message) => string` | Cost-badge tooltip. Base lines (`$cost`, blank, input, output) plus the adapter's optional `extendCostTooltip` (Claude: Cache/Speed/Tier/Web-search; Codex: rebuilds the body to show gross input + interleaved cached / reasoning sub-lines for byte-identical pre-refactor formatting). |
@@ -119,7 +119,7 @@ the Claude adapter's `calculateMessageCost`. Not multiplied by fast mode.
 3. Add a `.test.ts` file with test cases
 
 ### Updating model pricing
-Edit the single source — `backend/internal/pricingsource/pricing.json` — and bump its `updated_at`. The frontend has no bundled table to update; it fetches the effective table from the backend at runtime. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries set `cacheWrite: 0` (writes are free) and put the documented cached-input rate in `cacheRead`.
+Edit the single source — `backend/internal/pricingsource/pricing.json` — and bump its `updated_at`. The frontend has no bundled table to update; it fetches the effective table from the backend at runtime. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries set `cacheWrite: 0` and `cacheWrite1h: 0` (writes are free) and put the documented cached-input rate in `cacheRead`. For Claude entries set `cacheWrite1h` to 2x input (the 1-hour cache-write rate).
 
 ## Invariants / Conventions
 
@@ -133,7 +133,7 @@ Edit the single source — `backend/internal/pricingsource/pricing.json` — and
 - **Frontend cost calculation**: Token costs are computed client-side from the pricing table + transcript token usage data. This avoids adding cost computation to the backend transcript parser and allows instant cost display as messages stream in.
 - **HTML-aware search highlighting**: `highlightTextInHtml` splits HTML into tag/text segments and only applies highlighting to text nodes. This prevents breaking HTML structure when highlighting inside rendered markdown.
 - **Model family extraction over full name matching**: `getModelFamily(provider, modelName)` normalizes names like "claude-opus-4-5-20251101" to "opus-4-5" or "gpt-5-2026-05-01" to "gpt-5" so pricing works regardless of date suffix or "claude-" prefix variations.
-- **Parse-layer normalization to a canonical token shape** (CF-418): both transcript services stamp `TokenUsage` (`input`/`output`/`cacheWrite`/`cacheRead`) on assistant messages at parse time. Downstream components and cost arithmetic read one shape. Provider-specific cost adjustments (Claude fast multiplier, web-search dollars; Codex reasoning-token display) live on the `ProviderAdapter` (`providers/types.ts`).
+- **Parse-layer normalization to a canonical token shape** (CF-418): both transcript services stamp `TokenUsage` (`input`/`output`/`cacheWrite`/`cacheWrite1h`/`cacheRead`) on assistant messages at parse time. Downstream components and cost arithmetic read one shape. Provider-specific cost adjustments (Claude fast multiplier, web-search dollars; Codex reasoning-token display) live on the `ProviderAdapter` (`providers/types.ts`).
 
 ## Testing
 

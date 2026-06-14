@@ -136,7 +136,8 @@ function usageFromTokens(line: RawOpenCodeLine): TokenUsage | undefined {
     input = Math.max(0, input - cacheRead);
     cacheWrite = 0;
   }
-  return { input, output: t.output ?? 0, cacheWrite, cacheRead };
+  // OpenCode reports a single flat cache-write count (no 5m/1h tier split).
+  return { input, output: t.output ?? 0, cacheWrite, cacheWrite1h: 0, cacheRead };
 }
 
 const TERMINAL_TOOL_STATUSES = new Set(['completed', 'error']);

@@ -1519,10 +1519,10 @@ Returns the effective per-million-token model price table. No authentication req
   "updated_at": "2026-05-29T00:00:00Z",
   "pricing": {
     "claude-code": {
-      "opus-4-7": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheRead": 0.5 }
+      "opus-4-7": { "input": 5, "output": 25, "cacheWrite": 6.25, "cacheWrite1h": 10, "cacheRead": 0.5 }
     },
     "codex": {
-      "gpt-5": { "input": 1.25, "output": 10, "cacheWrite": 0, "cacheRead": 0.125 }
+      "gpt-5": { "input": 1.25, "output": 10, "cacheWrite": 0, "cacheWrite1h": 0, "cacheRead": 0.125 }
     }
   }
 }
@@ -1532,7 +1532,7 @@ Returns the effective per-million-token model price table. No authentication req
 |-------|------|-------------|
 | `schema_version` | int | Document format version (currently `0`). A reader rejects a version higher than it understands and falls back to its embedded table. |
 | `updated_at` | string (RFC 3339) | When the price data was last changed. Drives "freshest-wins": a self-hosted backend adopts a remote table only when it is strictly newer than its embedded copy. |
-| `pricing` | object | Provider (`claude-code` / `codex`) → model family → rates. Rates are USD per million tokens. OpenAI cache writes are free (`cacheWrite: 0`); the cached-input rate is `cacheRead`. |
+| `pricing` | object | Provider (`claude-code` / `codex`) → model family → rates. Rates are USD per million tokens. `cacheWrite` is the 5-minute cache-creation rate (1.25x input for Claude); `cacheWrite1h` is the 1-hour rate (2x input). When `cacheWrite1h` is absent or `0`, 1-hour cache tokens fall back to the `cacheWrite` rate (so older/remote docs never bill them at $0). OpenAI cache writes are free (`cacheWrite: 0`, `cacheWrite1h: 0`); the cached-input rate is `cacheRead`. |
 
 **Caching:** sent with `Cache-Control: public, max-age=<refresh-interval>` (default 7200s) — a tiny, edge-cacheable payload. The serving backend refreshes its own table from `PRICING_SOURCE_URL` lazily (2h on success, 15m on failure) and always returns a valid table (its embedded floor at worst). See [`internal/pricingsource`](internal/pricingsource/) for details.
 

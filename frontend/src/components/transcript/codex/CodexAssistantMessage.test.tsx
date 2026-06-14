@@ -162,7 +162,7 @@ describe('CodexAssistantMessage', () => {
     const usage = {
       input: 12_145,
       output: 1_200,
-      cacheWrite: 0,
+      cacheWrite: 0, cacheWrite1h: 0,
       cacheRead: 200,
     };
     const reasoningTokens = 250;
@@ -186,7 +186,7 @@ describe('CodexAssistantMessage', () => {
       const pillUsage = {
         input: 12_345,
         output: 1_200,
-        cacheWrite: 0,
+        cacheWrite: 0, cacheWrite1h: 0,
         cacheRead: 0,
       };
       const { container } = render(

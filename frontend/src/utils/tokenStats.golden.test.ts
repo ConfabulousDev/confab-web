@@ -25,7 +25,7 @@ import { codexAdapter } from '@/providers/codexAdapter';
 //     usage = { input_tokens: 50_000, output_tokens: 5_000,
 //               cache_creation_input_tokens: 20_000,
 //               cache_read_input_tokens: 10_000 }
-//     pricing = sonnet-4 { input:3, output:15, cacheWrite:3.75, cacheRead:0.30 }
+//     pricing = sonnet-4 { input:3, output:15, cacheWrite: 3.75, cacheWrite1h: 0, cacheRead:0.30 }
 //     cost = (50_000*3 + 5_000*15 + 20_000*3.75 + 10_000*0.30) / 1e6
 //          = (150_000 + 75_000 + 75_000 + 3_000) / 1e6 = 0.303
 //
@@ -87,12 +87,12 @@ describe('golden: Claude session total cost', () => {
     const m1 = claudeAssistant('claude-sonnet-4-20250514', {
       input: 50_000,
       output: 5_000,
-      cacheWrite: 20_000,
+      cacheWrite: 20_000, cacheWrite1h: 0,
       cacheRead: 10_000,
     });
     const m2 = claudeAssistant(
       'claude-opus-4-7-20260301',
-      { input: 100_000, output: 10_000, cacheWrite: 0, cacheRead: 0 },
+      { input: 100_000, output: 10_000, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 },
       { speed: 'fast', server_tool_use: { web_search_requests: 2 } },
     );
 
@@ -134,8 +134,8 @@ describe('golden: Claude session total cost', () => {
 // `uncached = max(0, input_tokens - cached_input_tokens)` and passes
 // `output_tokens` through unchanged (reasoning lives separately on the
 // assistant item via `reasoningTokens`):
-//   Item 1: { input:400_000, output:50_000, cacheWrite:0, cacheRead:100_000 }
-//   Item 2: { input:150_000, output:10_000, cacheWrite:0, cacheRead:50_000 }
+//   Item 1: { input:400_000, output:50_000, cacheWrite: 0, cacheWrite1h: 0, cacheRead:100_000 }
+//   Item 2: { input:150_000, output:10_000, cacheWrite: 0, cacheWrite1h: 0, cacheRead:50_000 }
 // ---------------------------------------------------------------------------
 
 const CODEX_SESSION_TOTAL_USD = 1.07125;
@@ -157,13 +157,13 @@ describe('golden: Codex session total cost', () => {
     const i1 = codexAssistant('gpt-5', {
       input: 400_000,
       output: 50_000,
-      cacheWrite: 0,
+      cacheWrite: 0, cacheWrite1h: 0,
       cacheRead: 100_000,
     });
     const i2 = codexAssistant('gpt-5-mini', {
       input: 150_000,
       output: 10_000,
-      cacheWrite: 0,
+      cacheWrite: 0, cacheWrite1h: 0,
       cacheRead: 50_000,
     });
 

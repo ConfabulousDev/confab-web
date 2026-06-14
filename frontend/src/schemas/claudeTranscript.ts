@@ -123,6 +123,7 @@ const NormalizedTokenUsageSchema = z.object({
   input: z.number(),
   output: z.number(),
   cacheWrite: z.number(),
+  cacheWrite1h: z.number(),
   cacheRead: z.number(),
 });
 

@@ -336,6 +336,28 @@ func TestValidateAcceptsZeroRate(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsNegativeCacheWrite1h: the new 1h cache-write rate is
+// covered by the finite/non-negative validation loop (rd9v).
+func TestValidateRejectsNegativeCacheWrite1h(t *testing.T) {
+	d := Document{SchemaVersion: 0, UpdatedAt: newerAt, Pricing: map[string]map[string]Rate{
+		"claude-code": {"opus-4-8": {Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.5, CacheWrite1h: -1}},
+	}}
+	if err := validate(d); err == nil {
+		t.Error("validate accepted negative cacheWrite1h, want error")
+	}
+}
+
+// TestValidateAcceptsZeroCacheWrite1h: codex/opencode families legitimately have
+// cacheWrite1h == 0; the embedded doc must validate.
+func TestValidateAcceptsZeroCacheWrite1h(t *testing.T) {
+	d := Document{SchemaVersion: 0, UpdatedAt: newerAt, Pricing: map[string]map[string]Rate{
+		"codex": {"gpt-5": {Input: 1.25, Output: 10, CacheWrite: 0, CacheRead: 0.125, CacheWrite1h: 0}},
+	}}
+	if err := validate(d); err != nil {
+		t.Errorf("validate rejected a legitimate zero cacheWrite1h: %v", err)
+	}
+}
+
 // --------------------------------------------------------------------------
 // NewFromEnv (white-box — reads s.url / s.refresh)
 // --------------------------------------------------------------------------

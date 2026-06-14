@@ -13,10 +13,11 @@ import (
 // ModelPricing contains pricing per million tokens.
 // Uses 5-minute cache pricing per Anthropic's pricing page.
 type ModelPricing struct {
-	Input      decimal.Decimal // Per million input tokens
-	Output     decimal.Decimal // Per million output tokens
-	CacheWrite decimal.Decimal // Per million cache creation tokens (1.25x input)
-	CacheRead  decimal.Decimal // Per million cache read tokens (0.1x input)
+	Input        decimal.Decimal // Per million input tokens
+	Output       decimal.Decimal // Per million output tokens
+	CacheWrite   decimal.Decimal // Per million 5-minute cache creation tokens (1.25x input)
+	CacheWrite1h decimal.Decimal // Per million 1-hour cache creation tokens (2x input)
+	CacheRead    decimal.Decimal // Per million cache read tokens (0.1x input)
 }
 
 // activePricing holds the flat family→pricing table currently in effect, keyed
@@ -52,10 +53,11 @@ func flatten(doc pricingsource.Document) *map[string]ModelPricing {
 				continue
 			}
 			table[family] = ModelPricing{
-				Input:      decimal.NewFromFloat(r.Input),
-				Output:     decimal.NewFromFloat(r.Output),
-				CacheWrite: decimal.NewFromFloat(r.CacheWrite),
-				CacheRead:  decimal.NewFromFloat(r.CacheRead),
+				Input:        decimal.NewFromFloat(r.Input),
+				Output:       decimal.NewFromFloat(r.Output),
+				CacheWrite:   decimal.NewFromFloat(r.CacheWrite),
+				CacheWrite1h: decimal.NewFromFloat(r.CacheWrite1h),
+				CacheRead:    decimal.NewFromFloat(r.CacheRead),
 			}
 		}
 	}
@@ -189,16 +191,40 @@ func CalculateCost(pricing ModelPricing, inputTokens, outputTokens, cacheWriteTo
 	return input.Add(output).Add(cacheWrite).Add(cacheRead)
 }
 
+// effectiveCacheWrite1h is the rate billed for 1-hour cache-creation tokens.
+// It falls back to the 5-minute CacheWrite rate when CacheWrite1h is missing or
+// zero (e.g. a remote pricing doc fetched before the SaaS redeploys the new
+// rate), so 1h tokens degrade to the old behavior rather than billing $0 (rd9v).
+func effectiveCacheWrite1h(pricing ModelPricing) decimal.Decimal {
+	if pricing.CacheWrite1h.IsPositive() {
+		return pricing.CacheWrite1h
+	}
+	return pricing.CacheWrite
+}
+
 // CalculateTotalCost calculates the full cost including token costs,
 // fast mode multiplier, and server tool per-request charges.
 func CalculateTotalCost(pricing ModelPricing, usage *TokenUsage) decimal.Decimal {
+	// Split cache-creation tokens by ephemeral tier when the breakdown is
+	// present: 5-minute writes bill at CacheWrite, 1-hour writes at the
+	// effective 1h rate. When absent (legacy lines, codex/opencode) all
+	// cache-creation bills at the 5-minute rate, preserving prior behavior.
+	// The breakdown is trusted over the flat count when both are present.
+	cache5m := usage.CacheCreationInputTokens
+	var cache1h int64
+	if usage.CacheCreation != nil {
+		cache5m = usage.CacheCreation.Ephemeral5m
+		cache1h = usage.CacheCreation.Ephemeral1h
+	}
+
 	cost := CalculateCost(
 		pricing,
 		usage.InputTokens,
 		usage.OutputTokens,
-		usage.CacheCreationInputTokens,
+		cache5m,
 		usage.CacheReadInputTokens,
 	)
+	cost = cost.Add(decimal.NewFromInt(cache1h).Mul(effectiveCacheWrite1h(pricing)).Div(oneMillion))
 
 	// Fast mode: 6x all token costs
 	if usage.Speed == SpeedFast {

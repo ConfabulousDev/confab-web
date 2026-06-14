@@ -298,6 +298,7 @@ function attachTokenCountToAssistant(
       input: Math.max(0, delta.input_tokens - cached),
       output: delta.output_tokens,
       cacheWrite: 0,
+      cacheWrite1h: 0,
       cacheRead: cached,
     };
     items[i] = reasoning > 0

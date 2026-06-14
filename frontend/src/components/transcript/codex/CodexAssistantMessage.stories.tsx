@@ -89,7 +89,7 @@ export const CostModeFinal: Story = {
   args: {
     item: item({
       // CF-418: canonical TokenUsage (post-normalize).
-      usage: { input: 12_345, output: 1_200, cacheWrite: 0, cacheRead: 0 },
+      usage: { input: 12_345, output: 1_200, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 },
       timestamp: '2026-05-13T18:00:02Z',
     }),
     // CF-525: predecessor 2s earlier → ~600 tok/s estimate beside the badges.
@@ -106,7 +106,7 @@ export const CostModeWithCache: Story = {
       usage: {
         input: 30_000,
         output: 3_500,
-        cacheWrite: 0,
+        cacheWrite: 0, cacheWrite1h: 0,
         cacheRead: 50_000,
       },
     }),
@@ -125,7 +125,7 @@ export const CostModeWithReasoning: Story = {
       usage: {
         input: 5_000,
         output: 2_400,
-        cacheWrite: 0,
+        cacheWrite: 0, cacheWrite1h: 0,
         cacheRead: 0,
       },
       reasoningTokens: 2_000,

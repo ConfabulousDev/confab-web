@@ -9,7 +9,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { type ProviderId } from './providers';
 import {
   type TokenUsage,
+  type PricingTable,
   calculateCost,
+  normalizeClaudeUsage,
+  setPricingTable,
   formatTokenCount,
   formatCost,
   getModelFamily,
@@ -17,6 +20,7 @@ import {
   formatTokenSpeed,
   computeMessageTokenSpeed,
 } from './tokenStats';
+import { PRICING_FIXTURE } from '@/test/pricingFixture';
 
 // ---------------------------------------------------------------------------
 // Format helpers — behavior preserved from pre-refactor code.
@@ -208,7 +212,7 @@ describe('getModelFamily', () => {
 // ---------------------------------------------------------------------------
 
 function usage(overrides: Partial<TokenUsage> = {}): TokenUsage {
-  return { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, ...overrides };
+  return { input: 0, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0, ...overrides };
 }
 
 describe('calculateCost', () => {
@@ -316,6 +320,89 @@ describe('calculateCost', () => {
     );
     // opus-4-6: input=$5, output=$25 → 1M*5 + 100k*25 = $5 + $2.50 = $7.50
     expect(cost).toBeCloseTo(7.5, 4);
+  });
+
+  // rd9v: cache-creation split by ephemeral tier. cacheWrite = 5m count
+  // (1.25x input), cacheWrite1h = 1h count (2x input). Numbers pinned to the
+  // backend pricing_test.go cache-tier cases (opus-4-8: cacheWrite 6.25,
+  // cacheWrite1h 10 per million).
+  it('bills 1h cache writes at the cacheWrite1h rate', () => {
+    // opus-4-8: cacheWrite1h=$10/M → 1M * $10/M = $10.00
+    const cost = calculateCost(
+      'claude-code',
+      'claude-opus-4-8-20260515',
+      usage({ cacheWrite1h: 1_000_000 }),
+    );
+    expect(cost).toBeCloseTo(10, 4);
+  });
+
+  it('bills mixed 5m + 1h cache writes at their respective rates', () => {
+    // 400k * $6.25/M (5m) + 600k * $10/M (1h) = $2.50 + $6.00 = $8.50
+    const cost = calculateCost(
+      'claude-code',
+      'claude-opus-4-8-20260515',
+      usage({ cacheWrite: 400_000, cacheWrite1h: 600_000 }),
+    );
+    expect(cost).toBeCloseTo(8.5, 4);
+  });
+
+  it('falls back to the 5m rate for 1h tokens when cacheWrite1h is missing/0', () => {
+    // Simulate a stale remote pricing doc with no cacheWrite1h field.
+    const stale: PricingTable = {
+      'claude-code': {
+        'opus-4-8': { input: 5, output: 25, cacheWrite: 6.25, cacheWrite1h: 0, cacheRead: 0.5 },
+      },
+      codex: {},
+      opencode: {},
+    };
+    setPricingTable(stale);
+    try {
+      const cost = calculateCost(
+        'claude-code',
+        'claude-opus-4-8-20260515',
+        usage({ cacheWrite1h: 1_000_000 }),
+      );
+      // 1h priced at the 5m rate $6.25/M, NOT $0.
+      expect(cost).toBeCloseTo(6.25, 4);
+    } finally {
+      setPricingTable(PRICING_FIXTURE); // restore the global fixture
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeClaudeUsage — Claude wire shape → canonical TokenUsage, splitting
+// cache-creation into 5m (cacheWrite) and 1h (cacheWrite1h) counts (rd9v).
+// ---------------------------------------------------------------------------
+
+describe('normalizeClaudeUsage', () => {
+  it('splits the nested cache_creation object into 5m and 1h counts', () => {
+    const u = normalizeClaudeUsage({
+      input_tokens: 6,
+      output_tokens: 221,
+      cache_creation_input_tokens: 9726,
+      cache_read_input_tokens: 17335,
+      cache_creation: { ephemeral_5m_input_tokens: 1000, ephemeral_1h_input_tokens: 8726 },
+    });
+    expect(u.cacheWrite).toBe(1000);
+    expect(u.cacheWrite1h).toBe(8726);
+    expect(u.cacheRead).toBe(17335);
+  });
+
+  it('treats legacy usage (no cache_creation object) as all-5m', () => {
+    const u = normalizeClaudeUsage({
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_creation_input_tokens: 200,
+    });
+    expect(u.cacheWrite).toBe(200);
+    expect(u.cacheWrite1h).toBe(0);
+  });
+
+  it('defaults both cache-write counts to 0 when absent', () => {
+    const u = normalizeClaudeUsage({ input_tokens: 10, output_tokens: 5 });
+    expect(u.cacheWrite).toBe(0);
+    expect(u.cacheWrite1h).toBe(0);
   });
 });
 
