@@ -147,6 +147,18 @@ export interface BlendedSegment {
   messageCount: number;
 }
 
+/**
+ * Shared base for the turn-based timeline bar segments. Both Codex
+ * (`CodexTimelineSegment`) and OpenCode (`OpenCodeTimelineSegment`) extend
+ * this so they fit the generic `TimelineBar`. `speaker` drives the stripe
+ * color (user vs assistant; tools fold into the assistant stripe);
+ * `turnIndex` is a stable per-turn counter surfaced as `data-turn-index`.
+ */
+export interface SpeakerSegment extends BlendedSegment {
+  speaker: 'user' | 'assistant';
+  turnIndex: number;
+}
+
 export interface BlendedSegmentLayout<S extends BlendedSegment> {
   segments: S[];
   /** Visual height percentage for each segment (normalized to sum to 100) */

@@ -1,6 +1,7 @@
-// Vertical turn-based navigation bar for Codex transcripts. Each turn
+// Shared vertical turn-based navigation bar for transcript panes. Each turn
 // emits up to two clickable segments — a user thinking-gap segment and an
-// assistant body segment — matching the Claude TimelineBar shape.
+// assistant body segment (tools fold into the assistant stripe). Consumed by
+// both Codex (`assistantLabel="Codex"`) and OpenCode (`assistantLabel="Assistant"`).
 //
 // CF-361: when `visibleIndices` is supplied, segments whose entire item
 // range is filtered out render greyed-out (`.filtered`) and non-clickable.
@@ -9,38 +10,44 @@
 
 import { useCallback, useState, useRef } from 'react';
 import { cx } from '@/utils/utils';
-import { formatDuration } from '../timelineFormat';
-import type { BlendedSegmentLayout } from '../timelineSegments';
-import type { CodexTimelineSegment } from './codexTimelineSegments';
-import styles from './CodexTimelineBar.module.css';
+import { formatDuration } from './timelineFormat';
+import type { BlendedSegmentLayout, SpeakerSegment } from './timelineSegments';
+import styles from './TimelineBar.module.css';
 
-export interface CodexTimelineBarProps {
+export interface TimelineBarProps<S extends SpeakerSegment> {
   /**
-   * Precomputed segment layout. CF-362: the same layout instance feeds both
-   * `CodexTimelineBar` and `CostBar` so the two side-by-side rails line up
-   * row-for-row. Caller derives via `useCodexSegmentLayout(items, idx)`.
+   * Precomputed segment layout. The same layout instance can feed both
+   * `TimelineBar` and `CostBar` so the two side-by-side rails line up
+   * row-for-row. Caller derives via the provider's segment-layout hook.
    */
-  layout: BlendedSegmentLayout<CodexTimelineSegment>;
+  layout: BlendedSegmentLayout<S>;
   /**
-   * CF-361: indices into `items` whose category is currently visible under
-   * the active filter. `undefined` means "no filter applied" — every segment
-   * renders in its speaker color and no `(filtered)` suffix appears. An
-   * empty set means everything is filtered out.
+   * CF-361: indices into the unfiltered item array whose category is
+   * currently visible under the active filter. `undefined` means "no filter
+   * applied" — every segment renders in its speaker color and no `(filtered)`
+   * suffix appears. An empty set means everything is filtered out.
    */
   visibleIndices?: Set<number>;
   /** Click-to-seek callback; receives the segment's startIndex (into items). */
   onSeek: (startIndex: number) => void;
+  /** Tooltip label for assistant segments (e.g. "Codex", "Assistant"). */
+  assistantLabel: string;
 }
 
-export default function CodexTimelineBar({ layout, visibleIndices, onSeek }: CodexTimelineBarProps) {
+export default function TimelineBar<S extends SpeakerSegment>({
+  layout,
+  visibleIndices,
+  onSeek,
+  assistantLabel,
+}: TimelineBarProps<S>) {
   const barRef = useRef<HTMLDivElement>(null);
-  const [hoveredSegment, setHoveredSegment] = useState<CodexTimelineSegment | null>(null);
+  const [hoveredSegment, setHoveredSegment] = useState<S | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
   const { segments, heightPercents, totalSize, indicatorPosition } = layout;
 
   const isSegmentFiltered = useCallback(
-    (segment: CodexTimelineSegment): boolean => {
+    (segment: S): boolean => {
       if (!visibleIndices) return false;
       for (let i = segment.startIndex; i <= segment.endIndex; i++) {
         if (visibleIndices.has(i)) return false;
@@ -51,7 +58,7 @@ export default function CodexTimelineBar({ layout, visibleIndices, onSeek }: Cod
   );
 
   const handleSegmentHover = useCallback(
-    (segment: CodexTimelineSegment | null, event?: React.MouseEvent) => {
+    (segment: S | null, event?: React.MouseEvent) => {
       setHoveredSegment(segment);
       if (segment && event && barRef.current) {
         setTooltipPosition({ top: event.clientY, left: barRef.current.getBoundingClientRect().left });
@@ -72,7 +79,7 @@ export default function CodexTimelineBar({ layout, visibleIndices, onSeek }: Cod
           return (
             <div
               key={index}
-              data-codex-segment
+              data-timeline-segment
               data-turn-index={segment.turnIndex}
               className={cx(
                 styles.segment,
@@ -98,7 +105,7 @@ export default function CodexTimelineBar({ layout, visibleIndices, onSeek }: Cod
           className={styles.tooltip}
           style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
         >
-          {formatTooltip(hoveredSegment, visibleIndices)}
+          {formatTooltip(hoveredSegment, visibleIndices, assistantLabel)}
         </div>
       )}
     </div>
@@ -106,10 +113,11 @@ export default function CodexTimelineBar({ layout, visibleIndices, onSeek }: Cod
 }
 
 function formatTooltip(
-  segment: CodexTimelineSegment,
+  segment: SpeakerSegment,
   visibleIndices: Set<number> | undefined,
+  assistantLabel: string,
 ): string {
-  const speaker = segment.speaker === 'user' ? 'User' : 'Codex';
+  const speaker = segment.speaker === 'user' ? 'User' : assistantLabel;
   const itemLabel = segment.messageCount === 1 ? 'item' : 'items';
   const base = `${speaker}: ${formatDuration(segment.durationMs)}, ${segment.messageCount} ${itemLabel}`;
 

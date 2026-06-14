@@ -1,24 +1,28 @@
-// Renders the transcript-tab content for OpenCode sessions (MVP).
+// Renders the transcript-tab content for OpenCode sessions.
 //
-// A virtualized list of render items (user / assistant / tool). Deliberately
-// leaner than the Claude/Codex timelines — no minimap bar, cost side-rail, or
-// Cmd-F search yet — but real: it fetches nothing itself (SessionViewer drives
-// fetch/poll via the adapter) and renders the three categories with reasoning,
-// tool I/O, status, deep-link scroll, and per-message cost badges in cost mode.
+// A virtualized list of render items (user / assistant / tool) with a
+// turn-based minimap / timeline bar alongside (the shared `TimelineBar`,
+// reaching parity with Claude/Codex). Still leaner than the others — no cost
+// side-rail or Cmd-F search yet — but real: it fetches nothing itself
+// (SessionViewer drives fetch/poll via the adapter) and renders the three
+// categories with reasoning, tool I/O, status, deep-link scroll, and
+// per-message cost badges in cost mode.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CostAmount } from '@/components/CostAmount';
 import { cx } from '@/utils/utils';
 import { retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import TimelineBar from '@/components/transcript/TimelineBar';
 import type { OpenCodeRenderItem } from './opencodeCategories';
+import { useOpenCodeSegmentLayout } from './opencodeTimelineSegments';
 import OpenCodeUnknownItem from './OpenCodeUnknownItem';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './OpenCodeTranscriptPane.module.css';
 
 export interface OpenCodeTranscriptPaneProps {
   sessionId: string;
-  /** Unfiltered render items — distinguishes "no transcript yet" from "filtered out". */
+  /** Unfiltered render items — distinguishes "no transcript yet" from "filtered out". Drives bar segments. */
   items: OpenCodeRenderItem[];
   /** Post-filter render items — drives the row list. */
   filteredItems: OpenCodeRenderItem[];
@@ -111,7 +115,10 @@ export default function OpenCodeTranscriptPane({
 }: OpenCodeTranscriptPaneProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const hasScrolledToTarget = useRef(false);
+  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
     count: filteredItems.length,
     getScrollElement: () => parentRef.current,
@@ -123,6 +130,90 @@ export default function OpenCodeTranscriptPane({
     if (!targetId) return -1;
     return filteredItems.findIndex((it) => it.id === targetId);
   }, [filteredItems, targetId]);
+
+  // The timeline bar's segments index into the unfiltered `items` array, so we
+  // translate between the filtered-list index the pane holds internally and
+  // the unfiltered index the bar speaks. OpenCode has no separator rows, so a
+  // filtered index IS the virtual index — the only translation is filtered↔
+  // unfiltered, keyed by the stable render-item `id`.
+  const idToUnfilteredIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((item, idx) => map.set(item.id, idx));
+    return map;
+  }, [items]);
+
+  // CF-361 parity: the set of unfiltered indices whose item survives the
+  // active filter, so the bar greys out fully-filtered segments. `undefined`
+  // when nothing is filtered (filteredItems === items length-wise).
+  const visibleIndices = useMemo(() => {
+    if (filteredItems.length === items.length) return undefined;
+    const visibleIds = new Set(filteredItems.map((it) => it.id));
+    const set = new Set<number>();
+    items.forEach((item, idx) => {
+      if (visibleIds.has(item.id)) set.add(idx);
+    });
+    return set;
+  }, [items, filteredItems]);
+
+  // Selection plumbing: `selectedIndex`/`firstVisibleIndex` are filtered-list
+  // indices; the segment layout indexes the unfiltered array, so translate the
+  // active row's `id` back. Lifted above the early-return so the layout hook
+  // has a stable input across renders.
+  const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
+  const selectedUnfilteredIndex = useMemo(() => {
+    const selected = filteredItems[effectiveSelectedIndex];
+    if (!selected) return 0;
+    return idToUnfilteredIndex.get(selected.id) ?? 0;
+  }, [filteredItems, effectiveSelectedIndex, idToUnfilteredIndex]);
+
+  const segmentLayout = useOpenCodeSegmentLayout(items, selectedUnfilteredIndex);
+
+  // Track the first visible row so the bar indicator has something to point at
+  // when the user hasn't hovered a row.
+  const updateFirstVisible = useCallback(() => {
+    const visible = virtualizer.getVirtualItems();
+    const first = visible[0];
+    if (first) setFirstVisibleIndex(first.index);
+  }, [virtualizer]);
+
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateFirstVisible, { passive: true });
+    updateFirstVisible();
+    return () => el.removeEventListener('scroll', updateFirstVisible);
+  }, [updateFirstVisible]);
+
+  const scrollToItem = useCallback(
+    (filteredIdx: number) => {
+      retryOnAnimationFrame(
+        () => virtualizer.scrollToIndex(filteredIdx, { align: 'start' }),
+        () => false,
+      );
+      setSelectedIndex(filteredIdx);
+    },
+    [virtualizer],
+  );
+
+  // Bar click → scroll to the first visible item at or after `unfilteredStart`.
+  // The bar only fires clicks on un-filtered segments, so at least one item in
+  // the range maps into the filtered list.
+  const onSeekFromBar = useCallback(
+    (unfilteredStart: number) => {
+      const filteredIds = new Map<string, number>();
+      filteredItems.forEach((it, idx) => filteredIds.set(it.id, idx));
+      for (let i = unfilteredStart; i < items.length; i++) {
+        const candidate = items[i];
+        if (!candidate) continue;
+        const filteredIdx = filteredIds.get(candidate.id);
+        if (filteredIdx !== undefined) {
+          scrollToItem(filteredIdx);
+          return;
+        }
+      }
+    },
+    [items, filteredItems, scrollToItem],
+  );
 
   // Re-arm the one-shot scroll when the deep-link target changes, so intra-page
   // navigation (?msg= changes while the pane stays mounted) re-scrolls.
@@ -165,25 +256,35 @@ export default function OpenCodeTranscriptPane({
   }
 
   return (
-    <div ref={parentRef} className={styles.scroll}>
-      <div className={styles.virtualizer} style={{ height: `${virtualizer.getTotalSize()}px` }}>
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const item = filteredItems[virtualItem.index];
-          if (!item) return null;
-          const isTarget = targetId !== undefined && item.id === targetId;
-          return (
-            <div
-              key={virtualItem.key}
-              ref={virtualizer.measureElement}
-              data-index={virtualItem.index}
-              className={cx(styles.slot, isTarget ? styles.slotTarget : undefined)}
-              style={{ transform: `translateY(${virtualItem.start}px)` }}
-            >
-              <Row item={item} isCostMode={isCostMode} />
-            </div>
-          );
-        })}
+    <div className={styles.container}>
+      <div ref={parentRef} className={styles.scroll}>
+        <div className={styles.virtualizer} style={{ height: `${virtualizer.getTotalSize()}px` }}>
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const item = filteredItems[virtualItem.index];
+            if (!item) return null;
+            const isTarget = targetId !== undefined && item.id === targetId;
+            return (
+              <div
+                key={virtualItem.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+                className={cx(styles.slot, isTarget ? styles.slotTarget : undefined)}
+                onMouseEnter={() => setSelectedIndex(virtualItem.index)}
+                style={{ transform: `translateY(${virtualItem.start}px)` }}
+              >
+                <Row item={item} isCostMode={isCostMode} />
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      <TimelineBar
+        layout={segmentLayout}
+        visibleIndices={visibleIndices}
+        onSeek={onSeekFromBar}
+        assistantLabel="Assistant"
+      />
     </div>
   );
 }

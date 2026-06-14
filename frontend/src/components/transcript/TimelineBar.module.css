@@ -1,6 +1,6 @@
-/* Codex timeline bar — vertical turn-based segments. Each turn splits
-   into a user thinking-gap stripe and an assistant body stripe, matching
-   the Claude TimelineBar's color language. */
+/* Shared timeline bar — vertical turn-based segments. Each turn splits
+   into a user thinking-gap stripe and an assistant body stripe (tools fold
+   into the assistant stripe). Used by both Codex and OpenCode. */
 
 .timelineBar {
   position: relative;

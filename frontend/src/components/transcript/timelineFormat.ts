@@ -1,6 +1,6 @@
 /**
- * Format a duration in milliseconds for timeline tooltips on both the Claude
- * `TimelineBar` and the Codex `CodexTimelineBar`. Renders as `1h 15m`,
+ * Format a duration in milliseconds for timeline tooltips on the Claude
+ * `claude/TimelineBar` and the shared `TimelineBar` (Codex + OpenCode). Renders as `1h 15m`,
  * `5m 30s`, `42s`, or `500ms` depending on magnitude — preferred over the
  * `M:SS` colon style in `codexFormat.ts` for tooltip prose.
  */

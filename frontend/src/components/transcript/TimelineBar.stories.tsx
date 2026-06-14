@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import CodexTimelineBar from './CodexTimelineBar';
-import { useCodexSegmentLayout } from './codexTimelineSegments';
+import TimelineBar from './TimelineBar';
+import { useCodexSegmentLayout } from './codex/codexTimelineSegments';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 
-// CF-362: CodexTimelineBar now takes a precomputed layout. Stories drive
-// it via this thin wrapper to keep the story bodies focused on item shapes.
+// The shared TimelineBar takes a precomputed layout. Stories drive it via
+// this thin wrapper (using the Codex segment layout) to keep the story
+// bodies focused on item shapes.
 function Bar({
   items,
   selectedIndex = 0,
@@ -16,17 +17,17 @@ function Bar({
   onSeek: (idx: number) => void;
 }) {
   const layout = useCodexSegmentLayout(items, selectedIndex);
-  return <CodexTimelineBar layout={layout} onSeek={onSeek} />;
+  return <TimelineBar layout={layout} onSeek={onSeek} assistantLabel="Codex" />;
 }
 
-const meta: Meta<typeof CodexTimelineBar> = {
-  title: 'Transcript/Codex/CodexTimelineBar',
-  component: CodexTimelineBar,
+const meta: Meta<typeof TimelineBar> = {
+  title: 'Transcript/SharedTimelineBar',
+  component: TimelineBar,
   parameters: { layout: 'fullscreen' },
 };
 
 export default meta;
-type Story = StoryObj<typeof CodexTimelineBar>;
+type Story = StoryObj<typeof TimelineBar>;
 
 function user(timestamp: string, text = 'hi'): CodexRenderItem {
   return { kind: 'user', lineId: '0', timestamp, text };
