@@ -100,17 +100,6 @@ function CustomTooltip({ active, payload, showBreakdown }: CustomTooltipProps) {
   );
 }
 
-// Providers with no cache-write concept (Codex/OpenAI today) hide the
-// Cache row's "Create / " prefix rather than dashing it.
-// TODO(opencode): this hardcodes "only Codex lacks cache-write", but OpenCode
-// aggregates many providers (OpenAI, Gemini, DeepSeek, …) that mostly don't bill
-// cache writes either. Once OpenCode token data lands, drive this off whether the
-// provider actually has cache_write > 0 in the data rather than a provider-id
-// allowlist (which also tidies the Codex special-case).
-function providerHasCacheWrite(providerId: string): boolean {
-  return providerId !== 'codex';
-}
-
 // Elevated grand-total headline, rendered identically in single- and
 // multi-provider modes so the total cost reads the same regardless of layout.
 function TotalCostRow({ usd }: { usd: string }) {
@@ -122,18 +111,18 @@ function TotalCostRow({ usd }: { usd: string }) {
   );
 }
 
-// Tri-state cache row, parameterized so single-provider and per-provider
-// sections share the same rules. Returns null when both numbers are 0.
+// Tri-state cache row, shared by single-provider and per-provider sections.
+// The "Create" half is shown purely when the provider actually has
+// cache_creation > 0 in the data (vcpa — no provider-id allowlist). Returns
+// null when both numbers are 0.
 function CacheRow({
-  providerId,
   cacheCreation,
   cacheRead,
 }: {
-  providerId: string;
   cacheCreation: number;
   cacheRead: number;
 }) {
-  const hasCreate = providerHasCacheWrite(providerId) && cacheCreation > 0;
+  const hasCreate = cacheCreation > 0;
   if (hasCreate) {
     return (
       <StatRow
@@ -149,13 +138,7 @@ function CacheRow({
 }
 
 // Inner rows shared by single-provider mode and per-provider sections.
-function TokensStatRows({
-  providerId,
-  data,
-}: {
-  providerId: string;
-  data: TrendsTokensPerProvider;
-}) {
+function TokensStatRows({ data }: { data: TrendsTokensPerProvider }) {
   const totalTokens = data.total_input_tokens + data.total_output_tokens;
   return (
     <>
@@ -165,7 +148,6 @@ function TokensStatRows({
         value={`${formatTokenCount(data.total_input_tokens)} / ${formatTokenCount(data.total_output_tokens)}`}
       />
       <CacheRow
-        providerId={providerId}
         cacheCreation={data.total_cache_creation_tokens}
         cacheRead={data.total_cache_read_tokens}
       />
@@ -185,7 +167,7 @@ function TrendsTokensPerProviderList({ entries }: TrendsTokensPerProviderListPro
           <header className={styles.providerHeader}>{providerLabel(providerId)}</header>
           <div className={styles.providerRows}>
             <StatRow label="Cost" value={<CostAmount usd={parseFloat(e.total_cost_usd)} />} />
-            <TokensStatRows providerId={providerId} data={e} />
+            <TokensStatRows data={e} />
           </div>
         </section>
       ))}
@@ -230,8 +212,6 @@ export function TrendsTokensCard({ data, modelFilterActive = false }: TrendsToke
 
   const multiProvider = perProviderEntries.length >= 2;
   const hasChartData = chartData.length > 1;
-  const singleProviderId =
-    perProviderEntries.length === 1 ? perProviderEntries[0]![0] : '';
   // The fallback path always emits exactly one stack key, so length > 1
   // implies real per-provider stacking and the breakdown is meaningful.
   const tooltipShowBreakdown = stackProviderIds.length > 1;
@@ -248,7 +228,7 @@ export function TrendsTokensCard({ data, modelFilterActive = false }: TrendsToke
       {multiProvider ? (
         <TrendsTokensPerProviderList entries={perProviderEntries} />
       ) : (
-        <TokensStatRows providerId={singleProviderId} data={data} />
+        <TokensStatRows data={data} />
       )}
 
       {hasChartData && (

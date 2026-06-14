@@ -241,6 +241,45 @@ export const NoCachingAtAll: Story = {
   },
 };
 
+// vcpa: the cache "Create" half is data-driven (cache_creation > 0), not
+// gated on provider id. OpenCode aggregates many vendors: a window whose
+// cache-writing providers contributed shows "Cache (Create / Read)"; one
+// billed only by non-cache-writing vendors (cache_creation === 0) collapses
+// to "Cache Read".
+export const OpenCodeWithAndWithoutCacheWrites: Story = {
+  args: {
+    data: {
+      total_input_tokens: 1_700_000,
+      total_output_tokens: 360_000,
+      total_cache_creation_tokens: 40_000,
+      total_cache_read_tokens: 300_000,
+      total_cost_usd: '11.00',
+      daily_costs: [
+        { date: '2024-01-08', cost_usd: '5.00', per_provider: { opencode: '3.00', codex: '2.00' } },
+        { date: '2024-01-09', cost_usd: '6.00', per_provider: { opencode: '3.00', codex: '3.00' } },
+      ],
+      per_provider: {
+        // OpenCode window with Anthropic-style cache writes → Create shown.
+        opencode: {
+          total_input_tokens: 900_000,
+          total_output_tokens: 210_000,
+          total_cache_creation_tokens: 40_000,
+          total_cache_read_tokens: 180_000,
+          total_cost_usd: '6.75',
+        },
+        // Codex (OpenAI) never bills cache writes → cache_creation 0 → Cache Read.
+        codex: {
+          total_input_tokens: 800_000,
+          total_output_tokens: 150_000,
+          total_cache_creation_tokens: 0,
+          total_cache_read_tokens: 120_000,
+          total_cost_usd: '4.25',
+        },
+      },
+    },
+  },
+};
+
 // Multi-provider filtered set — top-level Total Cost row, indented
 // per-provider sections, and a stacked bar chart below where each day's bar
 // is split into per-provider segments (Claude Code in brand orange, Codex
