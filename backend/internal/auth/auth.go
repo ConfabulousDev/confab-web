@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -40,17 +39,15 @@ func GenerateAPIKey() (string, string, error) {
 	// Encode as base64 and add cfb_ prefix
 	rawKey := "cfb_" + base64.URLEncoding.EncodeToString(bytes)[:40]
 
-	// Hash the key for storage
-	hash := sha256.Sum256([]byte(rawKey))
-	keyHash := fmt.Sprintf("%x", hash)
+	// Hash the key for storage (same primitive as web sessions / device codes)
+	keyHash := db.HashToken(rawKey)
 
 	return rawKey, keyHash, nil
 }
 
 // HashAPIKey hashes an API key for validation
 func HashAPIKey(rawKey string) string {
-	hash := sha256.Sum256([]byte(rawKey))
-	return fmt.Sprintf("%x", hash)
+	return db.HashToken(rawKey)
 }
 
 // enrichSpanWithUser adds user attributes to the current span for tracing

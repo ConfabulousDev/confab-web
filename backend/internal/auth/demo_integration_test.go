@@ -77,8 +77,13 @@ func TestBootstrapDemoIdentity_FreshDatabase(t *testing.T) {
 	).Scan(&actualID); err != nil {
 		t.Fatalf("read session id: %v", err)
 	}
-	if actualID != expectedID {
-		t.Errorf("session id = %q, want %q", actualID, expectedID)
+	// The shared demo session is stored under sha256(sharedID) at rest (40hj);
+	// the cookie still carries the raw deterministic ID.
+	if actualID == expectedID {
+		t.Error("demo session id stored raw (must be hashed)")
+	}
+	if actualID != db.HashToken(expectedID) {
+		t.Errorf("session id = %q, want sha256(sharedID) %q", actualID, db.HashToken(expectedID))
 	}
 
 	// silence unused-import warning when stubs return zero values

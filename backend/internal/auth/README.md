@@ -6,7 +6,7 @@ Authentication and authorization for Confab. Supports multiple OAuth providers, 
 
 | File | Role |
 |------|------|
-| `auth.go` | Core auth primitives: `GenerateAPIKey`, `HashAPIKey`, API key context key, `RequireAPIKey` middleware, `TryAPIKeyAuth` (non-rejecting), `GetUserID` context extractor, `SetUserIDForTest` helper, `setLogUserID` for FlyLogger integration, OpenTelemetry span enrichment |
+| `auth.go` | Core auth primitives: `GenerateAPIKey`, `HashAPIKey` (both delegate to `db.HashToken` — the shared sha256 primitive also used for web-session IDs and device codes, 40hj), API key context key, `RequireAPIKey` middleware, `TryAPIKeyAuth` (non-rejecting), `GetUserID` context extractor, `SetUserIDForTest` helper, `setLogUserID` for FlyLogger integration, OpenTelemetry span enrichment |
 | `oauth.go` | OAuth providers (GitHub, Google, generic OIDC), session cookie management, all auth middleware (`RequireSession`, `RequireSessionOrAPIKey`, `OptionalAuth`), logout, CLI authorize flow, device code flow (initiate, poll, verify page), user cap enforcement, `OAuthConfig` struct, OIDC lazy discovery. `generateUserCode` uses rejection sampling for an unbiased alphabet; `HandleDeviceVerify` applies a per-verifier brute-force lockout (see `device_verify_throttle.go`) (8epk). |
 | `device_verify_throttle.go` | `attemptLimiter` — in-memory, per-key failed-attempt lockout (count failures → lock for a window → reset on success/expiry; bounded map). Used by `HandleDeviceVerify`, keyed by the verifier's user ID, mirroring the password-auth lockout without a DB column (8epk). |
 | `password.go` | Password authentication: `HandlePasswordLogin`, `HashPassword`/`CheckPassword` (bcrypt), `BootstrapAdmin` for initial admin user creation, `redirectWithError` helper |

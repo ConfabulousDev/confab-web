@@ -9,6 +9,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/api/apitest"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -336,7 +337,7 @@ func TestDemo_LogoutPreservesSharedSessionRow(t *testing.T) {
 	// Before logout: row exists.
 	var pre int
 	if err := env.DB.Conn().QueryRowContext(context.Background(),
-		`SELECT count(*) FROM web_sessions WHERE id = $1`, demoID,
+		`SELECT count(*) FROM web_sessions WHERE id = $1`, db.HashToken(demoID),
 	).Scan(&pre); err != nil {
 		t.Fatalf("pre-count: %v", err)
 	}
@@ -359,7 +360,7 @@ func TestDemo_LogoutPreservesSharedSessionRow(t *testing.T) {
 	// deleted, only client-side cleared.
 	var post int
 	if err := env.DB.Conn().QueryRowContext(context.Background(),
-		`SELECT count(*) FROM web_sessions WHERE id = $1`, demoID,
+		`SELECT count(*) FROM web_sessions WHERE id = $1`, db.HashToken(demoID),
 	).Scan(&post); err != nil {
 		t.Fatalf("post-count: %v", err)
 	}
@@ -426,7 +427,7 @@ func TestDemo_RegressionEnvUnsetNoBehaviorChange(t *testing.T) {
 
 		var pre int
 		_ = env.DB.Conn().QueryRowContext(context.Background(),
-			`SELECT count(*) FROM web_sessions WHERE id = $1`, realToken,
+			`SELECT count(*) FROM web_sessions WHERE id = $1`, db.HashToken(realToken),
 		).Scan(&pre)
 		if pre != 1 {
 			t.Fatalf("pre count = %d, want 1", pre)
@@ -444,7 +445,7 @@ func TestDemo_RegressionEnvUnsetNoBehaviorChange(t *testing.T) {
 
 		var post int
 		_ = env.DB.Conn().QueryRowContext(context.Background(),
-			`SELECT count(*) FROM web_sessions WHERE id = $1`, realToken,
+			`SELECT count(*) FROM web_sessions WHERE id = $1`, db.HashToken(realToken),
 		).Scan(&post)
 		if post != 0 {
 			t.Errorf("post count = %d, want 0 (real-user logout must still delete row)", post)

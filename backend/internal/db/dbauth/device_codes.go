@@ -18,8 +18,11 @@ func (s *Store) CreateDeviceCode(ctx context.Context, deviceCode, userCode, keyN
 	ctx, span := tracer.Start(ctx, "db.create_device_code")
 	defer span.End()
 
+	// Store sha256(device_code) so a DB read can't replay it (40hj). user_code
+	// stays plaintext (D4): low-entropy + short-lived, defended by the 8epk
+	// per-verifier throttle rather than at-rest hashing.
 	query := `INSERT INTO device_codes (device_code, user_code, key_name, expires_at) VALUES ($1, $2, $3, $4)`
-	_, err := s.conn().ExecContext(ctx, query, deviceCode, userCode, keyName, expiresAt)
+	_, err := s.conn().ExecContext(ctx, query, db.HashToken(deviceCode), userCode, keyName, expiresAt)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -61,7 +64,7 @@ func (s *Store) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string
 	          FROM device_codes WHERE device_code = $1`
 
 	var dc db.DeviceCode
-	err := s.conn().QueryRowContext(ctx, query, deviceCode).Scan(
+	err := s.conn().QueryRowContext(ctx, query, db.HashToken(deviceCode)).Scan(
 		&dc.ID, &dc.DeviceCode, &dc.UserCode, &dc.KeyName,
 		&dc.UserID, &dc.ExpiresAt, &dc.AuthorizedAt, &dc.CreatedAt,
 	)
@@ -105,7 +108,7 @@ func (s *Store) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
 	defer span.End()
 
 	query := `DELETE FROM device_codes WHERE device_code = $1`
-	_, err := s.conn().ExecContext(ctx, query, deviceCode)
+	_, err := s.conn().ExecContext(ctx, query, db.HashToken(deviceCode))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -113,4 +116,3 @@ func (s *Store) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
 	}
 	return nil
 }
-
