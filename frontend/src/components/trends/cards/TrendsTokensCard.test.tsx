@@ -280,6 +280,72 @@ describe('TrendsTokensCard multi-provider sections', () => {
     expect(within(claudeSection).getByText('Cache (Create / Read)')).toBeInTheDocument();
   });
 
+  // vcpa: the cache "Create" half is driven purely by the data
+  // (cache_creation > 0), NOT a provider-id allowlist.
+  it('shows "Cache (Create / Read)" for opencode when cache_creation > 0 (not allowlist-gated)', () => {
+    const data = makeData({
+      'claude-code': entry({
+        total_input_tokens: 5_000_000,
+        total_cache_creation_tokens: 100_000,
+        total_cache_read_tokens: 500_000,
+        total_cost_usd: '125.00',
+      }),
+      opencode: entry({
+        total_input_tokens: 900_000,
+        total_cache_creation_tokens: 40_000,
+        total_cache_read_tokens: 120_000,
+        total_cost_usd: '6.00',
+      }),
+    });
+    render(<TrendsTokensCard data={data} />);
+    const ocSection = screen.getByText('OpenCode').closest('section')!;
+    expect(within(ocSection).getByText('Cache (Create / Read)')).toBeInTheDocument();
+  });
+
+  it('shows "Cache Read" only for opencode when cache_creation === 0 (purely data-driven)', () => {
+    const data = makeData({
+      'claude-code': entry({
+        total_input_tokens: 5_000_000,
+        total_cache_creation_tokens: 100_000,
+        total_cache_read_tokens: 500_000,
+        total_cost_usd: '125.00',
+      }),
+      opencode: entry({
+        total_input_tokens: 900_000,
+        total_cache_creation_tokens: 0,
+        total_cache_read_tokens: 120_000,
+        total_cost_usd: '6.00',
+      }),
+    });
+    render(<TrendsTokensCard data={data} />);
+    const ocSection = screen.getByText('OpenCode').closest('section')!;
+    expect(within(ocSection).getByText('Cache Read')).toBeInTheDocument();
+    expect(within(ocSection).queryByText('Cache (Create / Read)')).not.toBeInTheDocument();
+  });
+
+  it('shows Create for a (contrived) codex entry with cache_creation > 0 — the id allowlist is gone', () => {
+    // Real Codex data never has cache_creation > 0; this locks in that the
+    // display is data-driven and not gated on provider id (guards against a
+    // re-introduced allowlist).
+    const data = makeData({
+      'claude-code': entry({
+        total_input_tokens: 5_000_000,
+        total_cache_creation_tokens: 100_000,
+        total_cache_read_tokens: 500_000,
+        total_cost_usd: '125.00',
+      }),
+      codex: entry({
+        total_input_tokens: 800_000,
+        total_cache_creation_tokens: 50_000,
+        total_cache_read_tokens: 120_000,
+        total_cost_usd: '4.25',
+      }),
+    });
+    render(<TrendsTokensCard data={data} />);
+    const codexSection = screen.getByText('Codex').closest('section')!;
+    expect(within(codexSection).getByText('Cache (Create / Read)')).toBeInTheDocument();
+  });
+
   it("omits the cache row entirely for a provider with all-zero cache numbers", () => {
     const data = makeData({
       'claude-code': entry({ total_input_tokens: 5_000_000, total_cost_usd: '125.00' }),
