@@ -29,7 +29,6 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `content_type.go` | `validateContentType` middleware -- enforces `application/json` Content-Type on POST/PUT/PATCH requests within `/api/v1` |
 | `flylogger.go` | `FlyLogger` middleware and `ParseCLIUserAgent` -- structured HTTP request logging with client IP, user ID, Fly.io region, CLI version, and 4xx error body capture |
 | `tracing.go` | `SpanEnricher` middleware -- adds CLI version/OS/arch attributes to OpenTelemetry spans |
-| `debug_logging.go` | `debugLoggingMiddleware` -- logs full request/response bodies when debug logging is enabled (truncated to 10KB) |
 
 ## Key Types
 
@@ -90,7 +89,7 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
 
 ## Testing
 
-- **Unit tests** -- `*_test.go` files in this package for pure logic (compression, CSRF, auth config, body size limits, GitHub URL parsing, transcript helpers, etc.). These tests need access to unexported helpers (`extractPRLinkFromLine`, `extractRepoName`, `sanitizeContentDispositionFilename`, `truncateTranscriptFromStart`, `debugLoggingMiddleware`, `decompressMiddleware`, …).
+- **Unit tests** -- `*_test.go` files in this package for pure logic (compression, CSRF, auth config, body size limits, GitHub URL parsing, transcript helpers, etc.). These tests need access to unexported helpers (`extractPRLinkFromLine`, `extractRepoName`, `sanitizeContentDispositionFilename`, `truncateTranscriptFromStart`, `decompressMiddleware`, …).
 - **Integration tests** -- HTTP integration tests live in per-feature sibling packages under `internal/api/` (one CI shard each — `list-test-packages.sh` discovers them automatically). Each sub-package uses `package <feature>_test` and exercises the router via the shared helper in `apitest`:
   - `apitest/` — exported `apitest.NewServer(t, env, apitest.Options{...})` builds a real test server (production router, DB, MinIO). Replaces a dozen near-identical `setupXxxTestServer` helpers that used to live in this package.
   - `sessionaccess/` — canonical session URL access (CF-132) tests against `api.HandleGetSession`.
