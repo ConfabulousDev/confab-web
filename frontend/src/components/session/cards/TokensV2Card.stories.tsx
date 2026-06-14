@@ -67,6 +67,37 @@ export const MultiProvider: Story = {
   args: { loading: false, data: multiProvider },
 };
 
+// hp73: deep multi-provider × multi-model case — the whole point of the
+// redesign is that the three indentation levels (provider → model → detail)
+// read clearly. Each provider has two models so the collapsed model headlines
+// nest visibly under the uppercase provider header.
+export const DeepMultiProviderMultiModel: Story = {
+  args: {
+    loading: false,
+    data: {
+      total_cost_usd: '12.40',
+      total_input: 3_600_000,
+      total_output: 720_000,
+      by_provider: {
+        anthropic: {
+          cost_usd: '9.10',
+          models: {
+            'opus-4-8': { input: 2_000_000, output: 500_000, cache_read: 1_500_000, cache_write: 120_000, reasoning: 0, cost_usd: '7.20' },
+            'opus-4-8 · fast': { input: 400_000, output: 80_000, cache_read: 0, cache_write: 0, reasoning: 24_000, cost_usd: '1.90' },
+          },
+        },
+        openai: {
+          cost_usd: '3.30',
+          models: {
+            'gpt-5': { input: 900_000, output: 120_000, cache_read: 300_000, cache_write: 0, reasoning: 30_000, cost_usd: '2.10' },
+            'gpt-5-mini': { input: 300_000, output: 20_000, cache_read: 100_000, cache_write: 0, reasoning: 0, cost_usd: '1.20' },
+          },
+        },
+      },
+    },
+  },
+};
+
 export const ZeroCost: Story = {
   args: {
     loading: false,
