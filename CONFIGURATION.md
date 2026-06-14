@@ -153,6 +153,7 @@ Sharing behavior and UI customization.
 | `ENABLE_ORG_ANALYTICS` | `false` | No | Expose org-wide per-user analytics (`/admin/...`) to every authenticated user — same visibility model as `SHARE_ALL_SESSIONS_TO_AUTHENTICATED`. See [Organization Analytics in backend/API.md](backend/API.md#organization-analytics) for the privacy implications. |
 | `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright); off by default for self-hosted |
 | `ENABLE_SAAS_TERMLY` | `false` | No | Enable the Termly cookie-consent banner (SaaS only); off by default for self-hosted |
+| `DISABLE_UPDATE_CHECK` | `false` | No | Suppress the in-product "Update available" badge (skips the periodic GitHub release check). Useful for air-gapped deployments. Implicitly `true` when `ENABLE_SAAS_FOOTER=true`, since SaaS users can't self-upgrade. |
 
 ## Model Pricing
 
@@ -175,6 +176,7 @@ Precomputes analytics and smart recaps in the background.
 |----------|---------|----------|-------------|
 | `WORKER_POLL_INTERVAL` | `30m` | No | How often to check for stale sessions |
 | `WORKER_MAX_SESSIONS` | `20` | No | Maximum sessions to process per cycle |
+| `WORKER_MAX_SEARCH_INDEX_SESSIONS` | `200` | No | Maximum sessions to (re)build the search index for per cycle (search indexing is cheap, so this is higher than `WORKER_MAX_SESSIONS`) |
 | `WORKER_DRY_RUN` | `false` | No | Log what would be done without actually processing |
 
 ### Staleness Thresholds (Advanced)
