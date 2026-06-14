@@ -195,6 +195,16 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
+	// git_info is a free-form JSONB passthrough that typically holds remote
+	// URLs (which can embed credentials), host metadata, and the committer's
+	// name/email. RedactForSharing can't reach it — it runs before the
+	// unmarshal above and only nils pii-tagged *string fields. So redact it
+	// here, for ALL non-owners (recipient, system, anonymous public alike —
+	// none are entitled to remote URLs), keeping only branch + an owner/repo
+	// display name. (d29s)
+	if !isOwner {
+		session.GitInfo = db.SanitizeGitInfoForSharing(session.GitInfo)
+	}
 	if err := db.LoadSessionSyncFiles(ctx, s.DB, &session); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

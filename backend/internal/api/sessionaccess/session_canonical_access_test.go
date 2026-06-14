@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/api"
@@ -209,6 +210,158 @@ func TestHandleGetSession_RecipientShareExposesOwnerEmail(t *testing.T) {
 	}
 	if session.OwnerEmail != "owner@example.com" {
 		t.Errorf("expected owner_email populated for recipient access, got %q", session.OwnerEmail)
+	}
+}
+
+// gitInfoWithSecrets is a rich git_info blob carrying credential- and
+// host-bearing keys, used by the d29s git_info-redaction wire tests.
+func gitInfoWithSecrets() map[string]interface{} {
+	return map[string]interface{}{
+		"repo_url":   "https://alice:ghp_secrettoken@github.com/acme/widget.git",
+		"branch":     "feature/login",
+		"author":     "Alice Owner <alice@example.com>",
+		"commit_sha": "deadbeefcafebabe",
+		"remotes": []interface{}{
+			map[string]interface{}{"name": "origin", "fetch_url": "https://alice:ghp_secrettoken@github.com/acme/widget.git"},
+			map[string]interface{}{"name": "upstream", "fetch_url": "https://internal.example.com/acme/widget.git"},
+		},
+		"tracking_remote": "upstream",
+	}
+}
+
+// assertNoGitSecretsInBody fails if the raw response body contains any
+// credential or host substring from gitInfoWithSecrets.
+func assertNoGitSecretsInBody(t *testing.T, body string) {
+	t.Helper()
+	for _, forbidden := range []string{"ghp_secrettoken", "alice:", "@github.com", "internal.example.com", "://"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("response body leaked git_info secret substring %q", forbidden)
+		}
+	}
+}
+
+// TestHandleGetSession_OwnerSeesFullGitInfo confirms the owner's own git_info
+// (including the credential-bearing repo_url and remotes) is returned intact —
+// redaction is for non-owners only (d29s).
+func TestHandleGetSession_OwnerSeesFullGitInfo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSessionWithGitInfoMap(t, env, owner.ID, "git-owner", gitInfoWithSecrets())
+
+	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, owner.ID)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	api.HandleGetSession(env.DB)(w, req)
+	testutil.AssertStatus(t, w, http.StatusOK)
+
+	var session db.SessionDetail
+	testutil.ParseJSONResponse(t, w, &session)
+
+	gi, ok := session.GitInfo.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected owner git_info map, got %T", session.GitInfo)
+	}
+	if gi["repo_url"] != "https://alice:ghp_secrettoken@github.com/acme/widget.git" {
+		t.Errorf("owner should see full repo_url, got %v", gi["repo_url"])
+	}
+	if _, hasRemotes := gi["remotes"]; !hasRemotes {
+		t.Error("owner should see remotes")
+	}
+}
+
+// TestHandleGetSession_PublicShareRedactsGitInfo asserts an anonymous public
+// viewer never receives credential- or host-bearing git_info: repo_url is
+// reduced to a bare owner/repo, branch is kept, every other key is dropped
+// (d29s).
+func TestHandleGetSession_PublicShareRedactsGitInfo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSessionWithGitInfoMap(t, env, owner.ID, "git-public", gitInfoWithSecrets())
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	api.HandleGetSession(env.DB)(w, req)
+	testutil.AssertStatus(t, w, http.StatusOK)
+
+	assertNoGitSecretsInBody(t, w.Body.String())
+
+	var session db.SessionDetail
+	testutil.ParseJSONResponse(t, w, &session)
+	gi, ok := session.GitInfo.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected sanitized git_info map, got %T (%v)", session.GitInfo, session.GitInfo)
+	}
+	if gi["repo_url"] != "acme/widget" {
+		t.Errorf("expected repo_url display = acme/widget, got %v", gi["repo_url"])
+	}
+	if gi["branch"] != "feature/login" {
+		t.Errorf("expected branch kept, got %v", gi["branch"])
+	}
+	for _, dropped := range []string{"remotes", "tracking_remote", "author", "commit_sha"} {
+		if _, present := gi[dropped]; present {
+			t.Errorf("expected %q dropped for public access, got %v", dropped, gi[dropped])
+		}
+	}
+}
+
+// TestHandleGetSession_RecipientRedactsGitInfo confirms d29s/D2: recipients
+// (authenticated, entitled non-owners) get the SAME git_info redaction as
+// anonymous public viewers — they are not entitled to remote URLs either.
+func TestHandleGetSession_RecipientRedactsGitInfo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSessionWithGitInfoMap(t, env, owner.ID, "git-recipient", gitInfoWithSecrets())
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
+
+	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, recipient.ID)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	api.HandleGetSession(env.DB)(w, req)
+	testutil.AssertStatus(t, w, http.StatusOK)
+
+	assertNoGitSecretsInBody(t, w.Body.String())
+
+	var session db.SessionDetail
+	testutil.ParseJSONResponse(t, w, &session)
+	gi, ok := session.GitInfo.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected sanitized git_info map, got %T", session.GitInfo)
+	}
+	if gi["repo_url"] != "acme/widget" {
+		t.Errorf("expected repo_url display = acme/widget for recipient, got %v", gi["repo_url"])
+	}
+	if _, present := gi["remotes"]; present {
+		t.Error("expected remotes dropped for recipient access")
 	}
 }
 

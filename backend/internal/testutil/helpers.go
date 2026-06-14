@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/google/uuid"
 )
 
 // AuthenticatedRequest creates an HTTP request with user authentication context
@@ -161,6 +161,30 @@ func CreateTestSessionWithGitInfo(t *testing.T, env *TestEnvironment, userID int
 	_, err = env.DB.Exec(env.Ctx, query, sessionID, userID, externalID, gitInfoJSON)
 	if err != nil {
 		t.Fatalf("failed to create test session with git info: %v", err)
+	}
+
+	return sessionID
+}
+
+// CreateTestSessionWithGitInfoMap creates a session whose git_info JSONB is the
+// caller-supplied map verbatim, for tests that need a rich blob (remotes,
+// tracking_remote, author, credential-bearing repo_url, etc.).
+func CreateTestSessionWithGitInfoMap(t *testing.T, env *TestEnvironment, userID int64, externalID string, gitInfo map[string]interface{}) string {
+	t.Helper()
+
+	sessionID := uuid.New().String()
+
+	gitInfoJSON, err := json.Marshal(gitInfo)
+	if err != nil {
+		t.Fatalf("failed to marshal git_info: %v", err)
+	}
+
+	_, err = env.DB.Exec(env.Ctx, `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, git_info)
+		VALUES ($1, $2, $3, NOW(), $4)
+	`, sessionID, userID, externalID, gitInfoJSON)
+	if err != nil {
+		t.Fatalf("failed to create test session with git info map: %v", err)
 	}
 
 	return sessionID

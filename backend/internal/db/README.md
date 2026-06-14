@@ -10,6 +10,7 @@ Core database connection, shared types, sentinel errors, and helper functions fo
 | `types.go` | Shared domain types used across sub-packages: `SessionListItem`, `SessionDetail`, `SyncFileDetail`, `SessionListParams`, `SessionListResult`, `SessionFilterOptions`, `SessionShare`, `ShareWithSessionInfo`, `DeviceCode`, `SyncFileState`, `SyncSessionParams`, `SessionEventParams`, `SessionAccessType`/`SessionAccessInfo`, plus constants (`MaxAPIKeysPerUser`, `DefaultPageSize`, `MaxCustomTitleLength`) |
 | `errors.go` | Sentinel errors for type-safe error checking with `errors.Is()`: session (`ErrSessionNotFound`, `ErrUnauthorized`), share (`ErrForbidden`), file (`ErrFileNotFound`), user (`ErrUserNotFound`, `ErrOwnerInactive`), API key (`ErrAPIKeyNotFound`, `ErrAPIKeyLimitExceeded`, `ErrAPIKeyNameExists`), device code (`ErrDeviceCodeNotFound`), GitHub link (`ErrGitHubLinkNotFound`), password auth (`ErrInvalidCredentials`, `ErrAccountLocked`), Codex rollout (`ErrRolloutNotFound`) |
 | `helpers.go` | Shared helper functions exported for sub-packages: `IsInvalidUUIDError`, `IsUniqueViolation`, `ExtractRepoName` (owner/repo from a git URL, used for the per-session display field), `UnmarshalSessionGitInfo`, `LoadSessionSyncFiles` |
+| `git_info_redact.go` | `SanitizeGitInfoForSharing(raw interface{}) interface{}` -- read-time redaction of the free-form `git_info` JSONB for non-owner access (recipient, system, public alike). Whitelists `branch` + a host/credential-stripped `owner/repo` display name; drops remote URLs, `tracking_remote`, author, and every other key. Fails safe (nil/non-map/unparseable → drop, never the original). Deliberately stricter than `ExtractRepoName`/`repo_filter.go` (which fall back to the original URL) — see the doc comment before consolidating. Called by `db/access.GetSessionDetailWithAccess` (d29s). |
 | `repo_filter.go` | SQL fragment helpers for repo extraction + read-time fork→upstream resolution: `RepoRootExpr(alias)` (SELECT projection) and `RepoMatchExpr(alias, paramPlaceholder)` (WHERE clause). `RepoRootExpr` resolves a session's upstream live from its own `git_info` (`repo_url` + `remotes` + `tracking_remote`) — no stored or shared mapping. Folds CF-509 trailing-slash handling into the extraction regex. One source of truth across the call sites that filter sessions by `owner/repo` (CF-510). |
 | `visibility.go` | CF-495 SQL CTE helper `VisibleSessionsCTE(shareAllSessions)` returning `visible_sessions(id, user_id, owner_email, access_type, shared_by_email)` for the session-visibility predicate. Single source of truth used by analytics (`trends.go`), session-list pagination (`db/session/session.go`), and filter-options paths (`db/session`). UNION ALL — callers wrap with `SELECT DISTINCT` (analytics) or `DISTINCT ON (id)` priority dedup (pagination). |
 | `tokens_v2.go` | `V2TotalCostExpr(alias)` — the SQL fragment that extracts a session's total cost from the `session_card_tokens_v2.data` JSONB (`data->>'total_cost_usd'`). One source of truth for the cost readers migrated off the flat v1 `session_card_tokens` table (37cg): session list (`db/session`), org analytics + Trends costliest-sessions (`analytics`). Returns nullable text — presentational LEFT-JOIN callers read it raw, aggregating INNER-JOIN callers wrap `COALESCE(<expr>, '0')::numeric`. |
@@ -43,7 +44,8 @@ Each sub-package depends on the root `db` package for the `DB` handle, shared ty
 
 - **`DB`** -- Wraps `*sql.DB` with a `ShareAllSessions` flag for on-prem deployments where all sessions are visible to all authenticated users.
 - **`SessionAccessType`/`SessionAccessInfo`** -- Enum + struct describing how a user can access a session (owner, recipient, system, public, none) and whether authentication would help.
-- **`SessionDetail.RedactForSharing()`** -- Strips PII fields (hostname, username, cwd, transcript path) for non-owner access.
+- **`SessionDetail.RedactForSharing()`** -- Strips PII fields (hostname, username, cwd, transcript path) for non-owner access. Does NOT touch `git_info` (it runs before the git_info unmarshal and only nils `*string` fields) — that JSONB blob is sanitized separately via `SanitizeGitInfoForSharing`.
+- **`SanitizeGitInfoForSharing(raw)`** -- Redacts the unmarshaled `git_info` for non-owner access: keeps `branch` + a host/credential-free `owner/repo` display name, drops everything else (d29s).
 
 ## How to Extend
 
@@ -56,7 +58,7 @@ Each sub-package depends on the root `db` package for the `DB` handle, shared ty
 
 - The `DB.conn` field is private; sub-packages access it via `DB.Conn()`.
 - `ShareAllSessions` bypasses share-row checks -- every authenticated user gets system-level access.
-- `SessionDetail.RedactForSharing()` must be called for all non-owner session access to strip PII.
+- `SessionDetail.RedactForSharing()` must be called for all non-owner session access to strip PII. The free-form `git_info` JSONB is NOT covered by it — non-owner access must additionally run `SanitizeGitInfoForSharing`, since a raw remote URL can embed credentials. Any new `interface{}`/JSONB field on `SessionDetail` is guarded by `TestSessionDetail_InterfaceFieldsAreClassified`.
 - Sentinel errors are the contract between DB layer and HTTP handlers; never return raw SQL errors to callers.
 
 ## Design Decisions
@@ -69,7 +71,7 @@ Each sub-package depends on the root `db` package for the `DB` handle, shared ty
 
 ## Testing
 
-- Unit tests: `helpers_test.go` (`ExtractRepoName`, `IsInvalidUUIDError`, `IsUniqueViolation`, `UnmarshalSessionGitInfo`), `redaction_test.go` (`SessionDetail.RedactForSharing` field completeness via reflection).
+- Unit tests: `helpers_test.go` (`ExtractRepoName`, `IsInvalidUUIDError`, `IsUniqueViolation`, `UnmarshalSessionGitInfo`), `redaction_test.go` (`SessionDetail.RedactForSharing` field completeness + the `interface{}`/JSONB classification guard, via reflection), `git_info_redact_test.go` (`SanitizeGitInfoForSharing` whitelist + credential/host stripping across URL forms).
 - Integration tests: `helpers_integration_test.go` (`LoadSessionSyncFiles` happy path + todo exclusion + empty result, plus a `Connect`/`Exec`/`QueryRow`/`Conn` lifecycle check) and `connect_test.go` (`ConnectWithRetry` context cancellation). All integration tests use `testutil.SetupTestEnvironment(t)`, which spins up containerized Postgres and MinIO via Docker/Orbstack.
 
 ## Dependencies
