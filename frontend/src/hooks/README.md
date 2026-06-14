@@ -19,7 +19,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useSmartPolling.ts` | Generic smart polling with visibility/activity awareness |
 | `useTrends.ts` | Trends data fetching with filter parameters |
 | `useOrgAnalytics.ts` | Organization analytics data fetching |
-| `useTranscriptSearch.ts` | Generic transcript search with debounced query and match navigation (parameterized over item type via an injected text extractor) |
+| `useTranscriptSearch.ts` | Generic transcript search with debounced query and match navigation (parameterized over item type via an injected text extractor). Consumed by the Claude, Codex, and OpenCode transcript panes |
 | `useShareDialog.ts` | Share dialog form state and API interactions |
 | `useAppConfig.ts` | App configuration context accessor |
 | `useTheme.ts` | Theme state (light/dark) with toggle |
@@ -56,7 +56,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, providers, query) to URL search params via `useURLFilters`. |
 | `useClaudeTranscriptFilters` | `() => ClaudeTranscriptFiltersResult` | Reads/writes Claude transcript message category visibility to URL `hide` param via `useURLFilters`. Provides toggle helpers for categories and subcategories. |
 | `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel of `useClaudeTranscriptFilters`. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
-| `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractClaudeMessageText` from `services/claudeMessageParser`) and Codex (`extractCodexItemText` from `components/transcript/codex`) timelines. |
+| `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractClaudeMessageText` from `services/claudeMessageParser`), Codex (`extractCodexItemText` from `components/transcript/codex`), and OpenCode (`extractOpenCodeItemText` from `components/session`) timelines. |
 | `useShareDialog` | `({ sessionId, userEmail?, onShareCreated? }) => UseShareDialogReturn` | Full share dialog state: form fields, email validation (Zod), create/revoke API calls. |
 | `useDropdown` | `<T extends HTMLElement>(initialOpen?: boolean) => UseDropdownReturn<T>` | Open/close state with click-outside detection and Escape key. `initialOpen` defaults to `false`; pass `true` in stories/tests to render open. |
 | `useSuccessMessage` | `(options?) => UseSuccessMessageReturn` | Auto-fading success message with optional URL param extraction. |

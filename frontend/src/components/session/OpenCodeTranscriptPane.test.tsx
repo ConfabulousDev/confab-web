@@ -1,10 +1,12 @@
 // Tests for the OpenCode transcript pane's minimap / timeline bar wiring
-// (ag2x). Covers: bar present only when segments exist; click-to-seek scrolls
-// the virtualizer; the scroll listener updates first-visible; deep-link scroll
-// still works after the `.container` refactor.
+// (ag2x), cost rail (hfk7), and Cmd-F in-transcript search (5p9j). Covers: bar
+// present only when segments exist; click-to-seek scrolls the virtualizer; the
+// scroll listener updates first-visible; deep-link scroll still works after the
+// `.container` refactor; search opens via Cmd-F, navigates matches, scrolls to
+// matches in unmounted rows, highlights, and force-opens collapsed <details>.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent, act } from '@testing-library/react';
 import OpenCodeTranscriptPane from './OpenCodeTranscriptPane';
 import type { OpenCodeRenderItem } from './opencodeCategories';
 import type { TokenUsage } from '@/utils/tokenStats';
@@ -317,5 +319,199 @@ describe('OpenCodeTranscriptPane cost rail', () => {
     fireEvent.click(segs[segs.length - 1]!);
     // Last segment → unfiltered index 3 → filtered index 3.
     expect(scrollToIndex).toHaveBeenCalledWith(3, expect.objectContaining({ align: 'start' }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5p9j — Cmd-F in-transcript search (shared useTranscriptSearch toolkit).
+//
+// The search query is debounced (150ms) and the highlight query (300ms), so
+// these tests run on fake timers and advance them after typing. The
+// virtualizer mock above lays out every row, so we assert on the rendered
+// <mark>s and the match-count text directly, and spy on scrollToIndex for the
+// scroll-to-(unmounted)-match behavior.
+// ---------------------------------------------------------------------------
+
+function assistantWithReasoning(id: string, timeCreated: number): OpenCodeRenderItem {
+  return {
+    kind: 'assistant',
+    id,
+    text: 'visible body text',
+    reasoning: 'hidden zebra reasoning',
+    timeCreated,
+  };
+}
+
+function toolItem(id: string, timeCreated: number): OpenCodeRenderItem {
+  return {
+    kind: 'tool',
+    id,
+    toolName: 'Bash',
+    status: 'completed',
+    input: 'ls -la',
+    output: 'collapsed quokka output',
+    timeCreated,
+  };
+}
+
+// Open the search bar, type a query, and flush the debounce timers.
+function openAndType(container: HTMLElement, query: string) {
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', metaKey: true }));
+  });
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Search transcript"]');
+  expect(input).not.toBeNull();
+  act(() => {
+    fireEvent.change(input!, { target: { value: query } });
+  });
+  act(() => {
+    vi.advanceTimersByTime(400);
+  });
+  return input!;
+}
+
+describe('OpenCodeTranscriptPane search (5p9j)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // rAF synchronous so retryOnAnimationFrame / the scroll-to-mark dance fire
+    // without real frames (overrides the file-level rAF stub, which is fine).
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    // jsdom doesn't implement scrollIntoView; the scroll-to-mark dance calls it.
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('Cmd-F opens the search bar', () => {
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={session} filteredItems={session} loading={false} error={null} />,
+    );
+    expect(container.querySelector('input[aria-label="Search transcript"]')).toBeNull();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', metaKey: true }));
+    });
+    expect(container.querySelector('input[aria-label="Search transcript"]')).not.toBeNull();
+  });
+
+  it('typing a query shows the "N of M" count and renders <mark>s', () => {
+    const items: OpenCodeRenderItem[] = [
+      { kind: 'user', id: 'u1', text: 'needle here', timeCreated: T0 },
+      { kind: 'assistant', id: 'a1', text: 'no match', timeCreated: T0 + 1000 },
+      { kind: 'user', id: 'u2', text: 'another needle row', timeCreated: T0 + 2000 },
+    ];
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={items} loading={false} error={null} />,
+    );
+    openAndType(container, 'needle');
+    // 2 matching rows.
+    expect(container.textContent).toContain('1 of 2');
+    expect(container.querySelectorAll('mark').length).toBeGreaterThan(0);
+    // The active match's <mark> carries the active class.
+    expect(container.querySelector('mark.search-highlight-active')).not.toBeNull();
+  });
+
+  it('Enter / Shift-Enter navigate matches', () => {
+    const items: OpenCodeRenderItem[] = [
+      { kind: 'user', id: 'u1', text: 'needle one', timeCreated: T0 },
+      { kind: 'user', id: 'u2', text: 'needle two', timeCreated: T0 + 1000 },
+      { kind: 'user', id: 'u3', text: 'needle three', timeCreated: T0 + 2000 },
+    ];
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={items} loading={false} error={null} />,
+    );
+    const input = openAndType(container, 'needle');
+    expect(container.textContent).toContain('1 of 3');
+    act(() => { fireEvent.keyDown(input, { key: 'Enter' }); });
+    expect(container.textContent).toContain('2 of 3');
+    act(() => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: true }); });
+    expect(container.textContent).toContain('1 of 3');
+  });
+
+  it('Escape closes the search bar', () => {
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={session} filteredItems={session} loading={false} error={null} />,
+    );
+    const input = openAndType(container, 'hi');
+    expect(container.querySelector('input[aria-label="Search transcript"]')).not.toBeNull();
+    act(() => { fireEvent.keyDown(input, { key: 'Escape' }); });
+    expect(container.querySelector('input[aria-label="Search transcript"]')).toBeNull();
+  });
+
+  it('a match in a far-down (would-be unmounted) row triggers scrollToIndex with that index', () => {
+    // 30 rows; only the last contains the needle.
+    const items: OpenCodeRenderItem[] = Array.from({ length: 30 }, (_, i) => ({
+      kind: 'user',
+      id: `u${i}`,
+      text: i === 29 ? 'rare beacon term' : `filler ${i}`,
+      timeCreated: T0 + i * 1000,
+    }));
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={items} loading={false} error={null} />,
+    );
+    openAndType(container, 'beacon');
+    // The current-match effect scrolls the virtualizer to the match's filtered
+    // index (== virtual index for OpenCode), centering it.
+    expect(scrollToIndex).toHaveBeenCalledWith(29, expect.objectContaining({ align: 'center' }));
+  });
+
+  it('changing the filter recomputes matches and resets the active match', () => {
+    const items: OpenCodeRenderItem[] = [
+      { kind: 'user', id: 'u1', text: 'needle alpha', timeCreated: T0 },
+      { kind: 'tool', id: 't1', toolName: 'Bash', status: 'ok', input: 'needle beta', timeCreated: T0 + 1000 },
+      { kind: 'user', id: 'u2', text: 'needle gamma', timeCreated: T0 + 2000 },
+    ];
+    const { container, rerender } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={items} loading={false} error={null} />,
+    );
+    const input = openAndType(container, 'needle');
+    expect(container.textContent).toContain('1 of 3');
+    // Advance to match 2.
+    act(() => { fireEvent.keyDown(input, { key: 'Enter' }); });
+    expect(container.textContent).toContain('2 of 3');
+    // Filter out the tool row → matches recompute (3 → 2) and active resets to 1.
+    const filtered = items.filter((it) => it.kind !== 'tool');
+    act(() => {
+      rerender(
+        <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={filtered} loading={false} error={null} />,
+      );
+      vi.advanceTimersByTime(400);
+    });
+    expect(container.textContent).toContain('1 of 2');
+  });
+
+  it('decision 5: a match inside a reasoning <details> forces it open', () => {
+    const items: OpenCodeRenderItem[] = [assistantWithReasoning('a1', T0)];
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={items} loading={false} error={null} />,
+    );
+    // Before search: reasoning <details> is closed.
+    const detailsBefore = container.querySelector('details');
+    expect(detailsBefore).not.toBeNull();
+    expect(detailsBefore!.open).toBe(false);
+    // Search for a term only present inside the collapsed reasoning.
+    openAndType(container, 'zebra');
+    const details = container.querySelector('details');
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(true);
+    // And the match is highlighted inside it.
+    expect(details!.querySelector('mark')).not.toBeNull();
+  });
+
+  it('decision 5: a match inside a tool-output <details> forces it open', () => {
+    const items: OpenCodeRenderItem[] = [toolItem('t1', T0)];
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={items} filteredItems={items} loading={false} error={null} />,
+    );
+    const detailsBefore = container.querySelector('details');
+    expect(detailsBefore!.open).toBe(false);
+    openAndType(container, 'quokka');
+    const details = container.querySelector('details');
+    expect(details!.open).toBe(true);
+    expect(details!.querySelector('mark')).not.toBeNull();
   });
 });

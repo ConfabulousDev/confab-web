@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent, within, waitFor } from 'storybook/test';
 import OpenCodeTranscriptPane from './OpenCodeTranscriptPane';
 import type { OpenCodeRenderItem } from './opencodeCategories';
 
@@ -76,6 +77,60 @@ export const Filtered: Story = {
 
 export const CostMode: Story = {
   args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null, isCostMode: true },
+};
+
+// 5p9j: opens the Cmd-F search bar and types a query that matches across row
+// kinds (user prompt "Go" + assistant body). Visual regression cover for the
+// highlight + match-count wiring.
+export const SearchActive: Story = {
+  args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    // Cmd-F opens the shared search bar (document-level keydown intercept).
+    await userEvent.keyboard('{Meta>}f{/Meta}');
+    const input = await canvas.findByLabelText('Search transcript');
+    await userEvent.type(input, 'Go');
+    // Wait for the debounced highlight to land.
+    await waitFor(() => {
+      if (canvasElement.querySelectorAll('mark').length === 0) {
+        throw new Error('no highlight yet');
+      }
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '5p9j — the OpenCode transcript search bar opens via Cmd-F (shared useTranscriptSearch toolkit). Typing a query highlights matches inline across user / assistant / tool rows; the active match has an amber ring.',
+      },
+    },
+  },
+};
+
+// 5p9j: a query whose only match lives inside a collapsed <details> (the
+// assistant reasoning) — decision 5 force-opens that <details> so the counted
+// match is visible.
+export const SearchInsideDetails: Story = {
+  args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.keyboard('{Meta>}f{/Meta}');
+    const input = await canvas.findByLabelText('Search transcript');
+    // "Glob" only appears inside the assistant's reasoning text.
+    await userEvent.type(input, 'Glob');
+    await waitFor(() => {
+      const open = canvasElement.querySelector('details[open]');
+      if (!open) throw new Error('details not yet force-open');
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '5p9j (decision 5) — a match inside a collapsed reasoning / tool-output <details> force-opens that section so the search bar never counts a match the user cannot see.',
+      },
+    },
+  },
 };
 
 export const Loading: Story = {
