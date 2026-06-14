@@ -177,7 +177,16 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 	if !isOwner {
 		ownerEmail := session.OwnerEmail
 		session.RedactForSharing()
-		session.SharedByEmail = &ownerEmail
+		// Public shares are reachable by anonymous viewers, so the owner's
+		// email (PII) must not leak to them — blank the always-serialized
+		// owner_email field and leave SharedByEmail nil. Recipient/system
+		// viewers are authenticated and entitled to know who shared with
+		// them, so they keep it. (p99d)
+		if accessInfo.AccessType == db.SessionAccessPublic {
+			session.OwnerEmail = ""
+		} else {
+			session.SharedByEmail = &ownerEmail
+		}
 	}
 
 	// Unmarshal git_info and load sync files

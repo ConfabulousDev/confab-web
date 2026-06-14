@@ -13,7 +13,7 @@ Session access control and share management (create, list, revoke shares; check 
 ## Key API
 
 - **`GetSessionAccessType(ctx, sessionID, viewerUserID)`** -- Determines access level by checking, in order: owner, `ShareAllSessions` flag, then share rows (recipient > system > public). Returns a `SessionAccessInfo` with the access type, share ID, and an `AuthMayHelp` hint for unauthenticated users.
-- **`GetSessionDetailWithAccess(ctx, sessionID, viewerUserID, accessInfo)`** -- Loads full session detail for any user with access. Redacts PII (hostname, username, cwd, transcript path) for non-owners. Blocks access if the session owner is deactivated. Updates `last_accessed_at` on the share as a non-critical analytics side effect.
+- **`GetSessionDetailWithAccess(ctx, sessionID, viewerUserID, accessInfo)`** -- Loads full session detail for any user with access. Redacts PII (hostname, username, cwd, transcript path) for non-owners. For **public** access (reachable anonymously) it additionally blanks `OwnerEmail` and leaves `SharedByEmail` nil so the owner's email never leaks to anonymous viewers (p99d); recipient/system viewers are authenticated and entitled to it, so they keep both. Blocks access if the session owner is deactivated. Updates `last_accessed_at` on the share as a non-critical analytics side effect.
 - **`CreateShare(ctx, sessionID, userID, isPublic, expiresAt, recipientEmails)`** -- Creates a public or recipient-only share in a transaction. For recipient shares, batch-resolves email addresses to user IDs.
 - **`CreateSystemShare(ctx, sessionID, expiresAt)`** -- Creates a system-wide share (admin operation, no ownership check). Accessible to any authenticated user.
 - **`ListShares(ctx, sessionID, userID)` / `ListAllUserShares(ctx, userID)`** -- Lists shares for a session or across all of a user's sessions, including recipient emails.
@@ -31,6 +31,7 @@ Session access control and share management (create, list, revoke shares; check 
 - Share expiration is enforced in all queries via `(sh.expires_at IS NULL OR sh.expires_at > NOW())`.
 - Deactivated session owners cause `ErrOwnerInactive` for all non-owner access, preventing visibility of content from disabled accounts.
 - PII fields are never returned for non-owner access (enforced via `RedactForSharing()`).
+- The owner's email is never exposed to **public** (anonymous-reachable) access: `OwnerEmail` is blanked and `SharedByEmail` stays nil for `SessionAccessPublic`. Recipient/system access keeps both — the viewer is authenticated and entitled to know who shared with them (p99d).
 - `RevokeShare` uses a single `DELETE ... USING sessions` to atomically verify ownership and delete, preventing TOCTOU races.
 - The share tables use a polymorphic pattern: `session_shares` is the base, with `session_share_public`, `session_share_recipients`, and `session_share_system` as type-specific join tables.
 - `db.SessionShare.Provider` is always the canonical session provider. Every share-store read (`CreateShare`, `CreateSystemShare`, `ListShares`, `ListSystemShares`, `ListAllUserShares`) selects `session_type` from the joined `sessions` row and applies `models.NormalizeProvider`, so the legacy `"Claude Code"` form is never surfaced to callers (CF-370).

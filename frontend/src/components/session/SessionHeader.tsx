@@ -239,7 +239,7 @@ function SessionHeader({
           <CopyIdDropdown confabId={sessionId} externalId={externalId} provider={provider} showChip />
         </div>
         <div className={styles.metadata} data-testid="session-meta">
-          <MetaItem icon={PersonIcon} value={ownerEmail} />
+          {ownerEmail && <MetaItem icon={PersonIcon} value={ownerEmail} />}
           <GitInfoMeta gitInfo={gitInfo} />
           <MetaItem
             icon={getProviderIcon(provider)}
