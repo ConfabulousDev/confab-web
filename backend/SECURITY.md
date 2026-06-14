@@ -254,6 +254,10 @@ All state-changing endpoints behind `csrfMiddleware`:
 - API key authenticated routes (CLI uses Bearer tokens, not cookies)
 - Public shared session endpoints
 
+**Cross-origin guard on browser auth routes (56mw):**
+
+`GET /auth/cli/authorize` (mints an API key) and `POST /auth/device/verify` (binds a device code from a session cookie) are session-cookie-authenticated and state-changing, but they are registered *outside* the `csrfMiddleware` group (they are top-level browser navigations / device-page form posts, not `/api/v1` SPA calls). Because `filippo.io/csrf` — like the Fetch-Metadata standard — treats `GET`/`HEAD`/`OPTIONS` as always-safe, it would not protect the state-changing GET even if those routes were moved under it. Both routes are therefore wrapped in `crossOriginGuard` (`internal/api/fetch_metadata.go`), which applies the same `Sec-Fetch-Site`/`Origin` check to **all** methods, reusing the same `trustedOrigins` allowlist, and fails closed when neither header is present. Same-origin requests and top-level navigations (`Sec-Fetch-Site: same-origin` / `none`) pass; `cross-site` / `same-site` are rejected with 403.
+
 **Attack Prevented:**
 
 ```html

@@ -29,6 +29,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `content_type.go` | `validateContentType` middleware -- enforces `application/json` Content-Type on POST/PUT/PATCH requests within `/api/v1` |
 | `flylogger.go` | `FlyLogger` middleware and `ParseCLIUserAgent` -- structured HTTP request logging with client IP, user ID, Fly.io region, CLI version, and 4xx error body capture |
 | `tracing.go` | `SpanEnricher` middleware -- adds CLI version/OS/arch attributes to OpenTelemetry spans |
+| `fetch_metadata.go` | `crossOriginGuard` -- Fetch-Metadata (`Sec-Fetch-Site`) + `Origin` cross-origin check wrapping `/auth/cli/authorize` and `/auth/device/verify`, which sit outside the CSRF group. Unlike the CSRF library it does NOT exempt safe methods, so the state-changing GET (`cli/authorize`) is covered; reuses `trustedOrigins`; fails closed when neither header is present (56mw). |
 
 ## Key Types
 

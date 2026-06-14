@@ -296,7 +296,11 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Get("/auth/logout", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleLogout(s.db, s.oauthConfig))))
 
 	// CLI authorize (requires web session) - Apply auth rate limiting
-	r.Get("/auth/cli/authorize", withMaxBody(MaxBodyXS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db))))
+	// 56mw: these two routes are state-changing and session-cookie-authenticated
+	// but sit OUTSIDE the CSRF group below; guard them with the Fetch-Metadata
+	// cross-origin check (covers the state-changing GET that the CSRF library
+	// skips). Reuses trustedOrigins.
+	r.Get("/auth/cli/authorize", withMaxBody(MaxBodyXS, crossOriginGuard(trustedOrigins, ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db)))))
 
 	// Device code flow (for CLI on headless/remote machines)
 	backendURL := os.Getenv("BACKEND_URL")
@@ -306,7 +310,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Post("/auth/device/code", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceCode(s.db, backendURL))))
 	r.Post("/auth/device/token", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceToken(s.db, s.oauthConfig.AllowedEmailDomains))))
 	r.Get("/auth/device", withMaxBody(MaxBodyXS, auth.HandleDevicePage(s.db)))
-	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db, s.oauthConfig.AllowedEmailDomains))))
+	r.Post("/auth/device/verify", withMaxBody(MaxBodyS, crossOriginGuard(trustedOrigins, ratelimit.HandlerFunc(s.authLimiter, auth.HandleDeviceVerify(s.db, s.oauthConfig.AllowedEmailDomains)))))
 
 	// Admin handlers (shared across API routes)
 	adminHandlers := admin.NewHandlers(s.db, s.storage, s.frontendURL, s.oauthConfig.AllowedEmailDomains, s.sharesEnabled)
