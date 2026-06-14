@@ -72,6 +72,88 @@ func TestHandleGitHubCallback_CSRFValidation(t *testing.T) {
 	}
 }
 
+// TestHandleLogin_IncludesPKCEChallenge asserts each login handler appends the
+// S256 PKCE challenge to its auth-init URL and sets the HttpOnly oauth_verifier
+// cookie (r9zn). OIDC is exercised via setOAuthLoginCookies + the exchange
+// round-trip test (its login URL needs IdP discovery).
+func TestHandleLogin_IncludesPKCEChallenge(t *testing.T) {
+	cases := []struct {
+		name    string
+		handler http.HandlerFunc
+		path    string
+	}{
+		{
+			name: "github",
+			handler: HandleGitHubLogin(&OAuthConfig{
+				GitHubClientID:    "cid",
+				GitHubRedirectURL: "http://localhost:8080/auth/github/callback",
+			}),
+			path: "/auth/github/login",
+		},
+		{
+			name: "google",
+			handler: HandleGoogleLogin(&OAuthConfig{
+				GoogleClientID:    "cid",
+				GoogleRedirectURL: "http://localhost:8080/auth/google/callback",
+			}),
+			path: "/auth/google/login",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c.handler.ServeHTTP(rec, httptest.NewRequest("GET", c.path, nil))
+
+			loc := rec.Header().Get("Location")
+			if loc == "" {
+				t.Fatal("Location header not set")
+			}
+			if !strings.Contains(loc, "code_challenge=") {
+				t.Errorf("auth URL missing code_challenge: %s", loc)
+			}
+			if !strings.Contains(loc, "code_challenge_method=S256") {
+				t.Errorf("auth URL missing code_challenge_method=S256: %s", loc)
+			}
+
+			var verifier *http.Cookie
+			for _, ck := range rec.Result().Cookies() {
+				if ck.Name == "oauth_verifier" {
+					verifier = ck
+				}
+			}
+			if verifier == nil {
+				t.Fatal("oauth_verifier cookie not set")
+			}
+			if !verifier.HttpOnly {
+				t.Error("oauth_verifier cookie must be HttpOnly")
+			}
+		})
+	}
+}
+
+// TestHandleGitHubCallback_MissingVerifierRejected: a callback with a valid
+// state but no PKCE verifier cookie is rejected (same 400 shape as bad state).
+func TestHandleGitHubCallback_MissingVerifierRejected(t *testing.T) {
+	handler := HandleGitHubCallback(&OAuthConfig{
+		GitHubClientID:    "cid",
+		GitHubRedirectURL: "http://localhost:8080/auth/github/callback",
+	}, nil)
+
+	req := httptest.NewRequest("GET", "/auth/github/callback?state=valid_state&code=test_code", nil)
+	req.AddCookie(&http.Cookie{Name: "oauth_state", Value: "valid_state"})
+	// No oauth_verifier cookie.
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+	if body := rec.Body.String(); body != "Invalid state parameter\n" {
+		t.Errorf("body = %q, want 'Invalid state parameter'", body)
+	}
+}
+
 // TestHandleGitHubCallback_MissingCode tests missing code parameter
 func TestHandleGitHubCallback_MissingCode(t *testing.T) {
 	config := OAuthConfig{
@@ -87,6 +169,7 @@ func TestHandleGitHubCallback_MissingCode(t *testing.T) {
 		Name:  "oauth_state",
 		Value: "valid_state",
 	})
+	req.AddCookie(&http.Cookie{Name: "oauth_verifier", Value: "valid_verifier"})
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -166,6 +249,7 @@ func TestHandleGoogleCallback_MissingCode(t *testing.T) {
 		Name:  "oauth_state",
 		Value: "valid_state",
 	})
+	req.AddCookie(&http.Cookie{Name: "oauth_verifier", Value: "valid_verifier"})
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)

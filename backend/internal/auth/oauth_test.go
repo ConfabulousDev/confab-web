@@ -1,8 +1,48 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"testing"
 )
+
+// TestGeneratePKCE verifies the RFC 7636 S256 contract (r9zn): the challenge is
+// base64url-no-pad(SHA256(verifier)), both stay in the unreserved charset, and
+// two calls produce distinct verifiers.
+func TestGeneratePKCE(t *testing.T) {
+	v1, c1, err := generatePKCE()
+	if err != nil {
+		t.Fatalf("generatePKCE: %v", err)
+	}
+	if v1 == "" || c1 == "" {
+		t.Fatal("verifier/challenge must be non-empty")
+	}
+	// Challenge is the S256 of the verifier.
+	sum := sha256.Sum256([]byte(v1))
+	if want := base64.RawURLEncoding.EncodeToString(sum[:]); want != c1 {
+		t.Errorf("challenge = %q, want S256 %q", c1, want)
+	}
+	// RFC 7636 verifier length: 43 chars for 32 raw bytes, base64url no padding.
+	if len(v1) != 43 {
+		t.Errorf("verifier length = %d, want 43", len(v1))
+	}
+	// Charset: base64url unreserved only (no '+', '/', or '=').
+	for _, ch := range v1 + c1 {
+		ok := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+			(ch >= '0' && ch <= '9') || ch == '-' || ch == '_'
+		if !ok {
+			t.Errorf("non-unreserved char %q in PKCE value", ch)
+		}
+	}
+	// Uniqueness across calls.
+	v2, _, err := generatePKCE()
+	if err != nil {
+		t.Fatalf("generatePKCE (2nd): %v", err)
+	}
+	if v1 == v2 {
+		t.Error("two generatePKCE calls produced identical verifiers")
+	}
+}
 
 // Test random string generation for OAuth state - security critical
 func TestGenerateRandomString(t *testing.T) {
@@ -76,4 +116,3 @@ func TestGenerateRandomString(t *testing.T) {
 }
 
 // Note: canUserLogin tests are in auth_integration_test.go since they require a database
-

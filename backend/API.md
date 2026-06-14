@@ -1018,6 +1018,8 @@ These endpoints handle OAuth authentication flow:
 | `GET /auth/oidc/callback` | Generic OIDC OAuth callback |
 | `GET /auth/logout` | Logout (clears session) |
 
+All three login endpoints use **OAuth 2.0 PKCE (S256)**: the login handler generates a `code_verifier` (32 random bytes, base64url) stored in an HttpOnly `oauth_verifier` cookie (alongside `oauth_state`, `MaxAge` 300), and sends `code_challenge=base64url(SHA256(verifier))` + `code_challenge_method=S256` on the authorize URL. The callback reads + clears the single-use verifier cookie (rejecting with `400` if absent, same shape as an invalid `state`) and includes `code_verifier` in the token-exchange POST. No client action required.
+
 ### OAuth Login Parameters
 
 The login endpoints accept optional query parameters to support share link flows:

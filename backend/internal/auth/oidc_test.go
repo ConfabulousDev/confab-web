@@ -481,6 +481,7 @@ func TestHandleOIDCCallback_MissingCode(t *testing.T) {
 		Name:  "oauth_state",
 		Value: "valid_state",
 	})
+	req.AddCookie(&http.Cookie{Name: "oauth_verifier", Value: "valid_verifier"})
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -494,4 +495,3 @@ func TestHandleOIDCCallback_MissingCode(t *testing.T) {
 		t.Errorf("body = %q, want 'Missing code parameter'", body)
 	}
 }
-

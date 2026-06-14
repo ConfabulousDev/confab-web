@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -149,13 +150,31 @@ func oauthHTTPClient() *http.Client {
 	}
 }
 
-// setOAuthLoginCookies sets the standard pre-login cookies (CSRF state, post-login redirect,
-// expected email) that all OAuth login handlers need. Returns the state token and whether
-// a valid email hint was provided.
-func setOAuthLoginCookies(w http.ResponseWriter, r *http.Request) (state string, validEmail bool, expectedEmail string, err error) {
+// generatePKCE returns an RFC 7636 S256 PKCE pair: a high-entropy code verifier
+// (32 random bytes, base64url, no padding) and its challenge
+// (base64url(SHA256(verifier)), no padding). RawURLEncoding keeps both inside the
+// RFC 7636 unreserved charset so they need no escaping in URLs or form bodies.
+func generatePKCE() (verifier, challenge string, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", err
+	}
+	verifier = base64.RawURLEncoding.EncodeToString(b)
+	sum := sha256.Sum256([]byte(verifier))
+	challenge = base64.RawURLEncoding.EncodeToString(sum[:])
+	return verifier, challenge, nil
+}
+
+// setOAuthLoginCookies sets the standard pre-login cookies (CSRF state, PKCE
+// verifier, post-login redirect, expected email) that all OAuth login handlers
+// need. Returns the state token, the PKCE code_challenge to append to the
+// auth-init URL, and whether a valid email hint was provided. The verifier
+// itself is stored in the HttpOnly `oauth_verifier` cookie (single-use, cleared
+// on callback) so a stolen authorization code can't be exchanged without it (r9zn, A1).
+func setOAuthLoginCookies(w http.ResponseWriter, r *http.Request) (state, challenge string, validEmail bool, expectedEmail string, err error) {
 	state, err = generateRandomString(32)
 	if err != nil {
-		return "", false, "", err
+		return "", "", false, "", err
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -163,6 +182,20 @@ func setOAuthLoginCookies(w http.ResponseWriter, r *http.Request) (state string,
 		Value:    state,
 		Path:     "/",
 		MaxAge:   300, // 5 minutes
+		HttpOnly: true,
+		Secure:   cookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	verifier, challenge, err := generatePKCE()
+	if err != nil {
+		return "", "", false, "", err
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_verifier",
+		Value:    verifier,
+		Path:     "/",
+		MaxAge:   300, // 5 minutes, mirrors oauth_state
 		HttpOnly: true,
 		Secure:   cookieSecure(),
 		SameSite: http.SameSiteLaxMode,
@@ -194,7 +227,7 @@ func setOAuthLoginCookies(w http.ResponseWriter, r *http.Request) (state string,
 		})
 	}
 
-	return state, validEmail, expectedEmail, nil
+	return state, challenge, validEmail, expectedEmail, nil
 }
 
 // OAuthConfig holds OAuth configuration for all providers
@@ -263,7 +296,7 @@ type githubEmail struct {
 // HandleGitHubLogin initiates GitHub OAuth flow
 func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		state, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
+		state, challenge, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
 		if err != nil {
 			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
 			return
@@ -276,6 +309,9 @@ func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 			config.GitHubRedirectURL,
 			state,
 		)
+
+		// PKCE (S256): bind the auth code to this browser's verifier cookie (r9zn).
+		authURL += "&code_challenge=" + url.QueryEscape(challenge) + "&code_challenge_method=S256"
 
 		if validEmail {
 			authURL += "&login=" + url.QueryEscape(expectedEmail)
@@ -306,6 +342,16 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		// Clear state cookie
 		clearCookie(w, "oauth_state")
 
+		// PKCE: the verifier cookie must be present; it is single-use and binds
+		// the auth code to this browser (r9zn). Same 400 shape as invalid state.
+		verifierCookie, err := r.Cookie("oauth_verifier")
+		if err != nil || verifierCookie.Value == "" {
+			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+			return
+		}
+		clearCookie(w, "oauth_verifier")
+		codeVerifier := verifierCookie.Value
+
 		// Get authorization code
 		code := r.URL.Query().Get("code")
 		if code == "" {
@@ -314,7 +360,7 @@ func HandleGitHubCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 
 		// Exchange code for access token
-		accessToken, err := exchangeGitHubCode(code, config)
+		accessToken, err := exchangeGitHubCode(code, codeVerifier, config)
 		if err != nil {
 			log.Error("Failed to exchange GitHub code", "error", err)
 			errorURL := fmt.Sprintf("%s/login?error=github_error&error_description=%s",
@@ -699,12 +745,13 @@ func OptionalAuth(database *db.DB, config *OAuthConfig) func(http.Handler) http.
 }
 
 // exchangeGitHubCode exchanges authorization code for access token
-func exchangeGitHubCode(code string, config *OAuthConfig) (string, error) {
+func exchangeGitHubCode(code, codeVerifier string, config *OAuthConfig) (string, error) {
 	data := url.Values{
 		"client_id":     {config.GitHubClientID},
 		"client_secret": {config.GitHubClientSecret},
 		"code":          {code},
 		"redirect_uri":  {config.GitHubRedirectURL},
+		"code_verifier": {codeVerifier}, // PKCE (r9zn)
 	}
 
 	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token?"+data.Encode(), nil)
@@ -826,7 +873,7 @@ type googleUser struct {
 // HandleGoogleLogin initiates Google OAuth flow
 func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		state, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
+		state, challenge, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
 		if err != nil {
 			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
 			return
@@ -839,6 +886,9 @@ func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 			url.QueryEscape(state),
 			url.QueryEscape("openid email profile"),
 		)
+
+		// PKCE (S256): bind the auth code to this browser's verifier cookie (r9zn).
+		authURL += "&code_challenge=" + url.QueryEscape(challenge) + "&code_challenge_method=S256"
 
 		if validEmail {
 			authURL += "&login_hint=" + url.QueryEscape(expectedEmail)
@@ -869,6 +919,16 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		// Clear state cookie
 		clearCookie(w, "oauth_state")
 
+		// PKCE: the verifier cookie must be present; it is single-use and binds
+		// the auth code to this browser (r9zn). Same 400 shape as invalid state.
+		verifierCookie, err := r.Cookie("oauth_verifier")
+		if err != nil || verifierCookie.Value == "" {
+			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+			return
+		}
+		clearCookie(w, "oauth_verifier")
+		codeVerifier := verifierCookie.Value
+
 		// Get authorization code
 		code := r.URL.Query().Get("code")
 		if code == "" {
@@ -877,7 +937,7 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 		}
 
 		// Exchange code for access token
-		accessToken, err := exchangeGoogleCode(code, config)
+		accessToken, err := exchangeGoogleCode(code, codeVerifier, config)
 		if err != nil {
 			log.Error("Failed to exchange Google code", "error", err)
 			errorURL := fmt.Sprintf("%s/login?error=google_error&error_description=%s",
@@ -1003,13 +1063,14 @@ func HandleGoogleCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc
 }
 
 // exchangeGoogleCode exchanges authorization code for access token
-func exchangeGoogleCode(code string, config *OAuthConfig) (string, error) {
+func exchangeGoogleCode(code, codeVerifier string, config *OAuthConfig) (string, error) {
 	data := url.Values{
 		"client_id":     {config.GoogleClientID},
 		"client_secret": {config.GoogleClientSecret},
 		"code":          {code},
 		"redirect_uri":  {config.GoogleRedirectURL},
 		"grant_type":    {"authorization_code"},
+		"code_verifier": {codeVerifier}, // PKCE (r9zn)
 	}
 
 	resp, err := oauthHTTPClient().PostForm("https://oauth2.googleapis.com/token", data)
@@ -1197,7 +1258,7 @@ func HandleOIDCLogin(config *OAuthConfig) http.HandlerFunc {
 			return
 		}
 
-		state, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
+		state, challenge, validEmail, expectedEmail, err := setOAuthLoginCookies(w, r)
 		if err != nil {
 			http.Error(w, "Failed to generate state", http.StatusInternalServerError)
 			return
@@ -1211,6 +1272,9 @@ func HandleOIDCLogin(config *OAuthConfig) http.HandlerFunc {
 			url.QueryEscape(state),
 			url.QueryEscape("openid email profile"),
 		)
+
+		// PKCE (S256): bind the auth code to this browser's verifier cookie (r9zn).
+		authURL += "&code_challenge=" + url.QueryEscape(challenge) + "&code_challenge_method=S256"
 
 		// Add login hint if valid email is provided
 		if validEmail {
@@ -1239,6 +1303,16 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 		// Clear state cookie
 		clearCookie(w, "oauth_state")
 
+		// PKCE: the verifier cookie must be present; it is single-use and binds
+		// the auth code to this browser (r9zn). Same 400 shape as invalid state.
+		verifierCookie, err := r.Cookie("oauth_verifier")
+		if err != nil || verifierCookie.Value == "" {
+			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+			return
+		}
+		clearCookie(w, "oauth_verifier")
+		codeVerifier := verifierCookie.Value
+
 		// Get authorization code
 		code := r.URL.Query().Get("code")
 		if code == "" {
@@ -1258,7 +1332,7 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 		}
 
 		// Exchange code for access token
-		accessToken, err := exchangeOIDCCode(code, config, endpoints)
+		accessToken, err := exchangeOIDCCode(code, codeVerifier, config, endpoints)
 		if err != nil {
 			log.Error("Failed to exchange OIDC code", "error", err)
 			errorURL := fmt.Sprintf("%s/login?error=oidc_error&error_description=%s",
@@ -1397,13 +1471,14 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 }
 
 // exchangeOIDCCode exchanges an authorization code for an access token
-func exchangeOIDCCode(code string, config *OAuthConfig, endpoints *OIDCEndpoints) (string, error) {
+func exchangeOIDCCode(code, codeVerifier string, config *OAuthConfig, endpoints *OIDCEndpoints) (string, error) {
 	data := url.Values{
 		"client_id":     {config.OIDCClientID},
 		"client_secret": {config.OIDCClientSecret},
 		"code":          {code},
 		"redirect_uri":  {config.OIDCRedirectURL},
 		"grant_type":    {"authorization_code"},
+		"code_verifier": {codeVerifier}, // PKCE (r9zn)
 	}
 
 	resp, err := oauthHTTPClient().PostForm(endpoints.TokenEndpoint, data)

@@ -92,7 +92,7 @@ func TestExchangeOIDCCode(t *testing.T) {
 			)
 			config := &OAuthConfig{OIDCClientID: "id", OIDCClientSecret: "sec", OIDCRedirectURL: "http://localhost/cb"}
 
-			token, err := exchangeOIDCCode("code", config, endpoints)
+			token, err := exchangeOIDCCode("code", "verifier", config, endpoints)
 			if c.wantErr {
 				if err == nil {
 					t.Fatal("expected error")
@@ -109,6 +109,36 @@ func TestExchangeOIDCCode(t *testing.T) {
 				t.Errorf("token = %q, want %q", token, c.wantToken)
 			}
 		})
+	}
+}
+
+// TestExchangeOIDCCode_SendsCodeVerifier asserts the PKCE code_verifier is
+// posted to the token endpoint (r9zn). The fake /token handler captures the
+// posted form and echoes a token only when the verifier round-trips.
+func TestExchangeOIDCCode_SendsCodeVerifier(t *testing.T) {
+	var gotVerifier string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		gotVerifier = r.PostForm.Get("code_verifier")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"abc123"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	endpoints := &OIDCEndpoints{TokenEndpoint: srv.URL + "/token"}
+	config := &OAuthConfig{OIDCClientID: "id", OIDCClientSecret: "sec", OIDCRedirectURL: "http://localhost/cb"}
+
+	token, err := exchangeOIDCCode("the-code", "the-verifier", config, endpoints)
+	if err != nil {
+		t.Fatalf("exchangeOIDCCode: %v", err)
+	}
+	if token != "abc123" {
+		t.Errorf("token = %q, want abc123", token)
+	}
+	if gotVerifier != "the-verifier" {
+		t.Errorf("posted code_verifier = %q, want the-verifier", gotVerifier)
 	}
 }
 
