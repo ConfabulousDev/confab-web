@@ -33,19 +33,20 @@ const perSessionCostScanSQL = `
 	FROM filtered_sessions fs
 	JOIN session_card_tokens_v2 v ON v.session_id = fs.id`
 
-// Buckets are dynamic log10 decades: one bucket per power of 10, from $0.01 up to
-// the decade that contains the most expensive data point (y1w5). The low end is
-// fixed so the axis is comparable across ranges; only the top grows with the data,
-// including any empty middle decades. Data points below $0.01 ($0 / tiny / negative
-// / unpriced) are EXCLUDED entirely — no floor band (3tr4).
+// Buckets are dynamic log10 bands: the lowest band merges the two sub-$1 decades into
+// a single $0.01–$1 band (bj37); from $1 up there is one band per power of 10, up to
+// the band that contains the most expensive data point (y1w5). The low end is fixed so
+// the axis is comparable across ranges; only the top grows with the data, including any
+// empty middle decades. Data points below $0.01 ($0 / tiny / negative / unpriced) are
+// EXCLUDED entirely — no floor band (3tr4).
 
 // costDistributionMinCost is the inclusion threshold: data points below it are
 // excluded from the card (buckets, percentiles, and the covered count). It also
-// doubles as the lower edge of the first decade band.
+// doubles as the lower edge of the merged first band ($0.01–$1).
 var costDistributionMinCost = decimal.RequireFromString("0.01")
 
-// maxCostDecades caps the number of decades (~$10^13) — a defensive guard against
-// an absurd/NaN maximum producing an unbounded bucket list.
+// maxCostDecades caps the number of bands — a defensive guard against an absurd/NaN
+// maximum producing an unbounded bucket list.
 const maxCostDecades = 16
 
 // percentile points, as decimals so rank/frac arithmetic stays exact.
@@ -62,19 +63,25 @@ type costDistributionBand struct {
 	hi    float64
 }
 
-// decadeEdges returns the power-of-10 boundaries [0.01, 0.10, 1, …, B] where B is
-// the smallest power of 10 strictly greater than max — so the last decade [.., B)
-// contains max. Returns just [0.01] when max < 0.01 (no priced data → no bands).
-// Capped at maxCostDecades decades.
+// decadeEdges returns the band boundaries [0.01, 1, 10, …, B] where B is the smallest
+// power of 10 strictly greater than max — so the last band [.., B) contains max. The
+// first step is ×100 (0.01 → 1), merging the two sub-$1 decades into a single $0.01–$1
+// band (bj37); every step after is ×10. Returns just [0.01] when max < 0.01 (no priced
+// data → no bands). Capped at maxCostDecades bands.
 func decadeEdges(max decimal.Decimal) []decimal.Decimal {
 	edges := []decimal.Decimal{costDistributionMinCost}
 	ten := decimal.NewFromInt(10)
+	one := decimal.NewFromInt(1)
 	for range maxCostDecades {
 		last := edges[len(edges)-1]
 		if last.GreaterThan(max) {
 			break
 		}
-		edges = append(edges, last.Mul(ten))
+		if last.Equal(costDistributionMinCost) {
+			edges = append(edges, one) // 0.01 → 1: collapse $0.01–$0.10 and $0.10–$1
+		} else {
+			edges = append(edges, last.Mul(ten))
+		}
 	}
 	return edges
 }

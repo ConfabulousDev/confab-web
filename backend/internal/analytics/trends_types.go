@@ -276,7 +276,7 @@ type TrendsCostDistributionCard struct {
 
 // CostDistributionBucket is one fixed log-scale cost band. Lo/Hi are the band's
 // dollar edges (half-open [Lo, Hi)); Hi is nil for the unbounded top band (> $10).
-// Label is the display string the frontend renders verbatim ("$0.10 – $1"). Despite
+// Label is the display string the frontend renders verbatim ("$0.01 – $1"). Despite
 // the name, SessionCount is the data-point count — sessions by default, or
 // (session, model) pairs when a model filter is active. TotalUSD is the decimal-string
 // sum of cost across the band's data points.

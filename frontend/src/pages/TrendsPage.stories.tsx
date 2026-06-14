@@ -232,8 +232,7 @@ const defaultMockData: TrendsResponse = {
     cost_distribution: {
       buckets: [
         { label: '< $0.01', lo: 0, hi: 0.01, session_count: 5, total_usd: '0.03' },
-        { label: '$0.01 – $0.10', lo: 0.01, hi: 0.1, session_count: 12, total_usd: '0.68' },
-        { label: '$0.10 – $1', lo: 0.1, hi: 1, session_count: 16, total_usd: '7.40' },
+        { label: '$0.01 – $1', lo: 0.01, hi: 1, session_count: 28, total_usd: '8.08' },
         { label: '$1 – $10', lo: 1, hi: 10, session_count: 7, total_usd: '24.90' },
         { label: '$10 – $100', lo: 10, hi: 100, session_count: 2, total_usd: '38.20' },
       ],
