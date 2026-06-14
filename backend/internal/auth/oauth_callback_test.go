@@ -406,6 +406,44 @@ func TestGenerateUserCode(t *testing.T) {
 			codes[code] = true
 		}
 	})
+
+	// 8epk: the original `b[0] % 31` mapping over a 31-char alphabet favored the
+	// first 8 symbols (256 % 31 = 8 → residues 0..7 occur 9/256, the rest 8/256,
+	// a ~12.5% excess). Assert the first 8 alphabet symbols are NOT systematically
+	// over-represented, so the generation is unbiased.
+	t.Run("no modulo bias in alphabet distribution", func(t *testing.T) {
+		const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+		counts := make(map[rune]int)
+		const iterations = 20000 // 160,000 sampled symbols
+		for i := 0; i < iterations; i++ {
+			code, err := generateUserCode()
+			if err != nil {
+				t.Fatalf("generateUserCode failed: %v", err)
+			}
+			for j, c := range code {
+				if j == 4 {
+					continue // dash
+				}
+				counts[c]++
+			}
+		}
+
+		var first8, rest float64
+		for idx, c := range chars {
+			if idx < 8 {
+				first8 += float64(counts[c])
+			} else {
+				rest += float64(counts[c])
+			}
+		}
+		meanFirst8 := first8 / 8
+		meanRest := rest / float64(len(chars)-8)
+		ratio := meanFirst8 / meanRest
+		// Biased generator ratio ≈ 1.125; uniform ≈ 1.0 (±~0.006 at this N).
+		if ratio > 1.05 {
+			t.Errorf("first-8 alphabet symbols over-represented (mean %.1f vs rest %.1f, ratio %.4f > 1.05) — modulo bias present", meanFirst8, meanRest, ratio)
+		}
+	})
 }
 
 // TestGenerateDeviceCode tests the device code generation

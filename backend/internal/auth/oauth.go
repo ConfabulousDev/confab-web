@@ -1633,8 +1633,8 @@ type DeviceCodeResponse struct {
 	DeviceCode      string `json:"device_code"`
 	UserCode        string `json:"user_code"`
 	VerificationURI string `json:"verification_uri"`
-	ExpiresIn       int    `json:"expires_in"`       // seconds
-	Interval        int    `json:"interval"`         // polling interval in seconds
+	ExpiresIn       int    `json:"expires_in"` // seconds
+	Interval        int    `json:"interval"`   // polling interval in seconds
 }
 
 // DeviceTokenRequest is the request body for /auth/device/token
@@ -1653,11 +1653,20 @@ type DeviceTokenResponse struct {
 func generateUserCode() (string, error) {
 	// Use uppercase letters (excluding confusing ones: 0, O, I, L, 1)
 	const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+	// Rejection sampling: discard random bytes in the biased tail so every
+	// symbol is equiprobable. A plain `b % 31` over 0..255 favors the first
+	// 256 % 31 = 8 symbols (8epk); only bytes in [0, limit) map uniformly.
+	limit := byte(256 - (256 % len(chars))) // 248
 	code := make([]byte, 8)
 	for i := range code {
-		b := make([]byte, 1)
-		if _, err := rand.Read(b); err != nil {
-			return "", err
+		var b [1]byte
+		for {
+			if _, err := rand.Read(b[:]); err != nil {
+				return "", err
+			}
+			if b[0] < limit {
+				break
+			}
 		}
 		code[i] = chars[int(b[0])%len(chars)]
 	}
@@ -1888,6 +1897,11 @@ func HandleDevicePage(database *db.DB) http.HandlerFunc {
 // POST /device/verify
 func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFunc {
 	authStore := &dbauth.Store{DB: database}
+	// Per-verifier failed-attempt lockout (in-memory, no migration). Keyed by
+	// the verifier's user ID so a logged-in attacker can't brute-force
+	// outstanding user_codes within the short expiry window (8epk). One
+	// instance per handler — created here, shared across requests.
+	verifyLimiter := newAttemptLimiter(deviceVerifyMaxFailures, deviceVerifyLockout)
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
@@ -1941,6 +1955,18 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 			return
 		}
 
+		// Per-verifier brute-force lockout: too many failed verify attempts by
+		// this session locks it out of device-verify for the window (8epk).
+		limiterKey := strconv.FormatInt(session.UserID, 10)
+		if verifyLimiter.Locked(limiterKey) {
+			log.Warn("Device verify locked out after repeated failures", "user_id", session.UserID)
+			html := generateDeviceResultHTML(false, "Too many attempts. Please wait a few minutes and try again.")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(html))
+			return
+		}
+
 		// Normalize: remove any dash-like characters and re-add in correct position
 		// Handle various dash characters that might be pasted (hyphen, en-dash, em-dash, etc.)
 		for _, dash := range []string{"-", "–", "—", "‐", "−", "‑"} {
@@ -1953,6 +1979,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		// Validate and authorize
 		err = authStore.AuthorizeDeviceCode(ctx, userCode, session.UserID)
 		if err != nil {
+			verifyLimiter.RecordFailure(limiterKey)
 			log.Warn("Device code authorization failed", "error", err, "user_code", userCode)
 			// Show error page
 			html := generateDeviceResultHTML(false, "Invalid or expired code. Please try again.")
@@ -1961,6 +1988,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 			w.Write([]byte(html))
 			return
 		}
+		verifyLimiter.Reset(limiterKey) // successful authorize clears the count
 
 		log.Info("Device code authorized", "user_code", userCode, "user_id", session.UserID)
 
