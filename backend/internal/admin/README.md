@@ -8,13 +8,13 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 |------|------|
 | `admin.go` | `IsSuperAdmin` check against the `SUPER_ADMIN_EMAILS` env var |
 | `admin_test.go` | Unit tests for `IsSuperAdmin` |
-| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, delete, system shares, and smart recap prompt settings |
+| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, grant/revoke-admin (5k4v), delete, system shares, and smart recap prompt settings |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
 | `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`) |
 | `card_invalidations_test.go` | Integration tests for the card invalidation handlers |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
-| `middleware.go` | Chi middleware that gates routes to super admins only |
+| `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v) |
 
 ## Key Types
 
@@ -40,6 +40,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleCreateUserAPI` | `POST /api/v1/admin/users` | Creates a password-authenticated user (when password auth enabled) |
 | `HandleDeactivateUserAPI` | `POST /api/v1/admin/users/{id}/deactivate` | Sets user status to inactive |
 | `HandleActivateUserAPI` | `POST /api/v1/admin/users/{id}/activate` | Sets user status to active |
+| `HandleGrantAdminAPI` / `HandleRevokeAdminAPI` | `POST /api/v1/admin/users/{id}/grant-admin` \| `/revoke-admin` | Toggles the `users.is_admin` column (5k4v). Grant on a `read_only` user is rejected (D-S2). No last-admin lockout. |
 | `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}` | Deletes user, their S3 objects, then DB record |
 | `HandleListSystemSharesAPI` | `GET /api/v1/admin/system-shares` | Returns all system-wide shares |
 | `HandleCreateSystemShareAPI` | `POST /api/v1/admin/system-shares` | Creates a system-wide share |

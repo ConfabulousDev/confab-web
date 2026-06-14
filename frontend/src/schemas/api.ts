@@ -727,6 +727,10 @@ const AdminUserSchema = z.object({
   last_api_key_used: z.string().nullable(),
   last_logged_in: z.string().nullable(),
   created_at: z.string(),
+  // 5k4v: is_admin is the runtime-toggleable users.is_admin column;
+  // is_super_admin is whether the email is in SUPER_ADMIN_EMAILS (env, fixed).
+  is_admin: z.boolean(),
+  is_super_admin: z.boolean(),
 });
 const AdminTotalsSchema = z.object({
   total_sessions: z.number(),
@@ -751,6 +755,13 @@ export const StatusChangeResponseSchema = z.object({
   status: z.string(),
 });
 export type StatusChangeResponse = z.infer<typeof StatusChangeResponseSchema>;
+
+// 5k4v: response from the grant/revoke-admin endpoints.
+export const AdminChangeResponseSchema = z.object({
+  id: z.number(),
+  is_admin: z.boolean(),
+});
+export type AdminChangeResponse = z.infer<typeof AdminChangeResponseSchema>;
 
 const AdminSystemShareSchema = z.object({
   id: z.number(),

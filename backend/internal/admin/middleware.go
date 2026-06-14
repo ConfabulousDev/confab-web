@@ -28,8 +28,10 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Check if user is a super admin
-			if !IsSuperAdmin(user.Email) {
+			// Admin authorization is the UNION of SUPER_ADMIN_EMAILS (env) and
+			// the users.is_admin column, so admins can be managed at runtime
+			// without an env edit + restart (5k4v).
+			if !IsSuperAdmin(user.Email) && !user.IsAdmin {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}

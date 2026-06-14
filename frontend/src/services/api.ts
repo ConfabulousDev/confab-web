@@ -18,6 +18,7 @@ import {
   OrgAnalyticsResponseSchema,
   OrgReposResponseSchema,
   AdminUserListResponseSchema,
+  AdminChangeResponseSchema,
   CreateAdminUserResponseSchema,
   StatusChangeResponseSchema,
   AdminSystemSharesResponseSchema,
@@ -48,6 +49,7 @@ import {
   type AdminUserListResponse,
   type CreateAdminUserResponse,
   type StatusChangeResponse,
+  type AdminChangeResponse,
   type AdminSystemSharesResponse,
   type CreateSystemShareResponse,
   type SmartRecapPromptResponse,
@@ -717,6 +719,12 @@ export const adminAPI = {
 
   activateUser: (id: number): Promise<StatusChangeResponse> =>
     api.postValidated(`/admin/users/${id}/activate`, StatusChangeResponseSchema),
+
+  grantAdmin: (id: number): Promise<AdminChangeResponse> =>
+    api.postValidated(`/admin/users/${id}/grant-admin`, AdminChangeResponseSchema),
+
+  revokeAdmin: (id: number): Promise<AdminChangeResponse> =>
+    api.postValidated(`/admin/users/${id}/revoke-admin`, AdminChangeResponseSchema),
 
   deleteUser: (id: number): Promise<void> => api.deleteVoid(`/admin/users/${id}`),
 

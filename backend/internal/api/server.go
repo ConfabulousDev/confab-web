@@ -427,6 +427,8 @@ func (s *Server) SetupRoutes() http.Handler {
 				}
 				r.Post("/users/{id}/deactivate", withMaxBody(MaxBodyXS, adminHandlers.HandleDeactivateUserAPI))
 				r.Post("/users/{id}/activate", withMaxBody(MaxBodyXS, adminHandlers.HandleActivateUserAPI))
+				r.Post("/users/{id}/grant-admin", withMaxBody(MaxBodyXS, adminHandlers.HandleGrantAdminAPI))
+				r.Post("/users/{id}/revoke-admin", withMaxBody(MaxBodyXS, adminHandlers.HandleRevokeAdminAPI))
 				r.Delete("/users/{id}", withMaxBody(MaxBodyXS, adminHandlers.HandleDeleteUserAPI))
 				r.Get("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleListSystemSharesAPI))
 				r.Post("/system-shares", withMaxBody(MaxBodyXS, adminHandlers.HandleCreateSystemShareAPI))
