@@ -49,7 +49,7 @@ To exercise the CLI ⇄ backend sync path against a local stack:
 
 # 2. Create an API key via the web UI at http://localhost:5173 (or POST /api/v1/keys
 #    with an authenticated web session). The bootstrap admin is whatever you set in
-#    backend/.env — admin@example.com / change-me-immediately by default.
+#    backend/.env — admin@local.dev / localdevpassword by default.
 
 # 3. Configure the Confab CLI (separate repo: https://github.com/ConfabulousDev/confab)
 #    to point at the backend API at http://localhost:8080 with the API key from step 2.
@@ -57,7 +57,7 @@ To exercise the CLI ⇄ backend sync path against a local stack:
 # 4. Run a Claude Code or Codex session. The CLI uploads chunks via /api/v1/sync/{init,chunk,event}.
 
 # 5. Verify in the web UI or directly in Postgres:
-docker compose exec postgres psql -U confab -d confab \
+docker compose -f docker-compose.infra.yml exec postgres psql -U confab -d confab \
   -c "SELECT external_id, session_type, total_lines FROM sessions ORDER BY created_at DESC LIMIT 5;"
 ```
 

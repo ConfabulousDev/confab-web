@@ -1,0 +1,77 @@
+# Local development infrastructure for Confabulous.
+#
+# This file's only job is to back the local dev loop: Postgres, MinIO, and a
+# one-shot migration runner. You run the backend (`go run`) and frontend
+# (`npm run dev`) natively for hot reload — see "Local development" in README.md.
+#
+#   docker compose -f docker-compose.infra.yml up -d --build   # infra + migrations
+#   make up                                                    # same, shorter
+#
+# It does NOT run the app itself. The root `docker-compose.yml` is the canonical
+# self-host deploy stack (full app from the prebuilt image) — see SELF-HOSTING.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: confab
+      POSTGRES_PASSWORD: confab
+      POSTGRES_DB: confab
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U confab"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb minio/confab --ignore-existing;
+      exit 0;
+      "
+
+  # One-shot migration runner. Builds a tiny image (migrate CLI + your local SQL
+  # files) in seconds via the `migrate-runner` Dockerfile target — no app build.
+  # Use `--build` to pick up newly added migrations: docker compose up -d --build
+  migrate:
+    build:
+      context: .
+      target: migrate-runner
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["./migrate_db.sh"]
+    environment:
+      DATABASE_URL: postgres://confab:confab@postgres:5432/confab?sslmode=disable
+      # Optional: use a separate admin user for migrations
+      # MIGRATE_DATABASE_URL: postgres://admin:pass@postgres:5432/confab?sslmode=disable
+
+volumes:
+  postgres_data:
+  minio_data:

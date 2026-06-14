@@ -37,6 +37,18 @@ This package is intentionally thin. Request handlers live in [`internal/api`](..
 | `FRONTEND_URL` | (required) | Public origin of the frontend, used in emails and CORS. |
 | `ALLOWED_ORIGINS` | (required) | Comma-separated CORS allow-list. |
 
+### Startup safety guard (`security_guard.go`)
+
+`INSECURE_DEV_MODE=true` relaxes cookie/HSTS requirements for local HTTP dev (a
+warning is logged). To stop an operator from accidentally exposing an instance
+that still uses the public template defaults, `loadConfig` refuses to start when
+**production intent** is detected — `INSECURE_DEV_MODE` is not `true`, *or*
+`FRONTEND_URL` is `https://…` — *and* `CSRF_SECRET_KEY` or
+`ADMIN_BOOTSTRAP_PASSWORD` is one of the well-known values shipped in
+`docker-compose.yml` / `.env.example`. Local eval (`INSECURE_DEV_MODE=true` + an
+`http://localhost` URL) is unaffected. The known-default sets and the
+`insecureDefaultReason` predicate live in `security_guard.go`.
+
 ### Networking / HTTP
 | Var | Default | Purpose |
 |---|---|---|

@@ -36,7 +36,7 @@ Self-hosted analytics for your Claude Code and Codex sessions.
 
 ## Quickstart
 
-Run your own instance in under a minute with the [Self-Hosting Guide](SELF-HOSTING.md#quickstart): one `docker-compose.yml`, `docker compose up -d`, and the dashboard is live at [http://localhost:8080](http://localhost:8080) (`admin@local.dev` / `localdevpassword`).
+Run your own instance in under a minute with the [Self-Hosting Guide](SELF-HOSTING.md#quickstart): clone the repo, `docker compose up -d`, and the dashboard is live at [http://localhost:8080](http://localhost:8080) (`admin@local.dev` / `localdevpassword`).
 
 Developing against the code? See [Local Development](#local-development).
 
@@ -129,8 +129,11 @@ make coverage   # backend coverage (sharded)
 
 ```
 confab-web/
-├── docker-compose.yml     # Local dev infrastructure (Postgres + MinIO + migrate)
-├── CONFIGURATION.md       # Full configuration reference
+├── docker-compose.yml       # Canonical self-host deploy stack (full app, from the prebuilt image)
+├── docker-compose.infra.yml # Local dev infrastructure only (Postgres + MinIO + migrate)
+├── .env.example             # Self-host config template (copy to .env)
+├── Caddyfile                # Reverse proxy for the HTTPS (caddy) profile
+├── CONFIGURATION.md         # Full configuration reference
 ├── backend/               # Backend service (Go)
 │   ├── cmd/server/       # Server entry point
 │   ├── internal/         # Internal packages

@@ -15,6 +15,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       docker: ${{ steps.filter.outputs.docker }}
+      compose: ${{ steps.filter.outputs.compose }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +40,13 @@ jobs:
               - 'Dockerfile'
               - '.dockerignore'
               - 'migrate_db.sh'
+              - *ci
+              - *actions
+            compose:
+              - 'docker-compose.yml'
+              - 'docker-compose.infra.yml'
+              - '.env.example'
+              - 'Caddyfile'
               - *ci
               - *actions
 
@@ -226,9 +234,32 @@ jobs:
       - name: Smoke test - migration files present
         run: docker run --rm confab-test:latest ls /app/migrations/
 
+  compose-lint:
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Validates interpolation, the env_file overlay, and profile wiring of the
+      # canonical self-host compose. `config -q` runs with no .env (zero-config
+      # eval defaults) — the same state a fresh `git clone && docker compose up`
+      # hits. Catches YAML/interpolation breakage before it reaches a self-hoster.
+      - name: Validate root compose (zero-config defaults)
+        run: docker compose config -q
+
+      - name: Validate root compose (caddy profile)
+        run: docker compose --profile caddy config -q
+
+      - name: Validate dev-infra compose
+        run: docker compose -f docker-compose.infra.yml config -q
+
   ci-summary:
     if: always()
-    needs: [changes, frontend, backend-unit, govulncheck, discover-packages, backend-integration, docker-smoke-test]
+    needs: [changes, frontend, backend-unit, govulncheck, discover-packages, backend-integration, docker-smoke-test, compose-lint]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
@@ -253,6 +284,7 @@ jobs:
           check "discover-packages" "${{ needs.discover-packages.result }}"
           check "backend-integration" "${{ needs.backend-integration.result }}"
           check "docker-smoke-test" "${{ needs.docker-smoke-test.result }}"
+          check "compose-lint" "${{ needs.compose-lint.result }}"
           if [[ $fail -ne 0 ]]; then
             echo "One or more jobs failed"
             exit 1

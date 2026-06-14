@@ -27,6 +27,8 @@ make dev      # infra + backend + frontend in one terminal
 
 Then open [http://localhost:5173](http://localhost:5173).
 
+> **Note:** the dev loop runs only Postgres + MinIO in Docker, defined in `docker-compose.infra.yml` (driven by `make up`/`make dev`). The root `docker-compose.yml` is the canonical **self-host deploy** stack — running a bare `docker compose up` at the repo root launches the full app from the prebuilt image, not the dev infra. For local development always use the `make` targets.
+
 ## Project guides
 
 Each package documents its own conventions:
