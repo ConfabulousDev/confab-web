@@ -129,7 +129,11 @@ func AutoImpersonateIfDemo(w http.ResponseWriter, r *http.Request, database *db.
 	authStore := &dbauth.Store{DB: database}
 	sharedID := DemoSessionCookieID(csrfSecret, demoEmail)
 
-	session, err := authStore.GetWebSession(ctx, sharedID)
+	// The demo shared session is EXEMPT from the idle gate (60j6): it sits idle
+	// between anonymous visitors and would otherwise be force-rejected, and the
+	// activity touch would thrash under concurrent anonymous traffic. A
+	// non-positive idleTimeout disables both the predicate and the touch.
+	session, err := authStore.GetWebSession(ctx, sharedID, 0)
 	if err != nil {
 		// Shared row missing (operator skipped bootstrap, or the row
 		// was deleted post-bootstrap). Re-provision lazily so the

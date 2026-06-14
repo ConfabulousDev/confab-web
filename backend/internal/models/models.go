@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 // UserStatus represents the status of a user account
 type UserStatus string
@@ -63,6 +66,9 @@ type WebSession struct {
 	ReadOnly   bool       `json:"-"` // Used for EnforceReadOnly middleware (CF-483) — never serialized
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
+	// LastActivityAt drives the sliding idle-timeout gate (60j6). Nullable in the
+	// DB (rollout-gap rows fall back to created_at via COALESCE); never serialized.
+	LastActivityAt sql.NullTime `json:"-"`
 }
 
 // APIKey represents an API key for authentication

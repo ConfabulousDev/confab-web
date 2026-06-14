@@ -3,8 +3,44 @@ package auth
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 )
+
+// TestResolveSessionIdleTimeout covers the SESSION_IDLE_TIMEOUT env parsing
+// (60j6): valid values are honored; empty / unparseable / non-positive fall
+// back to the 48h default (mirrors MAX_USERS).
+func TestResolveSessionIdleTimeout(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cases := []struct {
+		name string
+		set  bool
+		val  string
+		want time.Duration
+	}{
+		{"unset → default", false, "", DefaultSessionIdleTimeout},
+		{"empty → default", true, "", DefaultSessionIdleTimeout},
+		{"valid 1h", true, "1h", time.Hour},
+		{"valid 30m", true, "30m", 30 * time.Minute},
+		{"unparseable → default", true, "not-a-duration", DefaultSessionIdleTimeout},
+		{"zero → default", true, "0s", DefaultSessionIdleTimeout},
+		{"negative → default", true, "-5m", DefaultSessionIdleTimeout},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.set {
+				t.Setenv("SESSION_IDLE_TIMEOUT", c.val)
+			} else {
+				t.Setenv("SESSION_IDLE_TIMEOUT", "")
+			}
+			if got := resolveSessionIdleTimeout(log); got != c.want {
+				t.Errorf("resolveSessionIdleTimeout() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
 
 // TestGeneratePKCE verifies the RFC 7636 S256 contract (r9zn): the challenge is
 // base64url-no-pad(SHA256(verifier)), both stay in the unreserved charset, and
