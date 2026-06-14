@@ -19,6 +19,7 @@ import { isAssistantMessage } from '@/types';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
   calculateCost,
+  cacheWriteTotal,
   FAST_MODE_MULTIPLIER,
   WEB_SEARCH_COST_PER_REQUEST,
 } from '@/utils/tokenStats';
@@ -94,8 +95,11 @@ export const claudeAdapter: ClaudeAdapter = {
 
   extendCostTooltip(base, usage, message) {
     const lines = [...base];
-    if (usage.cacheWrite) {
-      lines.push(`Cache write tokens (write): ${usage.cacheWrite.toLocaleString()}`);
+    // Show the full cache-creation count (5m + 1h); the tier split is a billing
+    // detail, not surfaced as a separate line (rd9v).
+    const cacheWrite = cacheWriteTotal(usage);
+    if (cacheWrite) {
+      lines.push(`Cache write tokens (write): ${cacheWrite.toLocaleString()}`);
     }
     if (usage.cacheRead) {
       lines.push(`Cache read tokens (hit): ${usage.cacheRead.toLocaleString()}`);

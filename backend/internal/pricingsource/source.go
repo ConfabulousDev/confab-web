@@ -47,10 +47,11 @@ var (
 
 // Rate is the per-million-token price for one model family (USD).
 type Rate struct {
-	Input      float64 `json:"input"`
-	Output     float64 `json:"output"`
-	CacheWrite float64 `json:"cacheWrite"`
-	CacheRead  float64 `json:"cacheRead"`
+	Input        float64 `json:"input"`
+	Output       float64 `json:"output"`
+	CacheWrite   float64 `json:"cacheWrite"`   // 5-minute cache writes (1.25x input)
+	CacheWrite1h float64 `json:"cacheWrite1h"` // 1-hour cache writes (2x input); 0 ⇒ fall back to CacheWrite
+	CacheRead    float64 `json:"cacheRead"`
 }
 
 // Document is the versioned price table, provider-nested (provider → family →
@@ -212,7 +213,7 @@ func validate(d Document) error {
 	families := 0
 	for _, fams := range d.Pricing {
 		for family, r := range fams {
-			for _, v := range []float64{r.Input, r.Output, r.CacheWrite, r.CacheRead} {
+			for _, v := range []float64{r.Input, r.Output, r.CacheWrite, r.CacheWrite1h, r.CacheRead} {
 				if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
 					return fmt.Errorf("invalid rate for family %q", family)
 				}

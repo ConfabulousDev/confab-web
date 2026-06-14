@@ -343,7 +343,7 @@ function makeCodexItems(): CodexRenderItem[] {
     {
       kind: 'assistant', lineId: '1', timestamp: ts(2000),
       phase: 'final', model: 'gpt-5', text: 'ok',
-      usage: { input: 1000, output: 100, cacheWrite: 0, cacheRead: 0 },
+      usage: { input: 1000, output: 100, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 },
     },
     { kind: 'turn_separator', lineId: '2', timestamp: ts(3000), turnIndex: 1, durationMs: 3000 },
 
@@ -352,13 +352,13 @@ function makeCodexItems(): CodexRenderItem[] {
       kind: 'assistant', lineId: '4', timestamp: ts(10000),
       phase: 'commentary', model: 'gpt-5', text: 'thinking',
       // Pre-normalization: input=20000 cached=5000 → input=15000, cacheRead=5000.
-      usage: { input: 15000, output: 1500, cacheWrite: 0, cacheRead: 5000 },
+      usage: { input: 15000, output: 1500, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 5000 },
     },
     {
       kind: 'assistant', lineId: '5', timestamp: ts(11000),
       phase: 'final', model: 'gpt-5', text: 'answer',
       // Pre-normalization: input=25000 cached=10000 → input=15000, cacheRead=10000.
-      usage: { input: 15000, output: 2000, cacheWrite: 0, cacheRead: 10000 },
+      usage: { input: 15000, output: 2000, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 10000 },
     },
     { kind: 'turn_separator', lineId: '6', timestamp: ts(12000), turnIndex: 2, durationMs: 4000 },
 
@@ -368,7 +368,7 @@ function makeCodexItems(): CodexRenderItem[] {
       phase: 'final', model: 'gpt-5.5', text: 'big response',
       // Pre-normalization: input=200000 cached=50000 → input=150000, cacheRead=50000.
       // Reasoning=5000 folded into output: 25000+5000=30000.
-      usage: { input: 150000, output: 30000, cacheWrite: 0, cacheRead: 50000 },
+      usage: { input: 150000, output: 30000, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 50000 },
       reasoningTokens: 5000,
     },
     { kind: 'turn_separator', lineId: '9', timestamp: ts(45000), turnIndex: 3, durationMs: 25000 },

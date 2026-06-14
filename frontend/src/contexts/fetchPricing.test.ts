@@ -3,7 +3,7 @@ import { fetchPricing } from './fetchPricing';
 import { calculateCost, setPricingTable, type PricingTable, type TokenUsage } from '@/utils/tokenStats';
 import { PRICING_FIXTURE } from '@/test/pricingFixture';
 
-const oneMillionInput: TokenUsage = { input: 1_000_000, output: 0, cacheWrite: 0, cacheRead: 0 };
+const oneMillionInput: TokenUsage = { input: 1_000_000, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 };
 
 function mockFetch(body: unknown, status = 200) {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(body), { status }));
@@ -17,7 +17,7 @@ afterEach(() => {
 describe('fetchPricing', () => {
   it('installs the table from the backend /api/v1/pricing response', async () => {
     const table: PricingTable = {
-      'claude-code': { 'opus-4-7': { input: 7, output: 25, cacheWrite: 6.25, cacheRead: 0.5 } },
+      'claude-code': { 'opus-4-7': { input: 7, output: 25, cacheWrite: 6.25, cacheWrite1h: 0, cacheRead: 0.5 } },
       codex: {},
       opencode: {},
     };

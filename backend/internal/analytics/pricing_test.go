@@ -267,6 +267,158 @@ func TestCalculateTotalCost_NilServerToolUse(t *testing.T) {
 	}
 }
 
+// --------------------------------------------------------------------------
+// rd9v: cache-creation billing split by ephemeral tier (5m vs 1h).
+// 5m cache writes bill at CacheWrite (1.25x input); 1h at CacheWrite1h (2x input).
+// The backend numbers here are pinned identical to the frontend's
+// tokenStats.test.ts cache-tier cases so the two cost surfaces stay in lockstep
+// (opus-4-8: input 5, cacheWrite 6.25, cacheWrite1h 10 per million).
+// --------------------------------------------------------------------------
+
+// TestEmbeddedHasCacheWrite1h asserts the embedded pricing table carries the new
+// 1h cache-write rate: 2x input for Claude families, 0 for codex/opencode.
+func TestEmbeddedHasCacheWrite1h(t *testing.T) {
+	opus, ok := LookupPricing("claude-opus-4-8-20260515")
+	if !ok {
+		t.Fatal("opus-4-8 not found in embedded pricing")
+	}
+	if want := decimal.NewFromFloat(10); !opus.CacheWrite1h.Equal(want) {
+		t.Errorf("opus-4-8 CacheWrite1h = %s, want %s (2x input)", opus.CacheWrite1h, want)
+	}
+	gpt5, ok := LookupPricing("gpt-5")
+	if !ok {
+		t.Fatal("gpt-5 not found in embedded pricing")
+	}
+	if !gpt5.CacheWrite1h.IsZero() {
+		t.Errorf("gpt-5 CacheWrite1h = %s, want 0 (codex has no cache writes)", gpt5.CacheWrite1h)
+	}
+}
+
+func TestCalculateTotalCost_CacheTierAll1h(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral5m: 0, Ephemeral1h: 1_000_000},
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	// 1M * $10/M (cacheWrite1h) = $10.00
+	if want := decimal.NewFromFloat(10); !cost.Equal(want) {
+		t.Errorf("all-1h cache cost = %s, want %s", cost, want)
+	}
+}
+
+func TestCalculateTotalCost_CacheTierAll5m(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral5m: 1_000_000, Ephemeral1h: 0},
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	// 1M * $6.25/M (cacheWrite) = $6.25
+	if want := decimal.NewFromFloat(6.25); !cost.Equal(want) {
+		t.Errorf("all-5m cache cost = %s, want %s", cost, want)
+	}
+}
+
+func TestCalculateTotalCost_CacheTierMixed(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral5m: 400_000, Ephemeral1h: 600_000},
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	// 400k * $6.25/M + 600k * $10/M = $2.50 + $6.00 = $8.50
+	if want := decimal.NewFromFloat(8.50); !cost.Equal(want) {
+		t.Errorf("mixed cache cost = %s, want %s", cost, want)
+	}
+}
+
+// TestCalculateTotalCost_CacheTierLegacy: no breakdown object (older sessions /
+// codex) → all cache-creation tokens bill at the 5m rate (today's behavior).
+func TestCalculateTotalCost_CacheTierLegacy(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            nil,
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	if want := decimal.NewFromFloat(6.25); !cost.Equal(want) {
+		t.Errorf("legacy (no breakdown) cache cost = %s, want %s (all 5m rate)", cost, want)
+	}
+}
+
+// TestCalculateTotalCost_CacheTierTrustsBreakdown: when the breakdown disagrees
+// with the flat count, the breakdown wins (we never re-derive from the flat sum).
+func TestCalculateTotalCost_CacheTierTrustsBreakdown(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 999, // bogus flat count, must be ignored
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral5m: 0, Ephemeral1h: 1_000_000},
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	if want := decimal.NewFromFloat(10); !cost.Equal(want) {
+		t.Errorf("trust-breakdown cache cost = %s, want %s", cost, want)
+	}
+}
+
+// TestCalculateTotalCost_CacheTierFastMode: 1h cache cost participates in the
+// fast-mode 6x multiplier (it is a token cost).
+func TestCalculateTotalCost_CacheTierFastMode(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral1h: 1_000_000},
+		Speed:                    "fast",
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	// (1M * $10/M) * 6 = $60.00
+	if want := decimal.NewFromFloat(60); !cost.Equal(want) {
+		t.Errorf("fast-mode 1h cache cost = %s, want %s", cost, want)
+	}
+}
+
+// TestCalculateTotalCost_CacheTier1hRateFallback: when CacheWrite1h is missing /
+// zero (e.g. a stale remote pricing doc fetched before SaaS redeploys), 1h
+// tokens fall back to the 5m CacheWrite rate — never $0.
+func TestCalculateTotalCost_CacheTier1hRateFallback(t *testing.T) {
+	t.Cleanup(func() { SetActivePricing(pricingsource.Embedded()) })
+	SetActivePricing(pricingsource.Document{
+		SchemaVersion: 0,
+		UpdatedAt:     time.Now(),
+		Pricing: map[string]map[string]pricingsource.Rate{
+			// CacheWrite1h omitted (zero) — simulates a pre-redeploy remote doc.
+			"claude-code": {"opus-4-8": {Input: 5, Output: 25, CacheWrite: 6.25, CacheRead: 0.5}},
+		},
+	})
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	usage := &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral1h: 1_000_000},
+	}
+	cost := CalculateTotalCost(pricing, usage)
+	// CacheWrite1h missing → 1h priced at the 5m rate $6.25/M, NOT $0.
+	if want := decimal.NewFromFloat(6.25); !cost.Equal(want) {
+		t.Errorf("1h fallback cost = %s, want %s (5m rate, never $0)", cost, want)
+	}
+}
+
+// TestCalculateTotalCost_CacheTierUnderbillingFixed encodes the billing-accuracy
+// intent: an all-1h turn now costs 1.6x what the old single-rate (5m) path
+// charged (2x vs 1.25x input).
+func TestCalculateTotalCost_CacheTierUnderbillingFixed(t *testing.T) {
+	pricing, _ := LookupPricing("claude-opus-4-8-20260515")
+	oldCost := CalculateTotalCost(pricing, &TokenUsage{
+		CacheCreationInputTokens: 1_000_000, // legacy single-rate (5m)
+	})
+	newCost := CalculateTotalCost(pricing, &TokenUsage{
+		CacheCreationInputTokens: 1_000_000,
+		CacheCreation:            &CacheCreationBreakdown{Ephemeral1h: 1_000_000},
+	})
+	if want := oldCost.Mul(decimal.NewFromFloat(1.6)); !newCost.Equal(want) {
+		t.Errorf("1h cost = %s, want %s (1.6x the old 5m-rate charge)", newCost, want)
+	}
+}
+
 // TestFlattenEmbeddedNoCollision verifies the embedded provider-nested table
 // flattens to a family-keyed table without losing any family to a cross-provider
 // key collision (the flatten/LookupPricing invariant).

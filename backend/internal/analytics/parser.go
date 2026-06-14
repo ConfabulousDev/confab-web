@@ -37,10 +37,10 @@ type TranscriptLine struct {
 // MessageContent contains message details for user/assistant messages.
 type MessageContent struct {
 	ID      string      `json:"id,omitempty"`      // API message ID (shared across content blocks)
-	Role    string      `json:"role,omitempty"`     // "user" or "assistant"
-	Model   string      `json:"model,omitempty"`    // Model ID (assistant only)
-	Usage   *TokenUsage `json:"usage,omitempty"`    // Token usage (assistant only)
-	Content interface{} `json:"content,omitempty"`  // String or []ContentBlock
+	Role    string      `json:"role,omitempty"`    // "user" or "assistant"
+	Model   string      `json:"model,omitempty"`   // Model ID (assistant only)
+	Usage   *TokenUsage `json:"usage,omitempty"`   // Token usage (assistant only)
+	Content interface{} `json:"content,omitempty"` // String or []ContentBlock
 
 	// Assistant-specific fields
 	StopReason string `json:"stop_reason,omitempty"` // "end_turn", "tool_use", "max_tokens"
@@ -57,14 +57,24 @@ type ServerToolUse struct {
 // SpeedFast is the value of TokenUsage.Speed when fast mode is enabled.
 const SpeedFast = "fast"
 
+// CacheCreationBreakdown splits cache-creation tokens by ephemeral tier.
+// Anthropic prices the two tiers differently: 5-minute cache writes bill at
+// 1.25x input, 1-hour cache writes at 2x input. When this object is absent
+// (older sessions, codex/opencode) all cache-creation is treated as 5-minute.
+type CacheCreationBreakdown struct {
+	Ephemeral5m int64 `json:"ephemeral_5m_input_tokens,omitempty"`
+	Ephemeral1h int64 `json:"ephemeral_1h_input_tokens,omitempty"`
+}
+
 // TokenUsage contains token counts from the API response.
 type TokenUsage struct {
-	InputTokens              int64          `json:"input_tokens"`
-	OutputTokens             int64          `json:"output_tokens"`
-	CacheCreationInputTokens int64          `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadInputTokens     int64          `json:"cache_read_input_tokens,omitempty"`
-	ServerToolUse            *ServerToolUse `json:"server_tool_use,omitempty"`
-	Speed                    string         `json:"speed,omitempty"`
+	InputTokens              int64                   `json:"input_tokens"`
+	OutputTokens             int64                   `json:"output_tokens"`
+	CacheCreationInputTokens int64                   `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int64                   `json:"cache_read_input_tokens,omitempty"`
+	CacheCreation            *CacheCreationBreakdown `json:"cache_creation,omitempty"`
+	ServerToolUse            *ServerToolUse          `json:"server_tool_use,omitempty"`
+	Speed                    string                  `json:"speed,omitempty"`
 }
 
 // CompactMetadata contains compaction trigger information.
@@ -75,12 +85,12 @@ type CompactMetadata struct {
 
 // ContentBlock represents a content block in assistant messages.
 type ContentBlock struct {
-	Type          string                 `json:"type"`                   // "text", "tool_use", "thinking", etc.
-	Name          string                 `json:"name,omitempty"`         // Tool name (for tool_use)
-	ID            string                 `json:"id,omitempty"`           // Tool use ID (for tool_use)
-	Input         map[string]interface{} `json:"input,omitempty"`        // Tool input parameters (for tool_use)
-	ToolUseID     string                 `json:"tool_use_id,omitempty"`  // Reference to tool_use ID (for tool_result)
-	IsError       bool                   `json:"is_error,omitempty"`     // For tool_result blocks
+	Type          string                 `json:"type"`                    // "text", "tool_use", "thinking", etc.
+	Name          string                 `json:"name,omitempty"`          // Tool name (for tool_use)
+	ID            string                 `json:"id,omitempty"`            // Tool use ID (for tool_use)
+	Input         map[string]interface{} `json:"input,omitempty"`         // Tool input parameters (for tool_use)
+	ToolUseID     string                 `json:"tool_use_id,omitempty"`   // Reference to tool_use ID (for tool_result)
+	IsError       bool                   `json:"is_error,omitempty"`      // For tool_result blocks
 	ToolUseResult *ToolUseResult         `json:"toolUseResult,omitempty"` // For tool_result blocks (agent results)
 }
 
@@ -368,6 +378,18 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 		}
 		if v, ok := usageMap["cache_read_input_tokens"].(float64); ok {
 			result.Usage.CacheReadInputTokens = int64(v)
+		}
+		// The subagent path is hand-parsed (not json-tag unmarshalled), so the
+		// nested cache_creation tier object needs explicit extraction (rd9v).
+		if ccMap, ok := usageMap["cache_creation"].(map[string]interface{}); ok {
+			cc := &CacheCreationBreakdown{}
+			if v, ok := ccMap["ephemeral_5m_input_tokens"].(float64); ok {
+				cc.Ephemeral5m = int64(v)
+			}
+			if v, ok := ccMap["ephemeral_1h_input_tokens"].(float64); ok {
+				cc.Ephemeral1h = int64(v)
+			}
+			result.Usage.CacheCreation = cc
 		}
 		if v, ok := usageMap["speed"].(string); ok {
 			result.Usage.Speed = v

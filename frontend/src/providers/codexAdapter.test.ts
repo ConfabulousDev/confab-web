@@ -185,7 +185,7 @@ describe('codexAdapter.calculateMessageCost', () => {
   }
 
   function usage(overrides: Partial<TokenUsage> = {}): TokenUsage {
-    return { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, ...overrides };
+    return { input: 0, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0, ...overrides };
   }
 
   it('bills gpt-5 input + output at documented rates', () => {
@@ -203,7 +203,7 @@ describe('codexAdapter.calculateMessageCost', () => {
   });
 
   it('does NOT charge for cache writes (table rate is 0 for Codex models)', () => {
-    const it = item('gpt-5', usage({ cacheWrite: 999_999_999 }));
+    const it = item('gpt-5', usage({ cacheWrite: 999_999_999, cacheWrite1h: 0 }));
     expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
   });
 
@@ -240,19 +240,19 @@ describe('codexAdapter.extendCostTooltip', () => {
   const baseLines = ['$0.10', '', 'Input tokens (in): 0', 'Output tokens (out): 0'];
 
   it('appends Cached (hit) sub-line when cacheRead > 0', () => {
-    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheRead: 25 });
+    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 25 });
     const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
     expect(out.some((l) => /Cached \(hit\):\s*25/.test(l))).toBe(true);
   });
 
   it('omits Cached (hit) sub-line when cacheRead is 0', () => {
-    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheRead: 0 });
+    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 });
     const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
     expect(out.every((l) => !l.includes('Cached (hit)'))).toBe(true);
   });
 
   it('does NOT emit Claude-only labels (Speed, Tier, Web searches)', () => {
-    const i = item({ input: 1000, output: 1000, cacheWrite: 0, cacheRead: 100 }, 50);
+    const i = item({ input: 1000, output: 1000, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 100 }, 50);
     const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
     expect(out.every((l) => !/^Speed:/.test(l))).toBe(true);
     expect(out.every((l) => !/^Tier:/.test(l))).toBe(true);

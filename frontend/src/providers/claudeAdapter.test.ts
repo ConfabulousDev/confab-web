@@ -127,7 +127,7 @@ function assistantMessageWithUsage(
 }
 
 function zeroUsage(): TokenUsage {
-  return { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+  return { input: 0, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 };
 }
 
 describe('claudeAdapter', () => {
@@ -295,10 +295,21 @@ describe('claudeAdapter.extendCostTooltip', () => {
 
   it('appends Cache write / Cache read lines when present in canonical usage', () => {
     const msg = assistantMessageWithUsage('claude-sonnet-4-20250514', zeroUsage());
-    const usage: TokenUsage = { input: 0, output: 0, cacheWrite: 100, cacheRead: 50 };
+    const usage: TokenUsage = { input: 0, output: 0, cacheWrite: 100, cacheWrite1h: 0, cacheRead: 50 };
     const out = claudeAdapter.extendCostTooltip!(baseLines, usage, msg);
     expect(out.some((l) => l.includes('Cache write tokens (write): 100'))).toBe(true);
     expect(out.some((l) => l.includes('Cache read tokens (hit): 50'))).toBe(true);
+  });
+
+  it('shows the COMBINED 5m + 1h cache-creation count on the write line (rd9v)', () => {
+    // An all-1h turn (cacheWrite=0, cacheWrite1h>0) must still surface the full
+    // cache-creation count, not 0 — the tier split is billing-only, no 1h line.
+    const msg = assistantMessageWithUsage('claude-sonnet-4-20250514', zeroUsage());
+    const usage: TokenUsage = { input: 0, output: 0, cacheWrite: 40, cacheWrite1h: 60, cacheRead: 0 };
+    const out = claudeAdapter.extendCostTooltip!(baseLines, usage, msg);
+    expect(out.some((l) => l.includes('Cache write tokens (write): 100'))).toBe(true);
+    // No separate 1-hour line is emitted (decision 8).
+    expect(out.every((l) => !/1.?hour|1h/i.test(l))).toBe(true);
   });
 
   it('appends Web searches line when web_search_requests > 0', () => {
@@ -311,7 +322,7 @@ describe('claudeAdapter.extendCostTooltip', () => {
 
   it('does not emit Cached (hit) or Reasoning sub-lines (those are Codex-only)', () => {
     const msg = assistantMessageWithUsage('claude-sonnet-4-20250514', zeroUsage(), { speed: 'fast' });
-    const usage: TokenUsage = { input: 100, output: 100, cacheWrite: 10, cacheRead: 10 };
+    const usage: TokenUsage = { input: 100, output: 100, cacheWrite: 10, cacheWrite1h: 0, cacheRead: 10 };
     const out = claudeAdapter.extendCostTooltip!(baseLines, usage, msg);
     expect(out.every((l) => !l.includes('Cached (hit)'))).toBe(true);
     expect(out.every((l) => !l.includes('Reasoning'))).toBe(true);

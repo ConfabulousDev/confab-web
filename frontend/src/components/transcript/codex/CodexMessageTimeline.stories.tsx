@@ -188,7 +188,7 @@ export const FullSession: Story = {
 // TimelineBar column.
 const sampleCostMode: CodexRenderItem[] = sample.map((item) =>
   item.kind === 'assistant'
-    ? { ...item, usage: { input: 1_000_000, output: 100_000, cacheWrite: 0, cacheRead: 0 } }
+    ? { ...item, usage: { input: 1_000_000, output: 100_000, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 } }
     : item,
 );
 

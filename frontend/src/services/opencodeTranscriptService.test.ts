@@ -83,7 +83,7 @@ describe('normalizeOpenCodeLines', () => {
       cost: 0.015,
     });
     if (asst?.kind === 'assistant') {
-      expect(asst.usage).toEqual({ input: 10000, output: 5000, cacheWrite: 2000, cacheRead: 3000 });
+      expect(asst.usage).toEqual({ input: 10000, output: 5000, cacheWrite: 2000, cacheWrite1h: 0, cacheRead: 3000 });
     }
   });
 

@@ -83,6 +83,85 @@ func TestParseLine_ToolUse(t *testing.T) {
 	}
 }
 
+// TestParseLine_CacheCreationBreakdown: the main assistant path is
+// json.Unmarshal'd, so the nested cache_creation tier object is parsed
+// automatically once TokenUsage carries the struct field (rd9v).
+func TestParseLine_CacheCreationBreakdown(t *testing.T) {
+	jsonl := `{"type":"assistant","message":{"model":"claude-opus-4-8","usage":{"input_tokens":6,"output_tokens":221,"cache_creation_input_tokens":9726,"cache_read_input_tokens":17335,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":9726}}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}`
+
+	line, err := ParseLine([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ParseLine failed: %v", err)
+	}
+	cc := line.Message.Usage.CacheCreation
+	if cc == nil {
+		t.Fatal("CacheCreation breakdown is nil, want parsed")
+	}
+	if cc.Ephemeral5m != 0 {
+		t.Errorf("Ephemeral5m = %d, want 0", cc.Ephemeral5m)
+	}
+	if cc.Ephemeral1h != 9726 {
+		t.Errorf("Ephemeral1h = %d, want 9726", cc.Ephemeral1h)
+	}
+}
+
+// TestParseLine_CacheCreationBreakdown_Absent: legacy lines without the nested
+// object leave CacheCreation nil (cost path then treats all as 5m).
+func TestParseLine_CacheCreationBreakdown_Absent(t *testing.T) {
+	jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":200}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}`
+	line, err := ParseLine([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("ParseLine failed: %v", err)
+	}
+	if line.Message.Usage.CacheCreation != nil {
+		t.Errorf("CacheCreation = %+v, want nil for legacy line", line.Message.Usage.CacheCreation)
+	}
+}
+
+// TestParseToolUseResult_CacheCreation: the subagent path is hand-parsed from a
+// map (NOT json-tag unmarshalled), so the nested cache_creation object needs
+// explicit extraction (rd9v).
+func TestParseToolUseResult_CacheCreation(t *testing.T) {
+	m := map[string]interface{}{
+		"agentId": "agent-1",
+		"usage": map[string]interface{}{
+			"input_tokens":                float64(10),
+			"output_tokens":               float64(20),
+			"cache_creation_input_tokens": float64(100),
+			"cache_creation": map[string]interface{}{
+				"ephemeral_5m_input_tokens": float64(40),
+				"ephemeral_1h_input_tokens": float64(60),
+			},
+		},
+	}
+	r := parseToolUseResult(m)
+	if r.Usage == nil || r.Usage.CacheCreation == nil {
+		t.Fatal("subagent CacheCreation breakdown not parsed")
+	}
+	if r.Usage.CacheCreation.Ephemeral5m != 40 {
+		t.Errorf("Ephemeral5m = %d, want 40", r.Usage.CacheCreation.Ephemeral5m)
+	}
+	if r.Usage.CacheCreation.Ephemeral1h != 60 {
+		t.Errorf("Ephemeral1h = %d, want 60", r.Usage.CacheCreation.Ephemeral1h)
+	}
+}
+
+// TestParseToolUseResult_CacheCreation_Absent: subagent usage without the nested
+// object leaves CacheCreation nil.
+func TestParseToolUseResult_CacheCreation_Absent(t *testing.T) {
+	m := map[string]interface{}{
+		"agentId": "agent-1",
+		"usage": map[string]interface{}{
+			"input_tokens":                float64(10),
+			"cache_creation_input_tokens": float64(100),
+		},
+	}
+	r := parseToolUseResult(m)
+	if r.Usage.CacheCreation != nil {
+		t.Errorf("CacheCreation = %+v, want nil", r.Usage.CacheCreation)
+	}
+}
+
 func TestParseLine_ThinkingBlock(t *testing.T) {
 	jsonl := `{"type":"assistant","message":{"model":"claude-opus-4","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"thinking","thinking":"Let me think about this...","signature":"abc123"},{"type":"text","text":"Here is my answer"}]},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}`
 

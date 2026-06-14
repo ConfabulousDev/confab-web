@@ -22,8 +22,11 @@ import { PROVIDER_VALUES } from './providers';
  *     included here and bills at the output rate implicitly. The raw
  *     reasoning count is preserved separately on the assistant render
  *     item (`reasoningTokens`) for the cost-tooltip sub-line.
- *   - `cacheWrite`: cache-creation tokens. Anthropic charges 1.25x input;
- *     OpenAI charges 0 (set to 0 by the Codex normalizer).
+ *   - `cacheWrite`: 5-minute cache-creation tokens. Anthropic charges 1.25x
+ *     input; OpenAI charges 0 (set to 0 by the Codex normalizer).
+ *   - `cacheWrite1h`: 1-hour cache-creation tokens (Anthropic charges 2x input).
+ *     Split out from `cacheWrite` by the Claude normalizer from the wire
+ *     `cache_creation` object; 0 for legacy lines and non-Claude providers (rd9v).
  *   - `cacheRead`: cache-hit tokens (Codex's `cached_input_tokens`,
  *     Anthropic's `cache_read_input_tokens`).
  */
@@ -31,6 +34,7 @@ export interface TokenUsage {
   input: number;
   output: number;
   cacheWrite: number;
+  cacheWrite1h: number;
   cacheRead: number;
 }
 
@@ -38,6 +42,7 @@ export interface ModelPricing {
   input: number;
   output: number;
   cacheWrite: number;
+  cacheWrite1h: number;
   cacheRead: number;
 }
 
@@ -57,7 +62,7 @@ export function setPricingTable(table: PricingTable): void {
   activePricing = table;
 }
 
-const ZERO_PRICING: ModelPricing = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
+const ZERO_PRICING: ModelPricing = { input: 0, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 };
 
 // Server tool pricing (per request, not per token).
 // Source: https://docs.anthropic.com/en/about-claude/pricing
@@ -119,10 +124,14 @@ export function calculateCost(
   usage: TokenUsage,
 ): number {
   const pricing = getPricing(provider, model);
+  // 1h cache writes fall back to the 5m rate when cacheWrite1h is missing/0
+  // (e.g. a stale remote pricing doc) so they never bill $0 (rd9v).
+  const effective1hRate = pricing.cacheWrite1h || pricing.cacheWrite;
   return (
     usage.input * pricing.input +
     usage.output * pricing.output +
     usage.cacheWrite * pricing.cacheWrite +
+    usage.cacheWrite1h * effective1hRate +
     usage.cacheRead * pricing.cacheRead
   ) / 1_000_000;
 }
@@ -163,15 +172,36 @@ interface ClaudeWireUsage {
   output_tokens: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  cache_creation?: {
+    ephemeral_5m_input_tokens: number;
+    ephemeral_1h_input_tokens: number;
+  };
 }
 
 export function normalizeClaudeUsage(wire: ClaudeWireUsage): TokenUsage {
+  // Split cache-creation by ephemeral tier when the nested object is present;
+  // legacy lines (no object) are treated as all-5m (rd9v).
+  const cacheWrite = wire.cache_creation
+    ? wire.cache_creation.ephemeral_5m_input_tokens
+    : wire.cache_creation_input_tokens ?? 0;
+  const cacheWrite1h = wire.cache_creation?.ephemeral_1h_input_tokens ?? 0;
   return {
     input: wire.input_tokens,
     output: wire.output_tokens,
-    cacheWrite: wire.cache_creation_input_tokens ?? 0,
+    cacheWrite,
+    cacheWrite1h,
     cacheRead: wire.cache_read_input_tokens ?? 0,
   };
+}
+
+/**
+ * Total cache-creation tokens for display (5m + 1h). The canonical TokenUsage
+ * splits cache writes by ephemeral tier for billing (rd9v); display surfaces
+ * that show a single "cache write" count must use this combined total so the
+ * number stays the full cache-creation count (decision: no separate 1h line).
+ */
+export function cacheWriteTotal(usage: TokenUsage): number {
+  return usage.cacheWrite + usage.cacheWrite1h;
 }
 
 /**

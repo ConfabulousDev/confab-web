@@ -956,6 +956,7 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
       input: 1000,
       output: 500,
       cacheWrite: 0,
+      cacheWrite1h: 0,
       cacheRead: 0,
     });
   });
