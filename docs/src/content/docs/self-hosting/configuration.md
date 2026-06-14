@@ -96,6 +96,7 @@ Works with Okta, Auth0, Azure AD, Keycloak, etc. All four variables must be set.
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `ALLOWED_EMAIL_DOMAINS` | *(all domains)* | No | Comma-separated list of allowed email domains; applies to all auth methods |
+| `OAUTH_AUTO_LINK_EMAIL` | `false` | No | When `true`, a first-time OAuth login whose email matches an existing account (password or another provider) is automatically linked to it. **Default `false`** rejects the login (`/login?error=account_exists`) instead, preventing account takeover via an attacker-controlled IdP email. Only enable if you trust every configured IdP to strictly verify email ownership. Returning users and brand-new emails are unaffected. |
 
 ### Demo mode
 

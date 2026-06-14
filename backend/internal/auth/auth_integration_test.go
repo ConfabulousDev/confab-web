@@ -80,7 +80,7 @@ func TestCanUserLogin(t *testing.T) {
 			Name:       "Existing User",
 			AvatarURL:  "https://example.com/avatar.png",
 		}
-		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -113,7 +113,7 @@ func TestCanUserLogin(t *testing.T) {
 			Name:       "Cap User",
 			AvatarURL:  "https://example.com/avatar.png",
 		}
-		_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 		}
@@ -220,7 +220,7 @@ func TestCanUserLogin(t *testing.T) {
 				Email:      email,
 				Name:       fmt.Sprintf("User %d", i),
 			}
-			_, err = authStore.FindOrCreateUserByOAuth(ctx, info)
+			_, err = authStore.FindOrCreateUserByOAuth(ctx, info, true)
 			if err != nil {
 				t.Fatalf("FindOrCreateUserByOAuth failed for user %d: %v", i, err)
 			}
@@ -328,7 +328,7 @@ func TestCanUserLogin(t *testing.T) {
 			Email:      "linked@example.com",
 			Name:       "Linked User",
 		}
-		_, err := authStore.FindOrCreateUserByOAuth(ctx, githubInfo)
+		_, err := authStore.FindOrCreateUserByOAuth(ctx, githubInfo, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth (GitHub) failed: %v", err)
 		}
@@ -340,7 +340,7 @@ func TestCanUserLogin(t *testing.T) {
 			Email:      "linked@example.com",
 			Name:       "Linked User",
 		}
-		_, err = authStore.FindOrCreateUserByOAuth(ctx, googleInfo)
+		_, err = authStore.FindOrCreateUserByOAuth(ctx, googleInfo, true)
 		if err != nil {
 			t.Fatalf("FindOrCreateUserByOAuth (Google) failed: %v", err)
 		}
@@ -656,7 +656,7 @@ func TestCanUserLogin_EmailNormalization(t *testing.T) {
 		Email:      "user@example.com", // lowercase
 		Name:       "Test User",
 	}
-	_, err := authStore.FindOrCreateUserByOAuth(ctx, info)
+	_, err := authStore.FindOrCreateUserByOAuth(ctx, info, true)
 	if err != nil {
 		t.Fatalf("FindOrCreateUserByOAuth failed: %v", err)
 	}

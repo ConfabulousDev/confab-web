@@ -9,13 +9,19 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // FindOrCreateUserByOAuth finds or creates a user by OAuth provider identity.
 // It handles account linking: if an identity doesn't exist but the email matches
-// an existing user, it links the new identity to that user.
-func (s *Store) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUserInfo) (*models.User, error) {
+// an existing user, it links the new identity to that user — but ONLY when
+// autoLinkEmail is true. When false (the default), an email collision with no
+// matching identity returns db.ErrAutoLinkDisabled instead of linking, to
+// prevent account takeover via an attacker-controlled IdP email (cm4f). The
+// already-linked path (matching identity) and brand-new-user path are
+// unaffected by the flag.
+func (s *Store) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUserInfo, autoLinkEmail bool) (*models.User, error) {
 	ctx, span := tracer.Start(ctx, "db.find_or_create_user_by_oauth",
 		trace.WithAttributes(attribute.String("oauth.provider", string(info.Provider))))
 	defer span.End()
@@ -72,6 +78,15 @@ func (s *Store) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUs
 	)
 
 	if err == nil {
+		// cm4f: an email match with no existing identity would link a NEW
+		// OAuth identity onto this (possibly password) account. Unless
+		// explicitly enabled, refuse — an attacker controlling a matching IdP
+		// email could otherwise take over the account. The already-linked
+		// path (step 1) and brand-new-user path (step 3) are unaffected.
+		if !autoLinkEmail {
+			return nil, db.ErrAutoLinkDisabled
+		}
+
 		// CF-483 D2: defense-in-depth. Even though the OAuth callbacks
 		// reject the demo email up front, refuse to link a brand-new
 		// OAuth identity onto a read-only user at the store layer too.
