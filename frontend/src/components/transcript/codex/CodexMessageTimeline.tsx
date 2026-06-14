@@ -33,7 +33,7 @@ import CodexReasoningHidden from './CodexReasoningHidden';
 import CodexCompactedDivider from './CodexCompactedDivider';
 import CodexTurnAbortedDivider from './CodexTurnAbortedDivider';
 import CodexUnknownItem from './CodexUnknownItem';
-import CodexTimelineBar from './CodexTimelineBar';
+import TimelineBar from '../TimelineBar';
 import { useCodexSegmentLayout } from './codexTimelineSegments';
 import { buildVirtualItems, skipNavKey, skipNavLabel } from './codexVirtualItems';
 import { extractCodexItemText } from './extractCodexItemText';
@@ -53,7 +53,7 @@ export interface CodexMessageTimelineProps {
   filteredItems: CodexRenderItem[];
   /**
    * CF-361: indices into `items` whose category passes the active filter.
-   * Forwarded to `CodexTimelineBar` for greyed-segment rendering and tooltip
+   * Forwarded to the shared `TimelineBar` for greyed-segment rendering and tooltip
    * filtered-count display. `undefined` ⇒ no filtering applied.
    */
   visibleIndices?: Set<number>;
@@ -187,8 +187,8 @@ export default function CodexMessageTimeline({
     return map;
   }, [filteredItems]);
 
-  // CF-362: one segment layout instance feeds both `CodexTimelineBar` and
-  // `CostBar` so the two side-by-side rails line up row-for-row.
+  // CF-362: one segment layout instance feeds both the shared `TimelineBar`
+  // and `CostBar` so the two side-by-side rails line up row-for-row.
   const segmentLayout = useCodexSegmentLayout(items, selectedUnfilteredIndex);
 
   // CF-362: cost map keyed by unfiltered items index. Built only when cost
@@ -496,10 +496,11 @@ export default function CodexMessageTimeline({
         )}
       </div>
 
-      <CodexTimelineBar
+      <TimelineBar
         layout={segmentLayout}
         visibleIndices={visibleIndices}
         onSeek={onSeekFromBar}
+        assistantLabel="Codex"
       />
 
       {search.isOpen && (

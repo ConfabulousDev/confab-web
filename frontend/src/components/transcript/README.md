@@ -17,15 +17,16 @@ consume a separate render-item model produced by `services/codexTranscriptServic
 | `ReportUnknownButton.tsx` | (shared, CF-574) Small inline icon + text "Report bug" link shown on every UNKNOWN render surface (Claude message / content block, Codex line, OpenCode line). Takes an `UnknownDescriptor` (see `@/utils/reportUnknown`), reads the Confab app version from `useAppConfig`, and renders an `<a target="_blank" rel="noopener noreferrer">` to a prefilled GitHub issue with structural metadata only — never message content. Works on self-hosted (canonical hardcoded URL) |
 | `UnknownRawDetails.tsx` | (shared, CF-574) Provider-agnostic collapsible `<details>` shell for an unknown row: dashed warning box, click-to-expand raw JSON `<pre>` (caller pre-stringifies; HTML-escaped + search-highlighted), summary slots for a right-aligned `summaryAside` (timestamp) and `actions` (Report button / row actions — clicks there don't toggle the details), and the selection / deep-link-pulse / search-match rings. Consumed by `codex/CodexUnknownItem` and `session/OpenCodeUnknownItem` so the behavior + rings live in one place |
 | `CostBar.tsx` | (shared) Provider-agnostic vertical cost heatmap bar. Driven by `{ layout, costByIndex, segmentUniqueCounts, totalCost, onSeek }` — caller computes the layout (via `useSegmentLayout` / `useCodexSegmentLayout`) and the per-segment unique-call counts (`message.id` dedup for Claude; assistant-kind count for Codex). Intensity = cost per API call (CF-362) |
-| `timelineFormat.ts` | (shared) `formatDuration` — shared `1h 15m` / `5m 30s` / `500ms` formatter for both Claude and Codex tooltip prose |
-| `timelineSegments.ts` | (shared) Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math, also consumed by Codex's bar) |
+| `TimelineBar.tsx` | (shared) Generic vertical turn-based navigation rail `TimelineBar<S extends SpeakerSegment>`. Each turn emits up to two clickable segments — a user thinking-gap stripe and an assistant body stripe (tools fold into the assistant stripe — 2-color). Click-to-seek, hover tooltips (`User: 30s, 1 item` / `<assistantLabel>: 5m, 12 items`), position indicator, and CF-361 greyed/`(N filtered)` rendering when `visibleIndices` is supplied. Required props: `layout`, `onSeek`, `assistantLabel`. Consumed by Codex (`assistantLabel="Codex"`) and OpenCode (`assistantLabel="Assistant"`). Emits a provider-neutral `data-timeline-segment` attribute |
+| `timelineFormat.ts` | (shared) `formatDuration` — shared `1h 15m` / `5m 30s` / `500ms` formatter for the timeline-bar tooltip prose |
+| `timelineSegments.ts` | (shared) Claude segment compute (`useSegmentLayout`) + generic `useBlendedSegmentLayout` hook (size + position math). Defines the `BlendedSegment` base and the `SpeakerSegment` base (`speaker` + `turnIndex`) that Codex / OpenCode segments extend so they fit the shared `TimelineBar` |
 | `timelineUtils.ts` | (shared) Provider-neutral helpers shared by Claude & Codex timelines: `formatTimeSeparator` (>5min idle-gap label), `retryOnAnimationFrame` (virtualizer scroll positioning), `addCmdFListener` (Cmd/Ctrl+F intercept that opens the search bar — CF-359), and `SCROLL_NAV_COST_MODE_RIGHT` (CF-369 — 56px rightOffset both timelines pass to `ScrollNavButtons` in cost mode so the floating buttons clear the CostBar / TimelineBar rail) |
 | `claude/ClaudeMessageTimeline.tsx` | (Claude) Virtualized timeline (TanStack Virtual) that renders the Claude transcript. Owns selection/scroll state, search, cost bar, and time-separator injection. Mirror of `codex/CodexMessageTimeline` |
 | `claude/ClaudeTimelineMessage.tsx` | (Claude) Single Claude message row — header (role, model, timestamp, cost), content blocks, attachments. CF-574: on a genuinely-unrecognized message (`isUnknownClaudeMessage` from `claudeCategories` — excludes known-but-unlabeled types like `pr-link`) the otherwise-empty body shows a `ReportUnknownButton` (`surface:'message'`) |
 | `claude/ContentBlock.tsx` | (Claude) Dispatcher that renders content blocks by type (text, thinking, tool_use, tool_result, image, unknown). Uses the shared `renderMarkdownToHtml` helper from `@/utils/markdown`. CF-574: the unknown-block fallback pairs its label with a `ReportUnknownButton` (`surface:'content block'`) |
-| `claude/TimelineBar.tsx` | (Claude) Vertical timeline bar showing user/assistant turn segments with duration tooltips |
+| `claude/TimelineBar.tsx` | (Claude) Vertical timeline bar showing user/assistant turn segments with duration tooltips (Claude-specific; the shared cross-provider bar is `transcript/TimelineBar.tsx`) |
 | `claude/attachments/` | (Claude) Renderers for `attachment.*` subtypes (hook output, edited files, queued commands, tool deltas) and `system.away_summary`. See `claude/attachments/README.md` |
-| `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline, turn-based timeline bar). See "Codex transcript renderers" below |
+| `codex/` | Codex transcript renderers (user, assistant, tool call, turn separator, reasoning placeholder, compaction divider, unknown fallback, virtualized timeline). The turn-based timeline bar is the shared `TimelineBar`. See "Codex transcript renderers" below |
 
 ## Key Components
 
@@ -61,9 +62,8 @@ layer.
 
 | File | Role |
 |------|------|
-| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` / `isNewSpeaker` / `isDeepLinkTarget` (CF-360) plus per-row `sessionId` and `onSkipToNext` / `onSkipToPrevious` callbacks (CF-360). Accepts a `targetLineId` prop for `?msg=<lineId>` deep linking. CF-362: also computes `segmentLayout` once via `useCodexSegmentLayout` and feeds it to BOTH `CodexTimelineBar` and `CostBar` so the two rails line up row-for-row; when `isCostMode` is true, builds `costByIndex` from `assistant.usage` via `codexAdapter.calculateMessageCost` (CF-418), renders the slide-in `CostBar` to the left of the timeline bar, and forwards `messageCost` to `CodexAssistantMessage` |
-| `CodexTimelineBar.tsx` | Vertical navigation rail. Each turn emits up to two clickable segments — a user thinking-gap stripe and an assistant body stripe — matching the Claude `TimelineBar` color language. Click-to-seek, hover tooltips (`User: 30s, 1 item` / `Codex: 5m, 12 items`), and a position indicator. CF-362: takes the precomputed `BlendedSegmentLayout<CodexTimelineSegment>` as a prop instead of calling the hook itself, so the cost bar and timeline bar share one layout instance |
-| `codexTimelineSegments.ts` | `CodexSpeaker`, `CodexTimelineSegment`, `computeCodexSegments`, `useCodexSegmentLayout`. Per turn, emits a user segment sized by the wall-clock gap from the prior separator (synthetic 1s for turn 1 / zero-or-negative gaps) and an assistant body segment for the rest of the slice. Slices with no user item (compaction-only) collapse to one assistant segment. Layout math shared via `useBlendedSegmentLayout` |
+| `CodexMessageTimeline.tsx` | Virtualized timeline (TanStack Virtual). Owns selection state (`firstVisibleIndex`, `selectedIndex`), scroll buttons, the timeline bar, and time-separator injection. Dispatches each item to its renderer by `kind`, threading `isSelected` / `isNewSpeaker` / `isDeepLinkTarget` (CF-360) plus per-row `sessionId` and `onSkipToNext` / `onSkipToPrevious` callbacks (CF-360). Accepts a `targetLineId` prop for `?msg=<lineId>` deep linking. CF-362: also computes `segmentLayout` once via `useCodexSegmentLayout` and feeds it to BOTH the shared `TimelineBar` (`assistantLabel="Codex"`) and `CostBar` so the two rails line up row-for-row; when `isCostMode` is true, builds `costByIndex` from `assistant.usage` via `codexAdapter.calculateMessageCost` (CF-418), renders the slide-in `CostBar` to the left of the timeline bar, and forwards `messageCost` to `CodexAssistantMessage` |
+| `codexTimelineSegments.ts` | `CodexSpeaker`, `CodexTimelineSegment` (extends the shared `SpeakerSegment`), `computeCodexSegments`, `useCodexSegmentLayout`. Per turn, emits a user segment sized by the wall-clock gap from the prior separator (synthetic 1s for turn 1 / zero-or-negative gaps) and an assistant body segment for the rest of the slice. Slices with no user item (compaction-only) collapse to one assistant segment. Layout math shared via `useBlendedSegmentLayout`; the bar is the shared `transcript/TimelineBar` |
 | `codexVirtualItems.ts` | Pure `buildVirtualItems(items)` that injects `>5min` time separators and tags each item with `isNewSpeaker`. The speaker rule is Codex-specific: `tool_call` / `reasoning_hidden` / `turn_separator` / `compacted` / `unknown` items do NOT break user/assistant continuity, so `user → tool_call → user` is the same speaker. Also exports `skipNavKey` / `skipNavLabel` (CF-360) — the chain-key + aria-label mapping used for skip-to-next-of-same-kind navigation |
 | `extractCodexItemText.ts` | CF-359 per-kind text projection (`(item: CodexRenderItem) => string`) consumed by the generic `useTranscriptSearch` hook. Returns user/assistant `text`, exec `cmd` + output, apply_patch diff + file paths, web_search queries, generic rawInput + rawOutput, the visible `compacted` label, and stringified `unknown` raw JSON. `turn_separator` and `reasoning_hidden` return `""` so they never match |
 | `CodexRowActions.tsx` | CF-360 per-row chrome shared by all seven renderers. Renders, into the header-right slot, `[prev-skip?] [next-skip?] [copy-text?] [copy-link]`. Copy-link is always rendered; copy-text is hidden when `copyText` is empty/whitespace; skip buttons are hidden when their callbacks are absent. Copy-link URL format: `${origin}/sessions/${sessionId}?tab=transcript&msg=${lineId}` (matches Claude exactly) |
@@ -84,7 +84,6 @@ layer.
 | `CodexDividers.module.css` | Shared styles for turn separator, reasoning placeholder, compaction divider, turn-aborted divider (CF-368). Defines `.selected`, `.deepLinkTarget`, and `.searchMatch` (CF-359). CF-574: the unknown-row chrome moved to the shared `UnknownRawDetails.module.css`; only `.unknownTimestamp` (passed into the shared shell's `summaryAside`) remains here |
 | `CodexRowActions.module.css` | CF-360 button-strip chrome (icon button states, copy-success colour) |
 | `CodexMessageTimeline.module.css` | Container (flex with bar on the right), virtualizer slot positioning, scroll chrome, time-separator divider, and CF-362 `.costBarWrapper` / `.costBarWrapperVisible` slide-in for the cost bar |
-| `CodexTimelineBar.module.css` | Vertical-bar chrome: segments, position indicator, hover tooltip |
 
 CF-349 shipped v1 as read-only display. CF-358 brought rendering parity
 (markdown, Prism, terminal output, diff highlighting) in line with Claude.
@@ -113,7 +112,7 @@ new `usage` field (`normalizeCodexLines` walks backwards to find the
 most-recent unannotated assistant of any phase, so multi-call turns get
 per-call attribution), `CodexAssistantMessage` renders `$cost` / `N in · N
 out` / `N hit` badges with a verbose tooltip, and a slide-in `CostBar`
-appears next to `CodexTimelineBar` driven by the same `BlendedSegmentLayout`
+appears next to the shared `TimelineBar` driven by the same `BlendedSegmentLayout`
 instance so the two rails line up. CF-368 closed several real-session
 audit findings: three previously-unrecognized `event_msg` variants are now
 schema-known (`web_search_end` and `context_compacted` drop as noise —
@@ -144,13 +143,13 @@ forward-compat.
   unstructured `output` string needs its own decoder pass and is filed as a
   follow-up.
 
-### TimelineBar / CostBar / CodexTimelineBar
+### TimelineBar / CostBar
 
 Vertical navigation bars displayed alongside the transcript:
-- **TimelineBar** (Claude) shows user (blue) and assistant (warm orange) turn segments derived from user-prompt boundaries, sized by a blended time+message-count metric. Clicking a segment scrolls to those messages.
-- **CodexTimelineBar** (Codex) renders the same user (blue) + assistant (warm orange) palette per turn. The user segment is sized by the wall-clock gap from the prior separator to the current user prompt (synthetic 1s for turn 1 or zero-gap turns); the assistant segment is sized by the separator's `durationMs`. Tooltip wording is `User: <dur>, 1 item` / `Codex: <dur>, N items` — no TTFT, no turn index. Same sizing math and position indicator as Claude.
+- **`claude/TimelineBar`** (Claude) shows user (blue) and assistant (warm orange) turn segments derived from user-prompt boundaries, sized by a blended time+message-count metric. Clicking a segment scrolls to those messages.
+- **`transcript/TimelineBar`** (shared, Codex + OpenCode) is the generic `TimelineBar<S extends SpeakerSegment>`. Same user (blue) + assistant (warm orange) palette per turn; tools fold into the assistant stripe (2-color). Tooltip wording is `User: <dur>, 1 item` / `<assistantLabel>: <dur>, N items` (`assistantLabel` is a required prop — `"Codex"` / `"Assistant"`) — no TTFT, no turn index. Each consumer supplies its own segment derivation: Codex's user segment is sized by the wall-clock gap from the prior separator (synthetic 1s for turn 1 / zero-gap turns), assistant by the separator's `durationMs`; OpenCode synthesizes turns from user-item transitions (no separator) and sizes both stripes from epoch-ms `timeCreated` deltas. Same sizing math and position indicator as Claude.
 - **CostBar** (CF-362: both providers) shows cost density as green intensity (per-API-call cost, not total segment cost). Only visible in cost mode. Provider-agnostic by design — caller supplies the `BlendedSegmentLayout`, the per-index cost map, and the per-segment unique-API-call count (Claude dedupes by `message.id`; Codex counts `assistant`-kind items).
-- All four share layout computation via `useBlendedSegmentLayout` (in `timelineSegments.ts`) to guarantee identical sizing and position-indicator placement. Each provider supplies its own segment-derivation function (`useSegmentLayout` / `useCodexSegmentLayout`). For Codex, `CodexMessageTimeline` calls the hook ONCE and passes the result to both `CodexTimelineBar` and `CostBar` so the rails line up row-for-row.
+- All bars share layout computation via `useBlendedSegmentLayout` (in `timelineSegments.ts`) to guarantee identical sizing and position-indicator placement. Each provider supplies its own segment-derivation function (`useSegmentLayout` / `useCodexSegmentLayout` / `useOpenCodeSegmentLayout` in `session/opencodeTimelineSegments.ts`). For Codex, `CodexMessageTimeline` calls the hook ONCE and passes the result to both the shared `TimelineBar` and `CostBar` so the rails line up row-for-row.
 
 ## Key Types
 
@@ -168,11 +167,16 @@ interface TimelineSegment extends BlendedSegment {
   speaker: 'user' | 'assistant';
 }
 
-// Codex-specific (extends BlendedSegment) — from codex/codexTimelineSegments.ts
-interface CodexTimelineSegment extends BlendedSegment {
+// Shared base for the turn-based TimelineBar — from timelineSegments.ts
+interface SpeakerSegment extends BlendedSegment {
   speaker: 'user' | 'assistant';
   turnIndex: number;
 }
+
+// Codex (codex/codexTimelineSegments.ts) and OpenCode
+// (session/opencodeTimelineSegments.ts) both extend SpeakerSegment:
+interface CodexTimelineSegment extends SpeakerSegment {}
+interface OpenCodeTimelineSegment extends SpeakerSegment {}
 
 interface BlendedSegmentLayout<S extends BlendedSegment> {
   segments: S[];

@@ -8,17 +8,14 @@
 import { useMemo } from 'react';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 import {
-  type BlendedSegment,
   type BlendedSegmentLayout,
+  type SpeakerSegment,
   useBlendedSegmentLayout,
 } from '../timelineSegments';
 
 export type CodexSpeaker = 'user' | 'assistant';
 
-export interface CodexTimelineSegment extends BlendedSegment {
-  speaker: CodexSpeaker;
-  turnIndex: number;
-}
+export type CodexTimelineSegment = SpeakerSegment;
 
 /** Floor for user thinking-gap duration (also used for turn 1's synthetic gap). */
 const FIRST_TURN_USER_SEGMENT_MS = 1000;

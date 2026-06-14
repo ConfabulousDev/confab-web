@@ -63,6 +63,17 @@ export const Default: Story = {
   args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null },
 };
 
+// Tools filtered out: the bar greys segments whose whole range is hidden.
+export const Filtered: Story = {
+  args: {
+    sessionId: 'demo',
+    items,
+    filteredItems: items.filter((it) => it.kind !== 'tool'),
+    loading: false,
+    error: null,
+  },
+};
+
 export const CostMode: Story = {
   args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null, isCostMode: true },
 };
