@@ -1,5 +1,5 @@
-import { Fragment, useId, useState } from 'react';
-import { CardWrapper, StatRow, CardLoading, CardError, SectionHeader } from './Card';
+import { useId, useState } from 'react';
+import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
 import { CostAmount } from '@/components/CostAmount';
 import { formatTokenCount } from '@/utils/tokenStats';
 import { formatModelKey } from '@/utils/formatting';
@@ -47,15 +47,13 @@ const ZERO_COST_TOOLTIP =
  * whole headline is a real button (aria-expanded/aria-controls, keyboard-operable);
  * the cost stays visible in the headline whether collapsed or expanded.
  */
-function ModelSection({
-  modelKey,
-  model,
-  defaultExpanded,
-}: {
+interface ModelSectionProps {
   modelKey: string;
   model: TokensV2Model;
   defaultExpanded: boolean;
-}) {
+}
+
+function ModelSection({ modelKey, model, defaultExpanded }: ModelSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const detailId = useId();
   return (
@@ -76,7 +74,7 @@ function ModelSection({
         <CostAmount usd={parseFloat(model.cost_usd)} className={styles.modelHeadlineCost} />
       </button>
       {expanded && (
-        <div id={detailId}>
+        <div id={detailId} className={styles.modelDetail}>
           <StatRow label="Input" value={formatTokenCount(model.input)} icon={ArrowRightIcon} />
           <StatRow label="Output" value={formatTokenCount(model.output)} icon={ArrowLeftIcon} />
           {model.cache_read > 0 && (
@@ -124,31 +122,42 @@ export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardDat
   );
   const autoExpand = totalModelCount === 1;
 
+  const renderModelSections = (provider: TokensV2Provider) =>
+    Object.entries(provider.models).map(([modelKey, model]) => (
+      <ModelSection key={modelKey} modelKey={modelKey} model={model} defaultExpanded={autoExpand} />
+    ));
+
   return (
     <CardWrapper title="Tokens" icon={TokenIcon}>
+      {/* Elevated grand-total headline (mirrors Trends TotalCostRow). The $0
+          amber-warning tooltip rides on the headline row. */}
+      <div className={styles.totalCostRow} title={isZeroCost ? ZERO_COST_TOOLTIP : undefined}>
+        <span className={styles.totalCostLabel}>Estimated cost</span>
+        <CostAmount usd={totalCost} className={styles.totalCostValue} />
+      </div>
+      {/* Card-level summary stack (mirrors Trends TokensStatRows). */}
+      <StatRow label="Total Tokens" value={formatTokenCount(data.total_input + data.total_output)} />
       <StatRow
-        label="Estimated cost"
-        value={<CostAmount usd={totalCost} />}
-        icon={DollarIcon}
-        tooltip={isZeroCost ? ZERO_COST_TOOLTIP : undefined}
+        label="Input / Output"
+        value={`${formatTokenCount(data.total_input)} / ${formatTokenCount(data.total_output)}`}
       />
-      <StatRow label="Input" value={formatTokenCount(data.total_input)} icon={ArrowRightIcon} />
-      <StatRow label="Output" value={formatTokenCount(data.total_output)} icon={ArrowLeftIcon} />
-      {providerEntries.map(([providerName, provider]) => {
-        const modelSections = Object.entries(provider.models).map(([modelKey, model]) => (
-          <ModelSection key={modelKey} modelKey={modelKey} model={model} defaultExpanded={autoExpand} />
-        ));
-        if (singleProvider) {
-          return <Fragment key={providerName}>{modelSections}</Fragment>;
-        }
-        return (
-          <div key={providerName}>
-            <SectionHeader label={providerLabel(providerName)} />
-            <StatRow label="Cost" value={<CostAmount usd={parseFloat(provider.cost_usd)} />} icon={DollarIcon} />
-            {modelSections}
-          </div>
-        );
-      })}
+      {singleProvider ? (
+        // Single provider: drop the wrapper, render model sections under the totals.
+        renderModelSections(providerEntries[0]![1])
+      ) : (
+        // Multi-provider: grouped sections with an uppercase header + indented rows.
+        <div className={styles.providerSections}>
+          {providerEntries.map(([providerName, provider]) => (
+            <section key={providerName} className={styles.providerSection}>
+              <header className={styles.providerHeader}>{providerLabel(providerName)}</header>
+              <div className={styles.providerRows}>
+                <StatRow label="Cost" value={<CostAmount usd={parseFloat(provider.cost_usd)} />} icon={DollarIcon} />
+                {renderModelSections(provider)}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </CardWrapper>
   );
 }

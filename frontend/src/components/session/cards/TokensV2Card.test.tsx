@@ -92,14 +92,17 @@ describe('TokensV2Card', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
   });
 
-  it('renders total input tokens formatted', () => {
+  it('renders total tokens (input + output) in the summary stack', () => {
     render(<TokensV2Card data={makeData()} loading={false} />);
-    expect(screen.getByText('150.0k')).toBeInTheDocument();
+    // total_input 150k + total_output 50k = 200k
+    expect(screen.getByText('200.0k')).toBeInTheDocument();
   });
 
-  it('renders total output tokens formatted', () => {
+  it('renders a combined Input / Output summary row', () => {
     render(<TokensV2Card data={makeData()} loading={false} />);
-    expect(screen.getAllByText('50.0k').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Total Tokens')).toBeInTheDocument();
+    expect(screen.getByText('Input / Output')).toBeInTheDocument();
+    expect(screen.getByText('150.0k / 50.0k')).toBeInTheDocument();
   });
 
   it('renders provider names', () => {

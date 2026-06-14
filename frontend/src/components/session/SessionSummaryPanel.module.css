@@ -350,8 +350,10 @@
   color: var(--color-text-tertiary);
 }
 
-/* d3rp: collapsible per-model headline. A full-width button that visually echoes
-   .sectionHeader (uppercase label, top border) with the cost + a rotating chevron. */
+/* hp73 (d3rp): collapsible per-model headline. A full-width button with the
+   model label + cost + a rotating chevron. Deliberately subordinate to the
+   provider header (.providerHeader) — NOT uppercase, lighter weight, no top
+   border — so the provider → model → detail hierarchy reads as depth. */
 .modelHeadline {
   display: flex;
   align-items: center;
@@ -359,14 +361,12 @@
   width: 100%;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
-  margin-top: var(--spacing-xs);
   border: none;
-  border-top: 1px solid var(--color-border-light);
   background: none;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
 .modelHeadline:hover {
@@ -382,10 +382,70 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+}
+
+/* hp73: per-session Tokens card layout, mirroring the Trends "Tokens & Cost"
+   card so the two token cards read consistently. Concrete numeric values are
+   copied from TrendsTokensCard.module.css; horizontal padding uses the session
+   card's --spacing-md so labels align with the StatRows below. */
+
+/* Elevated grand-total headline (mirrors Trends TotalCostRow). */
+.totalCostRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4px var(--spacing-md) 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.totalCostLabel {
+  font-size: 15px;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.totalCostValue {
+  font-size: 16px;
+  font-weight: var(--font-semibold);
+}
+
+/* Per-provider sections (multi-provider only), mirroring Trends' provider
+   grouping: an uppercase header distinct from the model headline + a
+   left-indented row stack (indent = depth). */
+.providerSections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.providerSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.providerHeader {
+  padding: 0 var(--spacing-md) 8px;
   font-size: var(--font-xs);
   font-weight: var(--font-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 4px;
+}
+
+.providerRows {
+  padding-left: 12px;
+}
+
+/* The model-detail block sits one indent deeper than .providerRows (and deeper
+   than the model headline in single-provider mode) so it reads as the deepest
+   tier. */
+.modelDetail {
+  padding-left: 12px;
 }
 
 .modelChevron {
