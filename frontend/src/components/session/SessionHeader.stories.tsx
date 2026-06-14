@@ -183,6 +183,27 @@ export const SharedSessionWithoutEmail: Story = {
   },
 };
 
+// p99d: anonymous viewer of a PUBLIC share — backend blanks owner_email and
+// omits shared_by_email, so the owner-identity meta-item is hidden entirely
+// (no stray empty Person row).
+export const PublicShareAnonymousViewer: Story = {
+  args: {
+    sessionId: 'session-public-anon',
+    title: 'Public Share Viewed While Logged Out',
+    hasCustomTitle: false,
+    autoTitle: 'Public Share Viewed While Logged Out',
+    externalId: 'public123anon456',
+    ownerEmail: '',
+    model: 'claude-sonnet-4-20250514',
+    durationMs: 900000,
+    sessionDate: new Date('2025-12-03T08:00:00'),
+    gitInfo: { repo_url: 'https://github.com/user/project', branch: 'main' },
+    isOwner: false,
+    isShared: true,
+    sharedByEmail: null,
+  },
+};
+
 export const OwnerViewingShareLink: Story = {
   args: {
     sessionId: 'session-owner-share',

@@ -6,12 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
+	"github.com/go-chi/chi/v5"
 )
 
 // =============================================================================
@@ -132,6 +132,83 @@ func TestHandleGetSession_PublicShareAccess_Authenticated(t *testing.T) {
 	}
 	if session.IsOwner == nil || *session.IsOwner {
 		t.Error("expected IsOwner = false for non-owner access")
+	}
+}
+
+// TestHandleGetSession_PublicShareHidesOwnerEmail asserts that an anonymous
+// viewer of a PUBLIC share never receives the owner's email — neither in the
+// always-serialized owner_email field nor in shared_by_email (p99d PII leak).
+func TestHandleGetSession_PublicShareHidesOwnerEmail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Public share, accessed while logged out
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	req := httptest.NewRequest("GET", "/api/v1/sessions/"+sessionID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	api.HandleGetSession(env.DB)(w, req)
+
+	testutil.AssertStatus(t, w, http.StatusOK)
+
+	var session db.SessionDetail
+	testutil.ParseJSONResponse(t, w, &session)
+
+	if session.OwnerEmail != "" {
+		t.Errorf("expected empty owner_email for anonymous public access, got %q", session.OwnerEmail)
+	}
+	if session.SharedByEmail != nil {
+		t.Errorf("expected nil shared_by_email for anonymous public access, got %q", *session.SharedByEmail)
+	}
+}
+
+// TestHandleGetSession_RecipientShareExposesOwnerEmail is the regression guard
+// against over-redaction: an entitled recipient (authenticated non-owner) must
+// still see who shared the session with them (p99d — recipient/system unchanged).
+func TestHandleGetSession_RecipientShareExposesOwnerEmail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	recipient := testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "test-session")
+
+	// Private share to the recipient (authenticated, entitled non-owner)
+	testutil.CreateTestShare(t, env, sessionID, false, nil, []string{"recipient@example.com"})
+
+	req := testutil.AuthenticatedRequest(t, "GET", "/api/v1/sessions/"+sessionID, nil, recipient.ID)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", sessionID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	api.HandleGetSession(env.DB)(w, req)
+
+	testutil.AssertStatus(t, w, http.StatusOK)
+
+	var session db.SessionDetail
+	testutil.ParseJSONResponse(t, w, &session)
+
+	if session.SharedByEmail == nil || *session.SharedByEmail != "owner@example.com" {
+		t.Errorf("expected shared_by_email = owner@example.com for recipient access, got %v", session.SharedByEmail)
+	}
+	if session.OwnerEmail != "owner@example.com" {
+		t.Errorf("expected owner_email populated for recipient access, got %q", session.OwnerEmail)
 	}
 }
 

@@ -1074,8 +1074,11 @@ func TestGetSessionDetailWithAccess_OwnerNoSharedByEmail(t *testing.T) {
 	}
 }
 
-// TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail tests that public share access includes SharedByEmail
-func TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail(t *testing.T) {
+// TestGetSessionDetailWithAccess_PublicShareHidesOwnerEmail tests that public
+// share access — reachable by anonymous viewers — never exposes the owner's
+// email, neither via owner_email nor shared_by_email (p99d PII leak). Contrast
+// with the system/recipient variants, where the entitled viewer keeps it.
+func TestGetSessionDetailWithAccess_PublicShareHidesOwnerEmail(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -1099,11 +1102,11 @@ func TestGetSessionDetailWithAccess_PublicShareHasSharedByEmail(t *testing.T) {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
 
-	if session.SharedByEmail == nil {
-		t.Fatal("expected SharedByEmail to be set for public share access")
+	if session.SharedByEmail != nil {
+		t.Errorf("expected SharedByEmail = nil for public share access, got %q", *session.SharedByEmail)
 	}
-	if *session.SharedByEmail != "owner@example.com" {
-		t.Errorf("expected SharedByEmail = %q, got %q", "owner@example.com", *session.SharedByEmail)
+	if session.OwnerEmail != "" {
+		t.Errorf("expected OwnerEmail = \"\" for public share access, got %q", session.OwnerEmail)
 	}
 	if session.IsOwner == nil || *session.IsOwner {
 		t.Error("expected IsOwner = false for public share access")
