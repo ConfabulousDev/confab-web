@@ -1,23 +1,28 @@
 // Renders the transcript-tab content for OpenCode sessions.
 //
 // A virtualized list of render items (user / assistant / tool) with a
-// turn-based minimap / timeline bar alongside (the shared `TimelineBar`) and,
-// in cost mode, the shared green `CostBar` side rail (hfk7) — reaching parity
-// with Claude/Codex. Still leaner than the others (no Cmd-F search yet) but
-// real: it fetches nothing itself (SessionViewer drives fetch/poll via the
-// adapter) and renders the three categories with reasoning, tool I/O, status,
-// deep-link scroll, and per-message cost badges in cost mode.
+// turn-based minimap / timeline bar alongside (the shared `TimelineBar`),
+// in cost mode the shared green `CostBar` side rail (hfk7), and Cmd-F
+// in-transcript search (5p9j, via the shared `useTranscriptSearch` toolkit) —
+// reaching parity with Claude/Codex. It fetches nothing itself (SessionViewer
+// drives fetch/poll via the adapter) and renders the categories with
+// reasoning, tool I/O, status, deep-link scroll, per-message cost badges in
+// cost mode, and scroll-to + highlight of search matches in unmounted rows.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CostAmount } from '@/components/CostAmount';
 import { cx } from '@/utils/utils';
-import { retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import TimelineBar from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
+import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
+import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
+import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import { opencodeAdapter } from '@/providers/opencodeAdapter';
 import type { TokenUsage } from '@/utils/tokenStats';
 import type { OpenCodeRenderItem } from './opencodeCategories';
+import { extractOpenCodeItemText } from './extractOpenCodeItemText';
 import { useOpenCodeSegmentLayout } from './opencodeTimelineSegments';
 import OpenCodeUnknownItem from './OpenCodeUnknownItem';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
@@ -49,8 +54,28 @@ const EMPTY_USAGE: TokenUsage = {
   cacheRead: 0,
 };
 
-function ToolRow({ item }: { item: Extract<OpenCodeRenderItem, { kind: 'tool' }> }) {
+// 5p9j: true when `query` (case-insensitive) appears inside `text`. Used to
+// force-open a collapsed <details> that holds the active match, so the search
+// bar never counts a match the user can't see.
+function containsQuery(text: string | undefined, query: string | undefined): boolean {
+  if (!text || !query) return false;
+  return text.toLowerCase().includes(query.toLowerCase());
+}
+
+function ToolRow({
+  item,
+  searchQuery,
+  isCurrentSearchMatch,
+}: {
+  item: Extract<OpenCodeRenderItem, { kind: 'tool' }>;
+  searchQuery?: string;
+  isCurrentSearchMatch?: boolean;
+}) {
   const isError = item.status === 'error';
+  // 5p9j: force the output <details> open when this row is the active match and
+  // the query is inside the (otherwise collapsed) output.
+  const outputForceOpen =
+    isCurrentSearchMatch && containsQuery(item.output, searchQuery) ? true : undefined;
   return (
     <div className={cx(styles.row, styles.toolRow)}>
       <div className={styles.rowHeader}>
@@ -60,11 +85,17 @@ function ToolRow({ item }: { item: Extract<OpenCodeRenderItem, { kind: 'tool' }>
           {item.status}
         </span>
       </div>
-      {item.input ? <pre className={styles.toolInput}>{item.input}</pre> : null}
+      {item.input ? (
+        <pre className={styles.toolInput}>
+          {renderTextWithHighlight(item.input, searchQuery, isCurrentSearchMatch)}
+        </pre>
+      ) : null}
       {item.output ? (
-        <details className={styles.details}>
+        <details className={styles.details} open={outputForceOpen}>
           <summary className={styles.summary}>Output</summary>
-          <pre className={styles.toolOutput}>{item.output}</pre>
+          <pre className={styles.toolOutput}>
+            {renderTextWithHighlight(item.output, searchQuery, isCurrentSearchMatch)}
+          </pre>
         </details>
       ) : null}
     </div>
@@ -75,6 +106,8 @@ function AssistantRow({
   item,
   isCostMode,
   messageCost,
+  searchQuery,
+  isCurrentSearchMatch,
 }: {
   item: Extract<OpenCodeRenderItem, { kind: 'assistant' }>;
   isCostMode?: boolean;
@@ -86,7 +119,13 @@ function AssistantRow({
    * the cost is zero.
    */
   messageCost?: number;
+  searchQuery?: string;
+  isCurrentSearchMatch?: boolean;
 }) {
+  // 5p9j: force the reasoning <details> open when this row is the active match
+  // and the query lives in the (collapsed) reasoning text.
+  const reasoningForceOpen =
+    isCurrentSearchMatch && containsQuery(item.reasoning, searchQuery) ? true : undefined;
   return (
     <div className={cx(styles.row, styles.assistantRow)}>
       <div className={styles.rowHeader}>
@@ -97,12 +136,18 @@ function AssistantRow({
         ) : null}
       </div>
       {item.reasoning ? (
-        <details className={styles.details}>
+        <details className={styles.details} open={reasoningForceOpen}>
           <summary className={styles.summary}>Reasoning</summary>
-          <div className={styles.reasoning}>{item.reasoning}</div>
+          <div className={styles.reasoning}>
+            {renderTextWithHighlight(item.reasoning, searchQuery, isCurrentSearchMatch)}
+          </div>
         </details>
       ) : null}
-      {item.text ? <div className={styles.text}>{item.text}</div> : null}
+      {item.text ? (
+        <div className={styles.text}>
+          {renderTextWithHighlight(item.text, searchQuery, isCurrentSearchMatch)}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -111,10 +156,16 @@ function Row({
   item,
   isCostMode,
   messageCost,
+  searchQuery,
+  isCurrentSearchMatch,
 }: {
   item: OpenCodeRenderItem;
   isCostMode?: boolean;
   messageCost?: number;
+  /** 5p9j: search query (when the search bar is open) — highlights matches. */
+  searchQuery?: string;
+  /** 5p9j: this row is the active (n-of-N) match — amber highlight + force-open. */
+  isCurrentSearchMatch?: boolean;
 }) {
   if (item.kind === 'user') {
     return (
@@ -122,17 +173,35 @@ function Row({
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>User</span>
         </div>
-        <div className={styles.text}>{item.text}</div>
+        <div className={styles.text}>
+          {renderTextWithHighlight(item.text, searchQuery, isCurrentSearchMatch)}
+        </div>
       </div>
     );
   }
   if (item.kind === 'assistant') {
-    return <AssistantRow item={item} isCostMode={isCostMode} messageCost={messageCost} />;
+    return (
+      <AssistantRow
+        item={item}
+        isCostMode={isCostMode}
+        messageCost={messageCost}
+        searchQuery={searchQuery}
+        isCurrentSearchMatch={isCurrentSearchMatch}
+      />
+    );
   }
   if (item.kind === 'tool') {
-    return <ToolRow item={item} />;
+    return (
+      <ToolRow item={item} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
+    );
   }
-  return <OpenCodeUnknownItem item={item} />;
+  return (
+    <OpenCodeUnknownItem
+      item={item}
+      searchQuery={searchQuery}
+      isCurrentSearchMatch={isCurrentSearchMatch}
+    />
+  );
 }
 
 export default function OpenCodeTranscriptPane({
@@ -147,6 +216,15 @@ export default function OpenCodeTranscriptPane({
   const hasScrolledToTarget = useRef(false);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  // 5p9j: Cmd-F transcript search, parameterized over `filteredItems` so
+  // matches respect the active filter (a natural consequence of indexing the
+  // filtered list). OpenCode has no separator/divider rows, so the filtered
+  // index IS the virtual index — no itemIndex→virtualIndex indirection.
+  // `extractOpenCodeItemText` is a stable module-level fn (see its file note),
+  // so the hook's search index doesn't churn every render.
+  const search = useTranscriptSearch(filteredItems, extractOpenCodeItemText);
+  useEffect(() => addCmdFListener(search.open), [search.open]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
@@ -308,6 +386,57 @@ export default function OpenCodeTranscriptPane({
     hasScrolledToTarget.current = true;
   }, [targetIndex, virtualizer]);
 
+  // 5p9j: scroll to the current search match, then bring its first <mark> into
+  // view inside the row. The match's filtered index IS its virtual index, so we
+  // use it directly — no itemIndex→virtualIndex map (cf. Codex). Structurally
+  // mirrors `CodexMessageTimeline.tsx`: scrollToIndex retries across frames as
+  // measurements settle, so we wait a few frames before locating the <mark> to
+  // avoid the bring-into-view being clobbered by a retry. This is what surfaces
+  // matches that live in rows the virtualizer hasn't mounted yet.
+  useEffect(() => {
+    if (search.currentMatchFilteredIndex === null) return;
+    const idx = search.currentMatchFilteredIndex;
+
+    retryOnAnimationFrame(
+      () => virtualizer.scrollToIndex(idx, { align: 'center' }),
+      () => false,
+    );
+    setSelectedIndex(idx);
+
+    let cancelled = false;
+    const scrollToIndexFrames = 6;
+    const maxMarkRetries = 10;
+    function scrollToMark(attempt: number) {
+      if (cancelled || attempt >= maxMarkRetries) return;
+      const scrollEl = parentRef.current;
+      if (!scrollEl) return;
+      const rowEl = scrollEl.querySelector(`[data-index="${idx}"]`);
+      if (!rowEl) {
+        requestAnimationFrame(() => scrollToMark(attempt + 1));
+        return;
+      }
+      const mark = rowEl.querySelector('mark');
+      if (mark) {
+        mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        requestAnimationFrame(() => scrollToMark(attempt + 1));
+      }
+    }
+    function delayThenScroll(framesLeft: number) {
+      if (cancelled) return;
+      if (framesLeft <= 0) {
+        scrollToMark(0);
+        return;
+      }
+      requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
+    }
+    delayThenScroll(scrollToIndexFrames);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [search.currentMatchFilteredIndex, virtualizer]);
+
   if (loading || error) {
     return <TranscriptPaneStatus loading={loading} error={error} />;
   }
@@ -345,6 +474,10 @@ export default function OpenCodeTranscriptPane({
               isCostMode && unfilteredIdx !== undefined
                 ? costByIndex.get(unfilteredIdx)
                 : undefined;
+            // 5p9j: the filtered index IS the virtual index (no divider rows).
+            const isCurrentSearchMatch =
+              search.currentMatchFilteredIndex === virtualItem.index;
+            const searchQuery = search.isOpen ? search.highlightQuery : undefined;
             return (
               <div
                 key={virtualItem.key}
@@ -354,7 +487,13 @@ export default function OpenCodeTranscriptPane({
                 onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                 style={{ transform: `translateY(${virtualItem.start}px)` }}
               >
-                <Row item={item} isCostMode={isCostMode} messageCost={messageCost} />
+                <Row
+                  item={item}
+                  isCostMode={isCostMode}
+                  messageCost={messageCost}
+                  searchQuery={searchQuery}
+                  isCurrentSearchMatch={isCurrentSearchMatch}
+                />
               </div>
             );
           })}
@@ -384,6 +523,21 @@ export default function OpenCodeTranscriptPane({
         onSeek={onSeekFromBar}
         assistantLabel="Assistant"
       />
+
+      {/* 5p9j: shared Cmd-F search bar. position:fixed, so it overlays the
+          .container without disturbing the scroll/CostBar/TimelineBar layout. */}
+      {search.isOpen && (
+        <TranscriptSearchBar
+          query={search.query}
+          onQueryChange={search.setQuery}
+          currentMatch={search.matches.length > 0 ? search.currentMatchIndex + 1 : 0}
+          totalMatches={search.matches.length}
+          onNext={search.goToNextMatch}
+          onPrev={search.goToPreviousMatch}
+          onClose={search.close}
+          inputRef={search.inputRef}
+        />
+      )}
     </div>
   );
 }

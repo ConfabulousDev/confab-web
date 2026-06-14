@@ -9,25 +9,29 @@ import { computeKeyFingerprint } from '@/utils/reportUnknown';
 import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
 import UnknownRawDetails from '@/components/transcript/UnknownRawDetails';
 import type { OpenCodeRenderItem } from './opencodeCategories';
+import { stringifyUnknownRaw } from './extractOpenCodeItemText';
 
 type OpenCodeUnknownItemType = Extract<OpenCodeRenderItem, { kind: 'unknown' }>;
 
-function stringifyRaw(value: unknown): string {
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-export default function OpenCodeUnknownItem({ item }: { item: OpenCodeUnknownItemType }) {
-  const raw = useMemo(() => stringifyRaw(item.rawLine), [item.rawLine]);
+export default function OpenCodeUnknownItem({
+  item,
+  searchQuery,
+  isCurrentSearchMatch,
+}: {
+  item: OpenCodeUnknownItemType;
+  /** 5p9j: search query (when the search bar is open) — highlights matches. */
+  searchQuery?: string;
+  /** 5p9j: this row is the active (n-of-N) match — amber ring + force-open. */
+  isCurrentSearchMatch?: boolean;
+}) {
+  const raw = useMemo(() => stringifyUnknownRaw(item.rawLine), [item.rawLine]);
 
   return (
     <UnknownRawDetails
       label="Unrecognized line"
       rawText={raw}
+      searchQuery={searchQuery}
+      isCurrentSearchMatch={isCurrentSearchMatch}
       summaryAside={<span>{item.reason}</span>}
       actions={
         <ReportUnknownButton
