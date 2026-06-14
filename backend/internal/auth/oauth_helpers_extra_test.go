@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -126,12 +128,15 @@ func TestSetOAuthLoginCookies_HappyPath(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/login?email=user@example.com&redirect=/dashboard", nil)
 
-	state, validEmail, expectedEmail, err := setOAuthLoginCookies(rec, req)
+	state, challenge, validEmail, expectedEmail, err := setOAuthLoginCookies(rec, req)
 	if err != nil {
 		t.Fatalf("setOAuthLoginCookies: %v", err)
 	}
 	if state == "" {
 		t.Error("expected non-empty state")
+	}
+	if challenge == "" {
+		t.Error("expected non-empty PKCE challenge")
 	}
 	if !validEmail {
 		t.Error("expected validEmail=true for valid email hint")
@@ -140,13 +145,27 @@ func TestSetOAuthLoginCookies_HappyPath(t *testing.T) {
 		t.Errorf("expectedEmail = %q, want user@example.com", expectedEmail)
 	}
 
-	names := map[string]bool{}
+	cookies := map[string]*http.Cookie{}
 	for _, c := range rec.Result().Cookies() {
-		names[c.Name] = true
+		cookies[c.Name] = c
 	}
-	for _, want := range []string{"oauth_state", "post_login_redirect", "expected_email"} {
-		if !names[want] {
+	for _, want := range []string{"oauth_state", "oauth_verifier", "post_login_redirect", "expected_email"} {
+		if cookies[want] == nil {
 			t.Errorf("missing cookie: %s", want)
+		}
+	}
+	// The PKCE verifier cookie must be HttpOnly + short-lived, mirroring oauth_state.
+	if v := cookies["oauth_verifier"]; v != nil {
+		if !v.HttpOnly {
+			t.Error("oauth_verifier cookie must be HttpOnly")
+		}
+		if v.MaxAge != 300 {
+			t.Errorf("oauth_verifier MaxAge = %d, want 300", v.MaxAge)
+		}
+		// challenge == base64url-no-pad(SHA256(verifier))
+		sum := sha256.Sum256([]byte(v.Value))
+		if want := base64.RawURLEncoding.EncodeToString(sum[:]); want != challenge {
+			t.Errorf("challenge %q != S256(verifier) %q", challenge, want)
 		}
 	}
 }
@@ -155,7 +174,7 @@ func TestSetOAuthLoginCookies_InvalidEmailHint(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/login?email=not-an-email", nil)
 
-	_, validEmail, _, err := setOAuthLoginCookies(rec, req)
+	_, _, validEmail, _, err := setOAuthLoginCookies(rec, req)
 	if err != nil {
 		t.Fatalf("setOAuthLoginCookies: %v", err)
 	}
@@ -173,7 +192,7 @@ func TestSetOAuthLoginCookies_OmitsRedirectAndEmailWhenAbsent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/login", nil)
 
-	state, validEmail, expectedEmail, err := setOAuthLoginCookies(rec, req)
+	state, _, validEmail, expectedEmail, err := setOAuthLoginCookies(rec, req)
 	if err != nil {
 		t.Fatalf("setOAuthLoginCookies: %v", err)
 	}
@@ -224,7 +243,7 @@ func TestSetOAuthLoginCookies_StateLengthAndUniqueness(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/login", nil)
-		state, _, _, err := setOAuthLoginCookies(rec, req)
+		state, _, _, _, err := setOAuthLoginCookies(rec, req)
 		if err != nil {
 			t.Fatalf("iteration %d: %v", i, err)
 		}

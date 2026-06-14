@@ -43,7 +43,7 @@ All middleware functions:
 
 | Function | Route | Description |
 |----------|-------|-------------|
-| `HandleGitHubLogin(config)` | `GET /auth/github/login` | Initiates GitHub OAuth, sets state cookie, redirects to GitHub |
+| `HandleGitHubLogin(config)` | `GET /auth/github/login` | Initiates GitHub OAuth, sets state + PKCE verifier cookies, redirects to GitHub |
 | `HandleGitHubCallback(config, db)` | `GET /auth/github/callback` | Exchanges code for token, fetches user, creates/finds user, sets session cookie |
 | `HandleGoogleLogin(config)` | `GET /auth/google/login` | Initiates Google OAuth with OpenID Connect scopes |
 | `HandleGoogleCallback(config, db)` | `GET /auth/google/callback` | Same flow as GitHub but for Google, requires verified email |
@@ -114,6 +114,7 @@ If the new mode is neither API key nor session cookie, add a new `Try*Auth` func
 ## Design Decisions
 
 - **Per-provider OAuth callbacks** -- GitHub, Google, and OIDC each have their own `Handle*Callback` function. The code notes this duplication is intentional: each provider has different quirks (GitHub needs a separate `/user/emails` call for verified email, Google has `verified_email` as a direct field, OIDC uses `email_verified` which can be string or bool). A generic abstraction would be more complex than the duplication.
+- **OAuth PKCE (S256) — verifier in a second cookie (r9zn, audit A1)** -- `setOAuthLoginCookies` generates a PKCE pair via `generatePKCE()` (32 random bytes → base64url verifier; `code_challenge = base64url(SHA256(verifier))`) and stores the verifier in a dedicated HttpOnly+Secure `oauth_verifier` cookie alongside `oauth_state` (same `Path`/`MaxAge=300`/`SameSite=Lax`). Chosen over HMAC-packing the verifier into `oauth_state` or a server-side store: a second short-lived single-use cookie is the simplest browser-bound carrier and needs no key or DB. Each login handler appends `&code_challenge=…&code_challenge_method=S256` to its own auth URL; each callback reads + verifies presence of + clears the verifier cookie (rejecting absent/empty with the same `400 Invalid state parameter` shape) and threads it into the per-provider exchange. Always-on (no config flag): S256 is universally supported by conformant IdPs; a broken IdP surfaces as a token-exchange error. **GitHub caveat:** GitHub accepts the params but its PKCE *enforcement* is not guaranteed — treated as best-effort until a one-time live wrong-verifier test against a real GitHub OAuth App confirms rejection (see `SECURITY_AUDIT_CF425.md` A1).
 - **`TryAuth` + `Require` pattern** -- Authentication is split into non-rejecting `Try*Auth` functions and rejecting `Require*` middleware. This allows `OptionalAuth` and `RequireSessionOrAPIKey` to compose auth attempts without code duplication.
 - **Session cookies over JWTs** -- Sessions are stored in the database with a random session ID in the cookie. This allows server-side session revocation (logout, admin deactivation) without waiting for token expiry.
 - **Device code flow** -- Implements a simplified version of RFC 8628 for CLI authentication on headless/remote machines where the browser runs on a different machine. Uses human-readable codes (XXXX-XXXX) instead of long URLs.
