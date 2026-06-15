@@ -1570,7 +1570,7 @@ Common HTTP status codes:
 - `401` - Unauthorized (missing/invalid auth)
 - `403` - Forbidden (CSRF validation failure, insufficient permissions, email domain not permitted)
 - `404` - Not found
-- `409` - Conflict (e.g., API key limit reached)
+- `409` - Conflict (e.g., API key limit reached — the error message includes the actual maximum, e.g. "maximum of 500 API keys")
 - `410` - Gone (e.g., share expired)
 - `429` - Too many requests (rate limited)
 - `500` - Internal server error

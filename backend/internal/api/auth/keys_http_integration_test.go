@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -114,6 +115,39 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 
 		if result.Name != "API Key" {
 			t.Errorf("expected default name 'API Key', got %s", result.Name)
+		}
+	})
+
+	t.Run("returns 409 with limit in message when at key limit", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+
+		// Fill the user up to the maximum number of API keys.
+		for i := 0; i < db.MaxAPIKeysPerUser; i++ {
+			testutil.CreateTestAPIKey(t, env, user.ID, "hash"+strconv.Itoa(i), "Key "+strconv.Itoa(i))
+		}
+
+		ts := setupKeysTestServer(t, env)
+		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+
+		resp, err := client.Post("/api/v1/keys", api.CreateAPIKeyRequest{Name: "One Too Many"})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusConflict)
+
+		var body map[string]string
+		testutil.ParseJSON(t, resp, &body)
+
+		// The error message must surface the actual limit so the frontend can
+		// display it directly without its own hardcoded copy of the number.
+		limit := strconv.Itoa(db.MaxAPIKeysPerUser)
+		if !strings.Contains(body["error"], limit) {
+			t.Errorf("expected limit error to contain %q, got %q", limit, body["error"])
 		}
 	})
 
