@@ -94,6 +94,7 @@ docker load. If it flakes, use `make coverage`.
    - `CreateTestWebSessionWithToken()` - Create web session and return token
    - `CreateTestSyncFile()` - Insert sync file into database
    - `SeedTokensV2Card()` - Upsert a `session_card_tokens_v2` row (per-model tree) at the current version, for exercising per-model cost aggregation without the analyzer
+   - `MakeSessionListable()` - Backfill a summary + synced lines onto an already-created session so it passes the `db.ListableSessionPredicate` gate (0407); use for bare `CreateTestSessionWithProvider` sessions that must surface in filter dropdowns
    - `ParseJSON()` - Decode JSON response
    - `RequireStatus()` - Check HTTP status code
 

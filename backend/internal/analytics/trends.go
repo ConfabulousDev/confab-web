@@ -885,8 +885,10 @@ func (s *Store) aggregateFilterOptions(ctx context.Context, userID int64, shareA
 			SELECT DISTINCT id, user_id, owner_email FROM visible_sessions
 		),
 		owners_q AS (
-			SELECT COALESCE(array_agg(DISTINCT LOWER(owner_email) ORDER BY LOWER(owner_email)), ARRAY[]::text[]) AS owners
-			FROM visible_unique
+			SELECT COALESCE(array_agg(DISTINCT LOWER(vs.owner_email) ORDER BY LOWER(vs.owner_email)), ARRAY[]::text[]) AS owners
+			FROM visible_unique vs
+			JOIN sessions s ON vs.id = s.id
+			WHERE ` + db.ListableSessionPredicate("s") + `
 		),
 		repos_q AS (
 			SELECT COALESCE(array_agg(DISTINCT root ORDER BY root), ARRAY[]::text[]) AS repos
@@ -895,6 +897,7 @@ func (s *Store) aggregateFilterOptions(ctx context.Context, userID int64, shareA
 				FROM visible_unique vs
 				JOIN sessions s ON vs.id = s.id
 				WHERE s.git_info->>'repo_url' IS NOT NULL
+				  AND ` + db.ListableSessionPredicate("s") + `
 			) r
 		)
 		SELECT o.owners, r.repos FROM owners_q o, repos_q r
