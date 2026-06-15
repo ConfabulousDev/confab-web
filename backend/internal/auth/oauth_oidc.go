@@ -152,30 +152,9 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 		ctx := r.Context()
 		frontendURL := os.Getenv("FRONTEND_URL")
 
-		// Validate state to prevent CSRF
-		stateCookie, err := r.Cookie("oauth_state")
-		if err != nil || stateCookie.Value != r.URL.Query().Get("state") {
-			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
-			return
-		}
-
-		// Clear state cookie
-		clearCookie(w, "oauth_state")
-
-		// PKCE: the verifier cookie must be present; it is single-use and binds
-		// the auth code to this browser (r9zn). Same 400 shape as invalid state.
-		verifierCookie, err := r.Cookie("oauth_verifier")
-		if err != nil || verifierCookie.Value == "" {
-			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
-			return
-		}
-		clearCookie(w, "oauth_verifier")
-		codeVerifier := verifierCookie.Value
-
-		// Get authorization code
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			http.Error(w, "Missing code parameter", http.StatusBadRequest)
+		// Validate state + PKCE verifier + code (shared across providers).
+		code, codeVerifier, err := validateOAuthCallback(w, r)
+		if err != nil {
 			return
 		}
 
@@ -247,32 +226,9 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			return
 		}
 
-		// Check email domain restriction
-		if !validation.IsAllowedEmailDomain(user.Email, config.AllowedEmailDomains) {
-			log.Warn("Email domain not permitted", "email", user.Email, "provider", "oidc")
-			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
-				frontendURL,
-				url.QueryEscape("Your email domain is not permitted. Contact your administrator."))
-			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Check user cap
-		allowed, err := CanUserLogin(ctx, database, user.Email)
-		if err != nil {
-			log.Error("Failed to check user login eligibility", "error", err, "email", user.Email)
-			errorURL := fmt.Sprintf("%s/login?error=server_error&error_description=%s",
-				frontendURL,
-				url.QueryEscape("An error occurred. Please try again later."))
-			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
-			return
-		}
-		if !allowed {
-			log.Warn("User cap reached, login denied", "email", user.Email)
-			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
-				frontendURL,
-				url.QueryEscape("This application has reached its user limit. Please contact the administrator."))
-			http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+		// Check email domain restriction + user cap (shared across providers).
+		if err := checkUserEligibility(ctx, database, user.Email, config.AllowedEmailDomains); err != nil {
+			redirectUserIneligible(w, r, frontendURL, "oidc", user.Email, err)
 			return
 		}
 
