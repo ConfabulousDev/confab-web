@@ -71,33 +71,38 @@ func hasLabel(card *TrendsCostDistributionCard, label string) bool {
 	return false
 }
 
-// TestBuildCostDistribution_DecadesUpToMax: the bands are one decade per power of 10
-// from $0.01 up to the band containing the max value. There is NO "< $0.01" floor
-// band, and the sub-cent value ($0.005) is excluded entirely.
+// TestBuildCostDistribution_DecadesUpToMax: the first band merges the two sub-$1
+// decades into a single $0.01–$1 band (bj37); decades from $1 up are one per power
+// of 10 up to the band containing the max value. There is NO "< $0.01" floor band,
+// and the sub-cent value ($0.005) is excluded entirely.
 func TestBuildCostDistribution_DecadesUpToMax(t *testing.T) {
 	// max = 50 → top decade [$10, $100). The 0.005 value is dropped.
 	values := decs(t, "0.005", "0.05", "0.50", "5.00", "50.00")
 	card := buildCostDistribution(values, 4, 4)
 
-	want := []string{"$0.01 – $0.10", "$0.10 – $1", "$1 – $10", "$10 – $100"}
+	want := []string{"$0.01 – $1", "$1 – $10", "$10 – $100"}
 	if !eqStrings(labelsOf(card), want) {
 		t.Fatalf("labels: got %v want %v", labelsOf(card), want)
 	}
 	if hasLabel(card, "< $0.01") {
 		t.Fatal("floor band '< $0.01' must not be present")
 	}
-	// Each priced value lands in its own band; the sub-cent value contributes nowhere.
-	for label, total := range map[string]string{
-		"$0.01 – $0.10": "0.05",
-		"$0.10 – $1":    "0.50",
-		"$1 – $10":      "5.00",
-		"$10 – $100":    "50.00",
+	// Both sub-$1 values (0.05, 0.50) fold into the merged first band; $5 and $50
+	// land in their own decades. The sub-cent value contributes nowhere.
+	for _, c := range []struct {
+		label string
+		count int
+		total string
+	}{
+		{"$0.01 – $1", 2, "0.55"},
+		{"$1 – $10", 1, "5.00"},
+		{"$10 – $100", 1, "50.00"},
 	} {
-		b := bucketByLabelI(t, card, label)
-		if b.SessionCount != 1 {
-			t.Errorf("band %q count: got %d want 1", label, b.SessionCount)
+		b := bucketByLabelI(t, card, c.label)
+		if b.SessionCount != c.count {
+			t.Errorf("band %q count: got %d want %d", c.label, b.SessionCount, c.count)
 		}
-		decEqual(t, b.TotalUSD, total)
+		decEqual(t, b.TotalUSD, c.total)
 	}
 }
 
@@ -109,8 +114,7 @@ func TestBuildCostDistribution_GrowsToLargeMax(t *testing.T) {
 	card := buildCostDistribution(values, 2, 2)
 
 	want := []string{
-		"$0.01 – $0.10",
-		"$0.10 – $1",
+		"$0.01 – $1",
 		"$1 – $10",
 		"$10 – $100",
 		"$100 – $1K",
@@ -125,8 +129,8 @@ func TestBuildCostDistribution_GrowsToLargeMax(t *testing.T) {
 	if b := bucketByLabelI(t, card, "$1M – $10M"); b.SessionCount != 1 {
 		t.Errorf("top band count: got %d want 1", b.SessionCount)
 	}
-	if b := bucketByLabelI(t, card, "$0.10 – $1"); b.SessionCount != 1 {
-		t.Errorf("$0.10–$1 band count: got %d want 1", b.SessionCount)
+	if b := bucketByLabelI(t, card, "$0.01 – $1"); b.SessionCount != 1 {
+		t.Errorf("$0.01–$1 band count: got %d want 1", b.SessionCount)
 	}
 	// An empty middle decade is still present with count 0.
 	if b := bucketByLabelI(t, card, "$1K – $10K"); b.SessionCount != 0 {
@@ -135,8 +139,10 @@ func TestBuildCostDistribution_GrowsToLargeMax(t *testing.T) {
 }
 
 // TestBuildCostDistribution_BoundariesAreHalfOpen pins the half-open [lo, hi) rule: a
-// value exactly on a decade edge belongs to the HIGHER band, $0.01 is included (it is
-// NOT < $0.01), and a sub-cent value just under the threshold is excluded.
+// value exactly on a band edge belongs to the HIGHER band, $0.01 is included (it is
+// NOT < $0.01), and a sub-cent value just under the threshold is excluded. The merged
+// first band ($0.01–$1) has a ×100 first step, so 1.00 sits exactly on its upper edge
+// and falls into $1–$10 (bj37).
 func TestBuildCostDistribution_BoundariesAreHalfOpen(t *testing.T) {
 	// max = 10 → top decade [$10, $100). Values sit exactly on edges; 0.009 is dropped.
 	values := decs(t, "0.009", "0.01", "0.10", "1.00", "10.00")
@@ -146,10 +152,9 @@ func TestBuildCostDistribution_BoundariesAreHalfOpen(t *testing.T) {
 		t.Fatal("floor band '< $0.01' must not be present")
 	}
 	wantCounts := map[string]int{
-		"$0.01 – $0.10": 1, // 0.01 (0.009 excluded)
-		"$0.10 – $1":    1, // 0.10
-		"$1 – $10":      1, // 1.00
-		"$10 – $100":    1, // 10.00
+		"$0.01 – $1": 2, // 0.01 and 0.10 (0.009 excluded); merged sub-$1 band
+		"$1 – $10":   1, // 1.00 (on-edge → higher band)
+		"$10 – $100": 1, // 10.00 (on-edge → higher band)
 	}
 	for label, want := range wantCounts {
 		if b := bucketByLabelI(t, card, label); b.SessionCount != want {
@@ -164,13 +169,13 @@ func TestBuildCostDistribution_ExcludesSubCent(t *testing.T) {
 	values := decs(t, "-1.00", "0.00", "0.005", "0.009", "0.05", "50.00")
 	card := buildCostDistribution(values, 2, 2)
 
-	want := []string{"$0.01 – $0.10", "$0.10 – $1", "$1 – $10", "$10 – $100"}
+	want := []string{"$0.01 – $1", "$1 – $10", "$10 – $100"}
 	if !eqStrings(labelsOf(card), want) {
 		t.Fatalf("labels: got %v want %v", labelsOf(card), want)
 	}
 	// Only the two priced values survive.
-	if b := bucketByLabelI(t, card, "$0.01 – $0.10"); b.SessionCount != 1 {
-		t.Errorf("$0.01–$0.10 count: got %d want 1", b.SessionCount)
+	if b := bucketByLabelI(t, card, "$0.01 – $1"); b.SessionCount != 1 {
+		t.Errorf("$0.01–$1 count: got %d want 1", b.SessionCount)
 	}
 	if b := bucketByLabelI(t, card, "$10 – $100"); b.SessionCount != 1 {
 		t.Errorf("$10–$100 count: got %d want 1", b.SessionCount)
@@ -210,16 +215,73 @@ func TestBuildCostDistribution_EmptyInput(t *testing.T) {
 }
 
 // TestBuildCostDistribution_BandEdges checks the numeric lo/hi edges: the FIRST band is
-// the $0.01–$0.10 decade (lo 0.01, not a 0-floor), and the top band is bounded.
+// the merged $0.01–$1 band (lo 0.01, hi 1 — not a 0-floor), and the top band is bounded.
 func TestBuildCostDistribution_BandEdges(t *testing.T) {
 	card := buildCostDistribution(decs(t, "5.00"), 1, 1) // max 5 → top [$1,$10)
-	first := bucketByLabelI(t, card, "$0.01 – $0.10")
-	if first.Lo != 0.01 || first.Hi == nil || *first.Hi != 0.10 {
-		t.Errorf("first band edges: lo=%v hi=%v want lo=0.01 hi=0.10", first.Lo, first.Hi)
+	first := bucketByLabelI(t, card, "$0.01 – $1")
+	if first.Lo != 0.01 || first.Hi == nil || *first.Hi != 1 {
+		t.Errorf("first band edges: lo=%v hi=%v want lo=0.01 hi=1", first.Lo, first.Hi)
 	}
 	top := bucketByLabelI(t, card, "$1 – $10")
 	if top.Lo != 1 || top.Hi == nil || *top.Hi != 10 {
 		t.Errorf("top edges: lo=%v hi=%v want lo=1 hi=10", top.Lo, top.Hi)
+	}
+}
+
+// TestDecadeEdges_MergedFirstBand pins the edge sequence: the first step is ×100
+// (0.01 → 1) so the two sub-$1 decades collapse into one $0.01–$1 band (bj37);
+// every step after is ×10. Below $0.01 there are no bands.
+func TestDecadeEdges_MergedFirstBand(t *testing.T) {
+	edgeStrs := func(max string) []string {
+		edges := decadeEdges(decimal.RequireFromString(max))
+		out := make([]string, len(edges))
+		for i, e := range edges {
+			out[i] = e.String()
+		}
+		return out
+	}
+	cases := []struct {
+		name string
+		max  string
+		want []string
+	}{
+		{"below threshold → no bands", "0.005", []string{"0.01"}},
+		{"sub-$1 max → single merged step", "0.5", []string{"0.01", "1"}},
+		{"on $1 → extends to $10 (half-open top)", "1", []string{"0.01", "1", "10"}},
+		{"single-digit max → 0.01,1,10", "5", []string{"0.01", "1", "10"}},
+		{"two-digit max → adds $100", "50", []string{"0.01", "1", "10", "100"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := edgeStrs(c.max); !eqStrings(got, c.want) {
+				t.Fatalf("decadeEdges(%s): got %v want %v", c.max, got, c.want)
+			}
+		})
+	}
+}
+
+// TestCostDistributionBucketIndex_MergedFirstBand checks half-open [lo,hi) assignment
+// against the non-uniform edge list [0.01, 1, 10, 100] (bands 0:[0.01,1) 1:[1,10)
+// 2:[10,100)): on-edge values go to the HIGHER band, and everything in [0.01, 1)
+// folds into the merged first band.
+func TestCostDistributionBucketIndex_MergedFirstBand(t *testing.T) {
+	edges := decadeEdges(decimal.RequireFromString("50")) // [0.01, 1, 10, 100]
+	cases := []struct {
+		v   string
+		idx int
+	}{
+		{"0.01", 0},  // lower edge of the merged band
+		{"0.99", 0},  // still in $0.01–$1
+		{"1.00", 1},  // on-edge → $1–$10
+		{"9.99", 1},  // top of $1–$10
+		{"10.00", 2}, // on-edge → $10–$100
+		{"50.00", 2}, // within [10,100)
+	}
+	for _, c := range cases {
+		got := costDistributionBucketIndex(decimal.RequireFromString(c.v), edges)
+		if got != c.idx {
+			t.Errorf("bucketIndex(%s): got %d want %d", c.v, got, c.idx)
+		}
 	}
 }
 

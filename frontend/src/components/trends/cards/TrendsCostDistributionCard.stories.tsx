@@ -37,11 +37,12 @@ function bucketsFor(
   }));
 }
 
-// Priced decades only — sub-cent sessions are excluded, so there is no '< $0.01' band.
-const BANDS_TO_100 = ['$0.01 – $0.10', '$0.10 – $1', '$1 – $10', '$10 – $100'];
+// The lowest band merges the two sub-$1 decades into $0.01–$1 (bj37); from $1 up it is
+// one band per power of 10. Sub-cent sessions are excluded, so there is no '< $0.01' band.
+const BANDS_TO_1K = ['$0.01 – $1', '$1 – $10', '$10 – $100', '$100 – $1K'];
 
 function buckets(counts: number[], totals: string[]): TrendsCostDistributionBucket[] {
-  return bucketsFor(BANDS_TO_100, counts, totals);
+  return bucketsFor(BANDS_TO_1K, counts, totals);
 }
 
 // Typical long-tail shape: many cheap sessions, a thin tail of expensive ones.
@@ -61,7 +62,7 @@ export const Default: Story = {
 export const SingleBand: Story = {
   args: {
     data: {
-      buckets: buckets([0, 6, 0, 0], ['0', '3.90', '0', '0']),
+      buckets: buckets([6, 0, 0, 0], ['3.90', '0', '0', '0']),
       stats: { p50: '0.62', p90: '0.81', p99: '0.95', avg: '0.65' },
       covered_session_count: 6,
       total_session_count: 6,
@@ -91,8 +92,7 @@ export const WideRange: Story = {
     data: {
       buckets: bucketsFor(
         [
-          '$0.01 – $0.10',
-          '$0.10 – $1',
+          '$0.01 – $1',
           '$1 – $10',
           '$10 – $100',
           '$100 – $1K',
@@ -101,8 +101,8 @@ export const WideRange: Story = {
           '$100K – $1M',
           '$1M – $10M',
         ],
-        [18, 27, 14, 5, 2, 0, 0, 0, 1],
-        ['1.10', '12.40', '58.00', '210.00', '900.00', '0', '0', '0', '2100000.00'],
+        [45, 14, 5, 2, 0, 0, 0, 1],
+        ['13.50', '58.00', '210.00', '900.00', '0', '0', '0', '2100000.00'],
       ),
       stats: { p50: '0.36', p90: '7.80', p99: '420.00', avg: '52.00' },
       covered_session_count: 67,

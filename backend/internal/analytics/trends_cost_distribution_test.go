@@ -152,9 +152,9 @@ func TestGetTrends_CostDistribution_PerSession(t *testing.T) {
 	if card.TimedOut {
 		t.Fatal("unexpected timed_out")
 	}
-	// max priced total is $50 → bands run from $0.01–$0.10 up to [$10, $100): four.
-	if len(card.Buckets) != 4 {
-		t.Fatalf("want 4 buckets ($0.01–$0.10 up to $10–$100, no floor), got %d", len(card.Buckets))
+	// max priced total is $50 → bands run from the merged $0.01–$1 up to [$10, $100): three.
+	if len(card.Buckets) != 3 {
+		t.Fatalf("want 3 buckets ($0.01–$1 up to $10–$100, no floor), got %d", len(card.Buckets))
 	}
 	for _, b := range card.Buckets {
 		if b.Label == "< $0.01" {
@@ -167,8 +167,7 @@ func TestGetTrends_CostDistribution_PerSession(t *testing.T) {
 		count int
 		total string
 	}{
-		{"$0.01 – $0.10", 1, "0.05"},
-		{"$0.10 – $1", 1, "0.50"},
+		{"$0.01 – $1", 2, "0.55"}, // 0.05 + 0.50 fold into the merged sub-$1 band
 		{"$1 – $10", 1, "5.00"},
 		{"$10 – $100", 1, "50.00"},
 	}
@@ -228,7 +227,7 @@ func TestGetTrends_CostDistribution_Percentiles(t *testing.T) {
 // TestGetTrends_CostDistribution_ModelFilter: under ?model=opus-4-5 the unit
 // becomes per-(session, model). Only opus-4-5's portion of each matched session
 // counts — so cd-big (full-session 5.00, opus-only 0.50) re-buckets from $1–$10
-// down to $0.10–$1; cd-mid (gpt-5 only) drops out entirely; the synthetic model on
+// down to the merged $0.01–$1 band; cd-mid (gpt-5 only) drops out entirely; the synthetic model on
 // cd-huge contributes no data point. cd-tiny's opus-only 0.005 is sub-cent and is
 // EXCLUDED, so it neither buckets nor counts as covered.
 func TestGetTrends_CostDistribution_ModelFilter(t *testing.T) {
@@ -253,10 +252,9 @@ func TestGetTrends_CostDistribution_ModelFilter(t *testing.T) {
 	// Per-(session, opus-4-5) data points >= $0.01: 0.05, 0.50, 50.00 (cd-tiny's
 	// 0.005 is excluded).
 	wantCounts := map[string]int{
-		"$0.01 – $0.10": 1, // cd-small 0.05
-		"$0.10 – $1":    1, // cd-big   0.50 (opus only — NOT 5.00)
-		"$1 – $10":      0,
-		"$10 – $100":    1, // cd-huge  50.00
+		"$0.01 – $1": 2, // cd-small 0.05 + cd-big 0.50 (opus only — NOT 5.00)
+		"$1 – $10":   0, // empty: cd-big re-scoped DOWN out of this decade
+		"$10 – $100": 1, // cd-huge  50.00
 	}
 	for label, want := range wantCounts {
 		b := bucketByLabel(t, card, label)
@@ -264,8 +262,10 @@ func TestGetTrends_CostDistribution_ModelFilter(t *testing.T) {
 			t.Errorf("band %q count under ?model=opus-4-5: got %d want %d", label, b.SessionCount, want)
 		}
 	}
-	// cd-big's opus-only portion proves per-(session,model) re-scoping.
-	cdDecEq(t, bucketByLabel(t, card, "$0.10 – $1").TotalUSD, "0.50")
+	// cd-big's opus-only portion proves per-(session,model) re-scoping: its 0.50 lands
+	// in the merged sub-$1 band (total 0.05 + 0.50) and $1–$10 is empty — if the full
+	// 5.00 session total had leaked through, $1–$10 would be non-empty instead.
+	cdDecEq(t, bucketByLabel(t, card, "$0.01 – $1").TotalUSD, "0.55")
 
 	// cd-tiny's only opus pair is sub-cent → not covered. Matched sessions still
 	// number 4 (the CTE-level model filter is independent of the price threshold).

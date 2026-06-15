@@ -9,15 +9,17 @@ import type {
   TrendsCostDistributionBucket,
 } from '@/schemas/api';
 
-// Representative dynamic log10 bands — priced decades only ($0.01 up). Sub-cent
-// sessions are excluded at compute time (3tr4), so no '< $0.01' floor band arrives.
-const LABELS = ['$0.01 – $0.10', '$0.10 – $1', '$1 – $10', '$10 – $100'];
+// Representative dynamic log10 bands — the lowest band merges the two sub-$1 decades
+// into $0.01–$1 (bj37); from $1 up it is one band per power of 10. Sub-cent sessions
+// are excluded at compute time (3tr4), so no '< $0.01' floor band arrives.
+const LABELS = ['$0.01 – $1', '$1 – $10', '$10 – $100', '$100 – $1K'];
+const EDGES = [0.01, 1, 10, 100, 1000];
 
 function buckets(counts: number[], totals: string[]): TrendsCostDistributionBucket[] {
   return LABELS.map((label, i) => ({
     label,
-    lo: i === 0 ? 0.01 : i,
-    hi: i < LABELS.length - 1 ? i + 1 : null,
+    lo: EDGES[i] ?? 0.01,
+    hi: i < LABELS.length - 1 ? (EDGES[i + 1] ?? null) : null,
     session_count: counts[i] ?? 0,
     total_usd: totals[i] ?? '0',
   }));
@@ -175,9 +177,9 @@ describe('TrendsCostDistributionCard', () => {
 
 describe('CostDistributionTooltip', () => {
   const bucket: TrendsCostDistributionBucket = {
-    label: '$0.10 – $1',
-    lo: 2,
-    hi: 3,
+    label: '$0.01 – $1',
+    lo: 0.01,
+    hi: 1,
     session_count: 34,
     total_usd: '14.80',
   };
@@ -198,7 +200,7 @@ describe('CostDistributionTooltip', () => {
 
   it('shows the band label, the session count, and the band total', () => {
     render(<CostDistributionTooltip active payload={payloadFor(bucket)} unit="sessions" />);
-    expect(screen.getByText('$0.10 – $1')).toBeInTheDocument();
+    expect(screen.getByText('$0.01 – $1')).toBeInTheDocument();
     expect(screen.getByText(/34 sessions/)).toBeInTheDocument();
     expect(screen.getByText(/\$14\.80 total/)).toBeInTheDocument();
   });

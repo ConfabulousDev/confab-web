@@ -536,8 +536,8 @@ const TrendsCostByModelCardSchema = z.object({
 });
 
 // y1w5: fixed log-scale histogram of per-session cost. `label` is the display
-// string the card renders verbatim ('$0.10 – $1'); `lo`/`hi` are the band's
-// dollar edges (half-open [lo, hi); `hi` is null for the unbounded '> $10' band).
+// string the card renders verbatim ('$0.01 – $1'); `lo`/`hi` are the band's
+// dollar edges (half-open [lo, hi); `hi` is null for the unbounded top band).
 // `session_count` is the data-point count — sessions by default, or (session,
 // model) pairs when a model filter is active.
 const TrendsCostDistributionBucketSchema = z.object({
