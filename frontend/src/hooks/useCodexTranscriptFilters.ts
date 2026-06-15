@@ -15,8 +15,11 @@
 // `DEFAULT_HIDDEN` is derived from `DEFAULT_CODEX_FILTER_STATE` so the two
 // can never drift.
 
-import { useCallback, useMemo } from 'react';
-import { useURLFilters, type URLFiltersConfig } from './useURLFilters';
+import { useCallback } from 'react';
+import {
+  useProviderTranscriptFilters,
+  type ProviderTranscriptFiltersConfig,
+} from './useProviderTranscriptFilters';
 import {
   DEFAULT_CODEX_FILTER_STATE,
   type CodexCategory,
@@ -82,13 +85,17 @@ export function stateFromPaths(paths: string[]): CodexFilterState {
 
 export const DEFAULT_HIDDEN: string[] = pathsFromState(DEFAULT_CODEX_FILTER_STATE);
 
-const CODEX_FILTERS_CONFIG: URLFiltersConfig = {
-  hide: { type: 'string[]', default: DEFAULT_HIDDEN, paramName: 'hide' },
+const HIERARCHICAL_KEYS = {
+  assistant: ASSISTANT_SUBS,
+  tool_call: TOOL_CALL_SUBS,
 };
 
-interface HideFilters {
-  hide: string[];
-}
+const CONFIG = {
+  defaultState: DEFAULT_CODEX_FILTER_STATE,
+  pathsFromState,
+  stateFromPaths,
+  hierarchicalKeys: HIERARCHICAL_KEYS,
+} satisfies ProviderTranscriptFiltersConfig<CodexFilterState>;
 
 export interface CodexTranscriptFiltersResult {
   filterState: CodexFilterState;
@@ -99,59 +106,16 @@ export interface CodexTranscriptFiltersResult {
 }
 
 export function useCodexTranscriptFilters(): CodexTranscriptFiltersResult {
-  const { filters, setFilter } = useURLFilters<HideFilters>(CODEX_FILTERS_CONFIG);
-
-  const filterState = useMemo(() => stateFromPaths(filters.hide), [filters.hide]);
-
-  const setFilterState = useCallback(
-    (state: CodexFilterState, opts?: { replace?: boolean }) => {
-      setFilter('hide', pathsFromState(state), opts);
-    },
-    [setFilter],
-  );
-
-  const toggleCategory = useCallback(
-    (category: CodexCategory) => {
-      const next: CodexFilterState = { ...filterState };
-      if (category === 'assistant') {
-        const allVisible = ASSISTANT_SUBS.every((k) => filterState.assistant[k]);
-        next.assistant = { commentary: !allVisible, final: !allVisible };
-      } else if (category === 'tool_call') {
-        const allVisible = TOOL_CALL_SUBS.every((k) => filterState.tool_call[k]);
-        next.tool_call = {
-          exec_command: !allVisible,
-          apply_patch: !allVisible,
-          web_search: !allVisible,
-          generic: !allVisible,
-        };
-      } else {
-        next[category] = !filterState[category];
-      }
-      setFilter('hide', pathsFromState(next));
-    },
-    [filterState, setFilter],
-  );
+  const { filterState, setFilterState, toggleCategory, toggleSubcategory } =
+    useProviderTranscriptFilters<CodexFilterState>(CONFIG);
 
   const toggleAssistantSubcategory = useCallback(
-    (sub: CodexAssistantSubcategory) => {
-      const next: CodexFilterState = {
-        ...filterState,
-        assistant: { ...filterState.assistant, [sub]: !filterState.assistant[sub] },
-      };
-      setFilter('hide', pathsFromState(next));
-    },
-    [filterState, setFilter],
+    (sub: CodexAssistantSubcategory) => toggleSubcategory('assistant', sub),
+    [toggleSubcategory],
   );
-
   const toggleToolCallSubcategory = useCallback(
-    (sub: CodexToolCallSubcategory) => {
-      const next: CodexFilterState = {
-        ...filterState,
-        tool_call: { ...filterState.tool_call, [sub]: !filterState.tool_call[sub] },
-      };
-      setFilter('hide', pathsFromState(next));
-    },
-    [filterState, setFilter],
+    (sub: CodexToolCallSubcategory) => toggleSubcategory('tool_call', sub),
+    [toggleSubcategory],
   );
 
   return {

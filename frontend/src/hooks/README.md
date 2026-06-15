@@ -11,9 +11,12 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useURLFilters.ts` | Generic URL-synced filter state hook (string, string[], boolean, dateRange fields) |
 | `useURLFilters.test.ts` | Tests for `useURLFilters` |
 | `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, providers, query) via `useURLFilters` |
-| `useClaudeTranscriptFilters.ts` | URL-synced Claude transcript message category filters via `useURLFilters` |
-| `useCodexTranscriptFilters.ts` | URL-synced Codex transcript category filters (CF-361) via `useURLFilters`. Shares the `?hide=` slot with `useClaudeTranscriptFilters`; foreign tokens are no-ops on read |
+| `useProviderTranscriptFilters.ts` | Shared machinery for the per-provider transcript filters (x5w2): owns the `?hide=` URL sync, derives typed `filterState` via the provider's `stateFromPaths`, and provides generic category (tri-state for hierarchical) + subcategory toggles. Toggles operate on the canonical hidden-path set so the generic never indexes the opaque state |
+| `useClaudeTranscriptFilters.ts` | URL-synced Claude transcript message category filters (thin `useProviderTranscriptFilters` wrapper); exports `pathsFromState`/`stateFromPaths`/`DEFAULT_HIDDEN` |
+| `useCodexTranscriptFilters.ts` | URL-synced Codex transcript category filters (CF-361) via `useProviderTranscriptFilters`. Shares the `?hide=` slot with the Claude/OpenCode hooks; foreign tokens are no-ops on read |
+| `useOpenCodeTranscriptFilters.ts` | URL-synced OpenCode transcript category filters (x5w2, flat: `user`/`assistant`/`tool`/`unknown`). All visible by default (empty `?hide=`); shares the `?hide=` slot with Claude/Codex. Consumed by `opencodeAdapter` |
 | `useCodexTranscriptFilters.test.ts` | Tests for the Codex transcript filter hook (default state, round-trip, toggles, foreign-token tolerance) |
+| `useClaudeTranscriptFilters.test.ts` / `useOpenCodeTranscriptFilters.test.tsx` | Round-trip, default-hidden, foreign-token, and (OpenCode) URL-sync toggle tests |
 | `useLoadSession.ts` | Single session loading with typed error categories |
 | `useAnalyticsPolling.ts` | Session analytics polling with conditional 304 support |
 | `useSmartPolling.ts` | Generic smart polling with visibility/activity awareness |
@@ -54,8 +57,10 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 |------|-----------|-------------|
 | `useURLFilters` | `<T>(config) => URLFiltersResult<T>` | Generic URL filter persistence. Supports string, string[], boolean, and dateRange fields. Provides `setFilter`, `setAll`, `toggleArrayValue`, `clearAll`, and `commitHistory`. |
 | `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, providers, query) to URL search params via `useURLFilters`. |
-| `useClaudeTranscriptFilters` | `() => ClaudeTranscriptFiltersResult` | Reads/writes Claude transcript message category visibility to URL `hide` param via `useURLFilters`. Provides toggle helpers for categories and subcategories. |
-| `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel of `useClaudeTranscriptFilters`. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
+| `useProviderTranscriptFilters` | `<TState>(config) => { filterState, setFilterState, toggleCategory, toggleSubcategory }` | x5w2 — shared `?hide=` URL sync + tri-state category / subcategory toggles for the per-provider transcript filters. `config` supplies `defaultState`, `pathsFromState`, `stateFromPaths`, and `hierarchicalKeys`. Backs the three hooks below. |
+| `useClaudeTranscriptFilters` | `() => ClaudeTranscriptFiltersResult` | Claude transcript message category visibility (URL `hide`), built on `useProviderTranscriptFilters`. Typed toggles for categories and subcategories (user/assistant/attachment). |
+| `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |
+| `useOpenCodeTranscriptFilters` | `() => { filterState, setFilterState, toggleCategory }` | x5w2 — OpenCode parallel (flat categories: `user`/`assistant`/`tool`/`unknown`). All visible by default; shares the `?hide=` slot. Consumed by `opencodeAdapter.useFilters`. |
 | `useTranscriptSearch` | `<T>(items, extractText) => TranscriptSearchResult` | Generic over item type. Builds a lowercased search index via `extractText`, debounces query (150ms search, 300ms highlight), provides match navigation. Shared by the Claude (`extractClaudeMessageText` from `services/claudeMessageParser`), Codex (`extractCodexItemText` from `components/transcript/codex`), and OpenCode (`extractOpenCodeItemText` from `components/session`) timelines. |
 | `useShareDialog` | `({ sessionId, userEmail?, onShareCreated? }) => UseShareDialogReturn` | Full share dialog state: form fields, email validation (Zod), create/revoke API calls. |
 | `useDropdown` | `<T extends HTMLElement>(initialOpen?: boolean) => UseDropdownReturn<T>` | Open/close state with click-outside detection and Escape key. `initialOpen` defaults to `false`; pass `true` in stories/tests to render open. |
