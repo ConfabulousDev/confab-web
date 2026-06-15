@@ -12,8 +12,20 @@ vi.mock('../CodeBlock', () => ({
 }));
 
 vi.mock('../BashOutput', () => ({
-  default: ({ output }: { output: string }) => (
-    <pre data-testid="bash-output">{output}</pre>
+  default: ({ output, interrupted, returnCodeInterpretation, persistedOutputPath }: {
+    output: string;
+    interrupted?: boolean;
+    returnCodeInterpretation?: string;
+    persistedOutputPath?: string;
+  }) => (
+    <pre
+      data-testid="bash-output"
+      data-interrupted={String(!!interrupted)}
+      data-rci={returnCodeInterpretation ?? ''}
+      data-persisted-path={persistedOutputPath ?? ''}
+    >
+      {output}
+    </pre>
   ),
 }));
 
@@ -83,6 +95,48 @@ describe('ContentBlock', () => {
     };
     const { getByTestId } = render(<ContentBlock block={block} toolName="Bash" />);
     expect(getByTestId('bash-output')).toBeInTheDocument();
+  });
+
+  it('threads toolUseResult metadata into BashOutput for a Bash result', () => {
+    const block: ContentBlockType = {
+      type: 'tool_result',
+      tool_use_id: 't1',
+      content: 'no matches',
+    };
+    const { getByTestId } = render(
+      <ContentBlock
+        block={block}
+        toolName="Bash"
+        toolUseResult={{
+          stdout: 'no matches',
+          interrupted: true,
+          returnCodeInterpretation: 'No matches found',
+          persistedOutputPath: '/tmp/p/tool-results/abc.txt',
+          persistedOutputSize: 1024,
+        }}
+      />
+    );
+    const out = getByTestId('bash-output');
+    expect(out.getAttribute('data-interrupted')).toBe('true');
+    expect(out.getAttribute('data-rci')).toBe('No matches found');
+    expect(out.getAttribute('data-persisted-path')).toBe('/tmp/p/tool-results/abc.txt');
+  });
+
+  it('ignores toolUseResult metadata for a non-Bash result', () => {
+    const block: ContentBlockType = {
+      type: 'tool_result',
+      tool_use_id: 't1',
+      content: 'plain output line',
+    };
+    const { queryByTestId } = render(
+      <ContentBlock
+        block={block}
+        toolName="Read"
+        toolUseResult={{ interrupted: true }}
+      />
+    );
+    // Non-Bash results route to CodeBlock, not BashOutput.
+    expect(queryByTestId('bash-output')).toBeNull();
   });
 
   it('applies an error indicator on tool_result with is_error=true', () => {

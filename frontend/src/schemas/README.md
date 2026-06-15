@@ -52,7 +52,7 @@ All types are inferred from Zod schemas via `z.infer<>`:
 - `UnknownBlock` -- Forward-compatibility catch-all
 
 **Message types** (discriminated union on `type`):
-- `UserMessage` -- User prompts and tool results
+- `UserMessage` -- User prompts and tool results. Its `toolUseResult` sibling validates against `ToolUseResultSchema`: a union of `string`, the typed `BashToolResultSchema` (CC ≥ 2.1.143 Bash fields — `stdout`/`stderr`/`exitCode`/`interrupted`/`isImage`/`noOutputExpected`/`returnCodeInterpretation`/`persistedOutputPath`/`persistedOutputSize`, all optional, `.passthrough()`), `unknown[]`, and an open `z.record` catch-all (last). The typed Bash variant is exported as `BashToolResult`.
 - `AssistantMessage` -- Claude responses with token usage
 - `SystemMessage` -- System events (compact_boundary, api_error, turn_duration, away_summary, etc.)
 - `SummaryMessage`, `PRLinkMessage`, `QueueOperationMessage`, `FileHistorySnapshot`

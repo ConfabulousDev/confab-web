@@ -94,13 +94,24 @@ type ContentBlock struct {
 	ToolUseResult *ToolUseResult         `json:"toolUseResult,omitempty"` // For tool_result blocks (agent results)
 }
 
-// ToolUseResult contains metadata from subagent/Task tool executions.
-// This is embedded in tool_result content blocks when the tool was a Task/agent.
+// ToolUseResult contains metadata from tool executions, embedded in tool_result
+// content blocks. Subagent/Task results carry the agent fields; Bash results
+// (Claude Code >= 2.1.143) carry the Bash fields below.
 type ToolUseResult struct {
 	AgentID           string      `json:"agentId,omitempty"`           // Subagent identifier (present for agent results)
 	Usage             *TokenUsage `json:"usage,omitempty"`             // Cumulative token usage for the agent
 	TotalTokens       int64       `json:"totalTokens,omitempty"`       // Total tokens used by the agent
 	TotalToolUseCount int         `json:"totalToolUseCount,omitempty"` // Number of tool calls made by the agent
+
+	// Bash tool result fields (Claude Code >= 2.1.143). interrupted/isImage/
+	// noOutputExpected appear on every recent Bash result; persistedOutput* and
+	// returnCodeInterpretation only when their condition is met.
+	Interrupted              bool   `json:"interrupted,omitempty"`              // User interrupted the command
+	IsImage                  bool   `json:"isImage,omitempty"`                  // Output is an image rather than text
+	NoOutputExpected         bool   `json:"noOutputExpected,omitempty"`         // Empty stdout is expected (e.g. backgrounded command)
+	ReturnCodeInterpretation string `json:"returnCodeInterpretation,omitempty"` // Human-readable interpretation of a non-zero exit (e.g. "No matches found")
+	PersistedOutputPath      string `json:"persistedOutputPath,omitempty"`      // Local path where output spilled when it exceeded the inline cap
+	PersistedOutputSize      int64  `json:"persistedOutputSize,omitempty"`      // Bytes spilled to PersistedOutputPath
 }
 
 // ParseLine parses a single JSONL line for analytics purposes.
@@ -362,6 +373,28 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 	}
 	if totalToolUseCount, ok := m["totalToolUseCount"].(float64); ok {
 		result.TotalToolUseCount = int(totalToolUseCount)
+	}
+
+	// Bash tool result fields (CC >= 2.1.143). Hand-extracted like the rest of
+	// this function — struct json tags do nothing here, so each field needs its
+	// own assertion block.
+	if interrupted, ok := m["interrupted"].(bool); ok {
+		result.Interrupted = interrupted
+	}
+	if isImage, ok := m["isImage"].(bool); ok {
+		result.IsImage = isImage
+	}
+	if noOutputExpected, ok := m["noOutputExpected"].(bool); ok {
+		result.NoOutputExpected = noOutputExpected
+	}
+	if rci, ok := m["returnCodeInterpretation"].(string); ok {
+		result.ReturnCodeInterpretation = rci
+	}
+	if path, ok := m["persistedOutputPath"].(string); ok {
+		result.PersistedOutputPath = path
+	}
+	if size, ok := m["persistedOutputSize"].(float64); ok {
+		result.PersistedOutputSize = int64(size)
 	}
 
 	// Parse usage sub-object
