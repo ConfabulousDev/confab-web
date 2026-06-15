@@ -5,19 +5,18 @@
 // codexAdapter. The transcript pane is intentionally leaner than Claude/Codex
 // (no minimap bar / cost rail / search yet) but real.
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
   fetchParsedOpenCodeTranscript,
   fetchNewOpenCodeLines,
   normalizeOpenCodeLines,
   extractOpenCodeModel,
 } from '@/services/opencodeTranscriptService';
+import { useOpenCodeTranscriptFilters } from '@/hooks/useOpenCodeTranscriptFilters';
 import {
   DEFAULT_OPENCODE_FILTER_STATE,
   countOpenCodeCategories,
   opencodeItemMatchesFilter,
-  type OpenCodeCategory,
-  type OpenCodeFilterState,
   type OpenCodeRenderItem,
 } from '@/components/session/opencodeCategories';
 import { calculateCost } from '@/utils/tokenStats';
@@ -88,14 +87,11 @@ export const opencodeAdapter: OpenCodeAdapter = {
   },
 
   useFilters() {
-    const [state, setState] = useState<OpenCodeFilterState>({ ...DEFAULT_OPENCODE_FILTER_STATE });
+    const { filterState, setFilterState, toggleCategory } = useOpenCodeTranscriptFilters();
     return {
-      state,
-      setState: (next: OpenCodeFilterState) => setState(next),
-      toggles: {
-        toggleCategory: (cat: OpenCodeCategory) =>
-          setState((prev) => ({ ...prev, [cat]: !prev[cat] })),
-      },
+      state: filterState,
+      setState: setFilterState,
+      toggles: { toggleCategory },
     };
   },
 
