@@ -1,4 +1,5 @@
-import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
+import { CardWrapper, StatRow } from './Card';
+import { useCardState } from './useCardState';
 import { formatResponseTime } from '@/utils/compactionStats';
 import { formatModelDisplayName } from '@/utils/formatting';
 import {
@@ -94,17 +95,8 @@ export function SessionCardForRegistry(
 }
 
 export function SessionCard({ data, loading, error, provider }: SessionCardProps) {
-  if (error && !data) {
-    return <CardError title="Session" error={error} icon={TerminalIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Session" icon={TerminalIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Session', icon: TerminalIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 

@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
-import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
+import { CardWrapper, StatRow } from './Card';
+import { useCardState } from './useCardState';
 import { CostAmount } from '@/components/CostAmount';
 import { formatTokenCount } from '@/utils/tokenStats';
 import { formatModelKey } from '@/utils/formatting';
@@ -93,17 +94,8 @@ function ModelSection({ modelKey, model, defaultExpanded }: ModelSectionProps) {
 }
 
 export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardData>) {
-  if (error && !data) {
-    return <CardError title="Tokens" error={error} icon={TokenIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Tokens" icon={TokenIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Tokens', icon: TokenIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 

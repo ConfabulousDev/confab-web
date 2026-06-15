@@ -1,4 +1,5 @@
-import { CardWrapper, CardLoading, CardError } from './Card';
+import { CardWrapper } from './Card';
+import { useCardState } from './useCardState';
 import { BranchIcon, RobotIcon, TokenIcon, DurationIcon, CheckCircleIcon } from '@/components/icons';
 import type { WorkflowsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -15,17 +16,8 @@ import styles from './WorkflowsCard.module.css';
  * they are labelled "Run 1…N" with the opaque runId in a hover title.
  */
 export function WorkflowsCard({ data, loading, error }: CardProps<WorkflowsCardData>) {
-  if (error && !data) {
-    return <CardError title="Workflows" error={error} icon={BranchIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Workflows" icon={BranchIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Workflows', icon: BranchIcon });
+  if (guard) return guard;
 
   if (!data || data.runs.length === 0) return null;
 

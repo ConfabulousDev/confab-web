@@ -1,4 +1,5 @@
-import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
+import { CardWrapper, StatRow } from './Card';
+import { useCardState } from './useCardState';
 import { ShieldIcon } from '@/components/icons';
 import type { RedactionsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -8,17 +9,8 @@ import type { CardProps } from './types';
  * Hidden entirely if no redactions were found.
  */
 export function RedactionsCard({ data, loading, error }: CardProps<RedactionsCardData>) {
-  if (error && !data) {
-    return <CardError title="Redactions" error={error} icon={ShieldIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Redactions" icon={ShieldIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Redactions', icon: ShieldIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 

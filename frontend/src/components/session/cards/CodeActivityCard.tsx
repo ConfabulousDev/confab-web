@@ -1,4 +1,5 @@
-import { CardWrapper, CardLoading, CardError, StatRow, SectionHeader } from './Card';
+import { CardWrapper, StatRow, SectionHeader } from './Card';
+import { useCardState } from './useCardState';
 import { CodeIcon, SearchIcon, FileIcon } from '@/components/icons';
 import type { CodeActivityCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -99,17 +100,8 @@ export function CodeActivityCardForRegistry(
 }
 
 export function CodeActivityCard({ data, loading, error, provider }: CodeActivityCardProps) {
-  if (error && !data) {
-    return <CardError title="Code Activity" error={error} icon={CodeIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Code Activity" icon={CodeIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Code Activity', icon: CodeIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 

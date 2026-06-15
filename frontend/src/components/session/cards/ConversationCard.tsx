@@ -1,4 +1,5 @@
-import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
+import { CardWrapper, StatRow } from './Card';
+import { useCardState } from './useCardState';
 import {
   ConversationIcon,
   RefreshIcon,
@@ -70,17 +71,8 @@ export function ConversationCardForRegistry(
 }
 
 export function ConversationCard({ data, loading, error, provider, tokenSpeed }: ConversationCardProps) {
-  if (error && !data) {
-    return <CardError title="Conversation" error={error} icon={ConversationIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Conversation" icon={ConversationIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Conversation', icon: ConversationIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 
