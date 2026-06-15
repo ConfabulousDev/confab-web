@@ -66,9 +66,15 @@ func (s *RateLimitedService) SendShareInvitation(ctx context.Context, userID int
 	return s.service.SendShareInvitation(ctx, params)
 }
 
-// checkRateLimit checks if sending n emails would exceed the rate limit
-// Returns nil if allowed, ErrRateLimitExceeded if not
-func (s *RateLimitedService) checkRateLimit(userID int64, count int) error {
+// CheckRateLimit reports whether sending count emails for userID would stay
+// within the per-hour limit, WITHOUT recording the sends. It lets a caller
+// fail a whole batch up front (e.g. a multi-recipient share) before any
+// individual email is sent, so a 50-recipient share can't partially drain the
+// quota. Returns nil if the batch fits, ErrRateLimitExceeded otherwise.
+//
+// Because it only checks (AllowN) and never records, calling it before the
+// per-send Allow+Record loop does not double-count against the limit.
+func (s *RateLimitedService) CheckRateLimit(userID int64, count int) error {
 	if !s.limiter.AllowN(userID, s.limitPerHour, count) {
 		return ErrRateLimitExceeded
 	}

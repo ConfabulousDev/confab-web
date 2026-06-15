@@ -416,6 +416,32 @@ func (s *Store) RevokeShare(ctx context.Context, shareID int64, userID int64) er
 	return nil
 }
 
+// CountUserSharesSince returns how many shares the user has created since the
+// given instant, used to enforce the per-user daily share-creation quota
+// (CF-429 / H2). session_shares has no owner column — ownership is the owning
+// session's user_id — so the count joins through sessions. Counting live rows
+// is durable and multi-instance-safe (no in-memory window that a restart would
+// reset), at the cost of one indexed COUNT per create.
+func (s *Store) CountUserSharesSince(ctx context.Context, userID int64, since time.Time) (int, error) {
+	ctx, span := tracer.Start(ctx, "db.count_user_shares_since",
+		trace.WithAttributes(attribute.Int64("user.id", userID)))
+	defer span.End()
+
+	var count int
+	err := s.conn().QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		 FROM session_shares ss
+		 JOIN sessions s ON ss.session_id = s.id
+		 WHERE s.user_id = $1 AND ss.created_at >= $2`,
+		userID, since).Scan(&count)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("failed to count user shares: %w", err)
+	}
+	return count, nil
+}
+
 // loadShareRecipients loads the recipient emails for a share
 func (s *Store) loadShareRecipients(ctx context.Context, shareID int64) ([]string, error) {
 	rows, err := s.conn().QueryContext(ctx,

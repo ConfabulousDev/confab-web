@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,31 @@ import (
 
 // MaxShareRecipients is the maximum number of recipients allowed per share
 const MaxShareRecipients = 50
+
+// defaultShareDailyQuota is the default per-user cap on shares created in a
+// rolling 24h window (CF-429 / H2). Overridable via SHARE_DAILY_QUOTA. Guards
+// storage exhaustion (unbounded share + recipient rows) from a scripted abuser.
+const defaultShareDailyQuota = 100
+
+// shareQuotaWindow is the rolling window the daily share-creation quota counts
+// over.
+const shareQuotaWindow = 24 * time.Hour
+
+// shareDailyQuotaFromEnv resolves the per-user daily share-creation quota from
+// SHARE_DAILY_QUOTA, falling back to defaultShareDailyQuota. A value of 0
+// disables the cap; a negative or non-numeric value is rejected at startup so a
+// misconfiguration fails loud instead of silently disabling the guard.
+func shareDailyQuotaFromEnv() int {
+	raw := os.Getenv("SHARE_DAILY_QUOTA")
+	if raw == "" {
+		return defaultShareDailyQuota
+	}
+	quota, err := strconv.Atoi(raw)
+	if err != nil || quota < 0 {
+		logger.Fatal("invalid SHARE_DAILY_QUOTA", "value", raw)
+	}
+	return quota
+}
 
 // CreateShareRequest is the request body for creating a share
 type CreateShareRequest struct {
@@ -43,8 +69,10 @@ type CreateShareResponse struct {
 	EmailFailures []string   `json:"email_failures,omitempty"` // List of emails that failed to send
 }
 
-// HandleCreateShare creates a new share for a session
-func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService, sharesEnabled bool) http.HandlerFunc {
+// HandleCreateShare creates a new share for a session. shareDailyQuota caps the
+// number of shares a single user may create in a rolling 24h window (CF-429 /
+// H2); a value <= 0 disables the cap.
+func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.RateLimitedService, sharesEnabled bool, shareDailyQuota int) http.HandlerFunc {
 	userStore := &dbuser.Store{DB: database}
 	sessionStore := &dbsession.Store{DB: database}
 	accessStore := &dbaccess.Store{DB: database}
@@ -108,6 +136,46 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 					respondError(w, http.StatusBadRequest, "You cannot share with yourself")
 					return
 				}
+			}
+		}
+
+		// Abuse guards (CF-429). Both run BEFORE CreateShare so a rejected
+		// request leaves no share/recipient rows behind and sends no email.
+
+		// H2: per-user daily share-creation quota. Counting live rows is
+		// durable across restarts and multi-instance-safe.
+		if shareDailyQuota > 0 {
+			quotaCtx, quotaCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+			count, err := accessStore.CountUserSharesSince(quotaCtx, userID, time.Now().Add(-shareQuotaWindow))
+			quotaCancel()
+			if err != nil {
+				log.Error("Failed to check share creation quota", "error", err, "user_id", userID)
+				respondError(w, http.StatusInternalServerError, "Failed to check share quota")
+				return
+			}
+			if count >= shareDailyQuota {
+				log.Warn("Share creation quota exceeded",
+					"user_id", userID,
+					"reason", "share_daily_quota",
+					"count", count,
+					"quota", shareDailyQuota)
+				respondError(w, http.StatusTooManyRequests, "Daily share creation limit reached. Please try again later.")
+				return
+			}
+		}
+
+		// H1: reject a whole multi-recipient batch up front if it would exceed
+		// the sender's remaining email quota, so a 50-recipient share can't
+		// partially drain the shared Resend quota. CheckRateLimit only checks
+		// (no record), so this does not double-count against the per-send loop.
+		if !req.IsPublic && !req.SkipNotifications && emailService != nil && len(req.Recipients) > 0 {
+			if err := emailService.CheckRateLimit(userID, len(req.Recipients)); err != nil {
+				log.Warn("Share invitation email quota exceeded",
+					"user_id", userID,
+					"reason", "email_rate_limit",
+					"recipients", len(req.Recipients))
+				respondError(w, http.StatusTooManyRequests, "Sending these invitations would exceed your email rate limit. Please try again later.")
+				return
 			}
 		}
 

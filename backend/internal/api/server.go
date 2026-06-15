@@ -66,6 +66,7 @@ type Server struct {
 	frontendURL         string                    // Base URL for the frontend (for building session URLs)
 	supportEmail        string                    // Support contact email address
 	sharesEnabled       bool                      // When true, share creation is enabled (ENABLE_SHARE_CREATION=true)
+	shareDailyQuota     int                       // Per-user rolling-24h cap on share creation (SHARE_DAILY_QUOTA, default 100; <=0 disables)
 	saasFooterEnabled   bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
 	saasTermlyEnabled   bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
 	orgAnalyticsEnabled bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
@@ -101,6 +102,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		frontendURL:         os.Getenv("FRONTEND_URL"),
 		supportEmail:        supportEmail,
 		sharesEnabled:       os.Getenv("ENABLE_SHARE_CREATION") == "true",
+		shareDailyQuota:     shareDailyQuotaFromEnv(),
 		saasFooterEnabled:   saasFooterEnabled,
 		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
@@ -403,7 +405,7 @@ func (s *Server) SetupRoutes() http.Handler {
 			// Session sharing
 			// Note: FRONTEND_URL is validated at startup in main.go
 			frontendURL := os.Getenv("FRONTEND_URL")
-			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService, s.sharesEnabled)))
+			r.Post("/sessions/{id}/share", withMaxBody(MaxBodyM, HandleCreateShare(s.db, frontendURL, s.emailService, s.sharesEnabled, s.shareDailyQuota)))
 			r.Get("/sessions/{id}/shares", withMaxBody(MaxBodyXS, HandleListShares(s.db)))
 			r.Get("/shares", withMaxBody(MaxBodyXS, HandleListAllUserShares(s.db)))
 			r.Delete("/shares/{shareID}", withMaxBody(MaxBodyXS, HandleRevokeShare(s.db)))

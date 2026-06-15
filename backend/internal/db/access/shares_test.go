@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/access"
@@ -460,5 +461,66 @@ func TestCreateSystemShare_ReturnsCanonicalProvider(t *testing.T) {
 	}
 	if legacyShare.Provider != "claude-code" {
 		t.Errorf("legacy share: Provider = %q, want %q", legacyShare.Provider, "claude-code")
+	}
+}
+
+// =============================================================================
+// CountUserSharesSince Tests
+// =============================================================================
+
+// TestCountUserSharesSince_CountsOnlyOwnerSharesInWindow asserts the daily
+// share-creation quota counter scopes to the owning user and the time window.
+func TestCountUserSharesSince_CountsOnlyOwnerSharesInWindow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	other := testutil.CreateTestUser(t, env, "other@example.com", "Other")
+	ownerSession := testutil.CreateTestSession(t, env, owner.ID, "owner-ext")
+	otherSession := testutil.CreateTestSession(t, env, other.ID, "other-ext")
+
+	ctx := context.Background()
+
+	// Empty to start.
+	n, err := store.CountUserSharesSince(ctx, owner.ID, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("CountUserSharesSince (empty) failed: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 shares, got %d", n)
+	}
+
+	// Owner creates 3 shares.
+	for i := 0; i < 3; i++ {
+		if _, err := store.CreateShare(ctx, ownerSession, owner.ID, true, nil, nil); err != nil {
+			t.Fatalf("CreateShare %d failed: %v", i, err)
+		}
+	}
+	// The other user creates a share that must NOT count toward owner's quota.
+	if _, err := store.CreateShare(ctx, otherSession, other.ID, true, nil, nil); err != nil {
+		t.Fatalf("CreateShare (other) failed: %v", err)
+	}
+
+	n, err = store.CountUserSharesSince(ctx, owner.ID, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("CountUserSharesSince failed: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("expected 3 shares for owner, got %d", n)
+	}
+
+	// A window starting well in the future excludes all rows (a year out so no
+	// clock/timezone skew at the boundary can flip the result).
+	n, err = store.CountUserSharesSince(ctx, owner.ID, time.Now().Add(365*24*time.Hour))
+	if err != nil {
+		t.Fatalf("CountUserSharesSince (future window) failed: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 shares in future window, got %d", n)
 	}
 }

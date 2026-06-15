@@ -181,15 +181,50 @@ func TestRateLimitedService(t *testing.T) {
 		service := NewRateLimitedService(mock, 5)
 
 		// Check if we can send 3 emails (should succeed)
-		err := service.checkRateLimit(1, 3)
+		err := service.CheckRateLimit(1, 3)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 
 		// Check if we can send 6 emails (should fail)
-		err = service.checkRateLimit(1, 6)
+		err = service.CheckRateLimit(1, 6)
 		if err != ErrRateLimitExceeded {
 			t.Errorf("expected ErrRateLimitExceeded, got %v", err)
+		}
+	})
+
+	t.Run("CheckRateLimit allows a batch exactly at the remaining quota", func(t *testing.T) {
+		mock := newMockService()
+		service := NewRateLimitedService(mock, 5)
+
+		// Boundary: count == limit must be allowed.
+		if err := service.CheckRateLimit(1, 5); err != nil {
+			t.Errorf("batch of exactly the limit should be allowed, got %v", err)
+		}
+		// count == limit+1 must be rejected.
+		if err := service.CheckRateLimit(1, 6); err != ErrRateLimitExceeded {
+			t.Errorf("batch over the limit should be rejected, got %v", err)
+		}
+	})
+
+	t.Run("CheckRateLimit does not record sends (no double-count before the loop)", func(t *testing.T) {
+		mock := newMockService()
+		service := NewRateLimitedService(mock, 3)
+
+		params := ShareInvitationParams{ToEmail: "a@example.com", SharerName: "Alice", SharerEmail: "alice@example.com"}
+
+		// Pre-check the full batch, then actually send the full batch. The
+		// pre-check must not consume quota, so all 3 sends must succeed.
+		if err := service.CheckRateLimit(1, 3); err != nil {
+			t.Fatalf("pre-check of full batch should pass, got %v", err)
+		}
+		for i := 0; i < 3; i++ {
+			if err := service.SendShareInvitation(context.Background(), 1, params); err != nil {
+				t.Fatalf("send %d should succeed after pre-check, got %v", i+1, err)
+			}
+		}
+		if len(mock.SentEmails) != 3 {
+			t.Errorf("expected 3 emails sent, got %d", len(mock.SentEmails))
 		}
 	})
 }

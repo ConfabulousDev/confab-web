@@ -152,6 +152,7 @@ Sharing behavior and UI customization.
 |----------|---------|----------|-------------|
 | `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `false` | No | Make every session visible to every authenticated user; useful for small teams that want full transparency |
 | `ENABLE_SHARE_CREATION` | `false` | No | Enable share link creation |
+| `SHARE_DAILY_QUOTA` | `100` | No | Per-user cap on shares created in a rolling 24h window; the creation endpoint returns 429 once a user exceeds it. Set to `0` to disable the cap. |
 | `ENABLE_ORG_ANALYTICS` | `false` | No | Expose org-wide per-user analytics (`/admin/...`) to every authenticated user — same visibility model as `SHARE_ALL_SESSIONS_TO_AUTHENTICATED`. See [Organization Analytics in backend/API.md](backend/API.md#organization-analytics) for the privacy implications. |
 | `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright); off by default for self-hosted |
 | `ENABLE_SAAS_TERMLY` | `false` | No | Enable the Termly cookie-consent banner (SaaS only); off by default for self-hosted |
