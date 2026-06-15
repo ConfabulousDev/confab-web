@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -161,6 +162,110 @@ func handlePostLoginRedirect(w http.ResponseWriter, r *http.Request, frontendURL
 		finalURL = appendEmailMismatchParams(finalURL, expectedEmail, actualEmail)
 	}
 	http.Redirect(w, r, finalURL, http.StatusTemporaryRedirect)
+}
+
+// validateOAuthCallback performs the state+PKCE+code validation shared by every
+// OAuth callback (GitHub/Google/OIDC). It checks the CSRF state cookie against
+// the state query param, requires a non-empty single-use PKCE verifier cookie
+// (r9zn), clears both cookies, and returns the authorization code + verifier.
+//
+// On any validation failure it writes the appropriate 400 response itself
+// (matching the historical inline behavior: "Invalid state parameter" for bad
+// state or missing verifier, "Missing code parameter" for an absent code) and
+// returns a non-nil error so the caller returns immediately without inspecting
+// the error.
+func validateOAuthCallback(w http.ResponseWriter, r *http.Request) (code, verifier string, err error) {
+	// Validate state to prevent CSRF
+	stateCookie, err := r.Cookie("oauth_state")
+	if err != nil || stateCookie.Value != r.URL.Query().Get("state") {
+		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+		return "", "", fmt.Errorf("invalid oauth state")
+	}
+
+	// Clear state cookie
+	clearCookie(w, "oauth_state")
+
+	// PKCE: the verifier cookie must be present; it is single-use and binds
+	// the auth code to this browser (r9zn). Same 400 shape as invalid state.
+	verifierCookie, err := r.Cookie("oauth_verifier")
+	if err != nil || verifierCookie.Value == "" {
+		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+		return "", "", fmt.Errorf("missing oauth verifier")
+	}
+	clearCookie(w, "oauth_verifier")
+
+	// Get authorization code
+	code = r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "Missing code parameter", http.StatusBadRequest)
+		return "", "", fmt.Errorf("missing oauth code")
+	}
+
+	return code, verifierCookie.Value, nil
+}
+
+// Sentinel errors returned by checkUserEligibility so callbacks can map each
+// failure mode to its historical redirect + log shape.
+var (
+	// errEmailDomainNotPermitted: the email's domain is outside the configured
+	// allow-list (or the email itself is invalid). Maps to access_denied.
+	errEmailDomainNotPermitted = errors.New("email domain not permitted")
+	// errUserCapReached: the user cap (MAX_USERS) blocks this new login.
+	// Maps to access_denied.
+	errUserCapReached = errors.New("user cap reached")
+)
+
+// checkUserEligibility performs the email-domain allow-list + user-cap checks
+// shared by every OAuth callback (GitHub/Google/OIDC). It returns:
+//   - errEmailDomainNotPermitted if the email's domain is not allowed,
+//   - errUserCapReached if the user cap blocks a new login,
+//   - the underlying error from CanUserLogin if the eligibility check itself
+//     fails (caller maps this to a server_error redirect),
+//   - nil if the user may proceed.
+//
+// The domain check runs first and short-circuits before any DB access.
+func checkUserEligibility(ctx context.Context, database *db.DB, email string, allowedDomains []string) error {
+	if !validation.IsAllowedEmailDomain(email, allowedDomains) {
+		return errEmailDomainNotPermitted
+	}
+
+	allowed, err := CanUserLogin(ctx, database, email)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return errUserCapReached
+	}
+	return nil
+}
+
+// redirectUserIneligible maps a checkUserEligibility error to the historical
+// per-provider log line + login-page redirect, then writes the redirect. It is
+// the caller's single response path when eligibility fails.
+func redirectUserIneligible(w http.ResponseWriter, r *http.Request, frontendURL, provider, email string, err error) {
+	log := logger.Ctx(r.Context())
+
+	// Each branch picks the login-page error code + description for its failure
+	// mode; the redirect shape (and 307 status) is identical across all three.
+	var errorCode, description string
+	switch {
+	case errors.Is(err, errEmailDomainNotPermitted):
+		log.Warn("Email domain not permitted", "email", email, "provider", provider)
+		errorCode = "access_denied"
+		description = "Your email domain is not permitted. Contact your administrator."
+	case errors.Is(err, errUserCapReached):
+		log.Warn("User cap reached, login denied", "email", email)
+		errorCode = "access_denied"
+		description = "This application has reached its user limit. Please contact the administrator."
+	default:
+		log.Error("Failed to check user login eligibility", "error", err, "email", email)
+		errorCode = "server_error"
+		description = "An error occurred. Please try again later."
+	}
+
+	errorURL := fmt.Sprintf("%s/login?error=%s&error_description=%s",
+		frontendURL, errorCode, url.QueryEscape(description))
+	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 }
 
 // oauthHTTPClient returns an HTTP client with timeout for OAuth API calls
