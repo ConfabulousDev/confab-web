@@ -73,7 +73,7 @@ All middleware functions:
 | `CanUserLogin(ctx, db, email)` | Checks user cap (MAX_USERS env var). Existing users always pass. |
 | `HashPassword(password)` | bcrypt hash at cost 12 |
 | `CheckPassword(hash, password)` | bcrypt comparison (constant-time) |
-| `BootstrapAdmin(ctx, db, allowedDomains)` | Creates initial admin user from ADMIN_BOOTSTRAP_EMAIL/ADMIN_BOOTSTRAP_PASSWORD if no users exist |
+| `BootstrapAdmin(ctx, db, allowedDomains)` | Creates initial admin user from ADMIN_BOOTSTRAP_EMAIL/ADMIN_BOOTSTRAP_PASSWORD if no users exist. Atomic across concurrent server starts via `dbauth.BootstrapPasswordAdmin` (advisory lock + in-lock recount); the losing start logs INFO `reason=already_bootstrapped` and no-ops (7ys0 / CF-425 A3/E1). |
 | `DiscoverOIDC(issuerURL)` | Fetches `.well-known/openid-configuration`, validates issuer match, returns endpoints |
 
 ## How to Extend

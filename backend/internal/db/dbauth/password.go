@@ -123,6 +123,13 @@ func (s *Store) AuthenticatePassword(ctx context.Context, email, password string
 	return &user, nil
 }
 
+// bootstrapAdvisoryLockKey is a fixed, arbitrary 64-bit constant passed to
+// pg_advisory_xact_lock so concurrent server starts serialize the admin
+// bootstrap (count-check + create). The value is meaningless on its own; it
+// only has to be stable and not collide with another advisory lock the app
+// takes (this is currently the only one). Keep it constant across releases.
+const bootstrapAdvisoryLockKey int64 = 7421968455123001 // "7ys0 bootstrap"
+
 // CreatePasswordUser creates a new user with password authentication.
 // Creates entries in users, user_identities, and identity_passwords tables.
 func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash string, isAdmin bool) (*models.User, error) {
@@ -138,10 +145,29 @@ func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash stri
 	}
 	defer tx.Rollback()
 
+	user, err := createPasswordUserTx(ctx, tx, email, passwordHash, isAdmin)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int64("user.id", user.ID))
+	return user, nil
+}
+
+// createPasswordUserTx performs the password-user creation (users +
+// user_identities + identity_passwords, plus pending-share resolution) inside
+// an existing transaction. It does NOT begin or commit the tx — the caller owns
+// the transaction lifecycle. Returns an error if the email already exists.
+func createPasswordUserTx(ctx context.Context, tx *sql.Tx, email, passwordHash string, isAdmin bool) (*models.User, error) {
 	// Check if email already exists
 	var exists bool
 	checkSQL := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`
-	if err = tx.QueryRowContext(ctx, checkSQL, email).Scan(&exists); err != nil {
+	if err := tx.QueryRowContext(ctx, checkSQL, email).Scan(&exists); err != nil {
 		return nil, fmt.Errorf("failed to check existing user: %w", err)
 	}
 	if exists {
@@ -158,11 +184,10 @@ func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash stri
 	// Use email prefix as default name
 	name, _, _ := strings.Cut(email, "@")
 
-	err = tx.QueryRowContext(ctx, insertUserSQL, email, name, isAdmin).Scan(
+	err := tx.QueryRowContext(ctx, insertUserSQL, email, name, isAdmin).Scan(
 		&user.ID, &user.Email, &user.Name, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -175,7 +200,6 @@ func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash stri
 	`
 	err = tx.QueryRowContext(ctx, insertIdentitySQL, user.ID, email).Scan(&identityID)
 	if err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to create password identity: %w", err)
 	}
 
@@ -185,7 +209,6 @@ func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash stri
 		VALUES ($1, $2, NOW(), NOW())
 	`
 	if _, err = tx.ExecContext(ctx, insertCredsSQL, identityID, passwordHash); err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("failed to create password credentials: %w", err)
 	}
 
@@ -195,12 +218,62 @@ func (s *Store) CreatePasswordUser(ctx context.Context, email, passwordHash stri
 		return nil, fmt.Errorf("failed to resolve pending share recipients: %w", err)
 	}
 
+	return &user, nil
+}
+
+// BootstrapPasswordAdmin atomically creates the initial admin password user iff
+// no users exist yet. It serializes concurrent callers with a transaction-scoped
+// Postgres advisory lock and re-checks the user count INSIDE the lock, so two
+// server starts against an empty DB can't both create an admin (CF-425 A3/E1).
+//
+// Returns created=true with the new user when this call won the race and created
+// the admin; created=false with a nil user when another caller had already
+// bootstrapped (the loser path — not an error). Returns an error only on a real
+// DB failure.
+func (s *Store) BootstrapPasswordAdmin(ctx context.Context, email, passwordHash string) (user *models.User, created bool, err error) {
+	ctx, span := tracer.Start(ctx, "db.bootstrap_password_admin",
+		trace.WithAttributes(attribute.String("email", email)))
+	defer span.End()
+
+	tx, err := s.conn().BeginTx(ctx, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Serialize concurrent bootstraps. The lock is released automatically when
+	// the transaction ends (commit or rollback), so the recheck + create below
+	// run with exclusive access against any other bootstrapping transaction.
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, bootstrapAdvisoryLockKey); err != nil {
+		span.RecordError(err)
+		return nil, false, fmt.Errorf("failed to acquire bootstrap advisory lock: %w", err)
+	}
+
+	// Re-check inside the lock: a peer may have created the admin while we waited.
+	var count int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		span.RecordError(err)
+		return nil, false, fmt.Errorf("failed to count users: %w", err)
+	}
+	if count > 0 {
+		// Lost the race (or users appeared concurrently) — no-op, not an error.
+		return nil, false, nil
+	}
+
+	user, err = createPasswordUserTx(ctx, tx, email, passwordHash, true /* isAdmin */)
+	if err != nil {
+		span.RecordError(err)
+		return nil, false, err
+	}
+
 	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit: %w", err)
+		return nil, false, fmt.Errorf("failed to commit: %w", err)
 	}
 
 	span.SetAttributes(attribute.Int64("user.id", user.ID))
-	return &user, nil
+	return user, true, nil
 }
 
 // UpdateUserPassword updates a user's password hash

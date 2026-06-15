@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	"github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -486,6 +488,72 @@ func TestBootstrapAdmin(t *testing.T) {
 			t.Errorf("expected lowercase email, got %s", user.Email)
 		}
 	})
+}
+
+// TestBootstrapAdminConcurrent verifies that concurrent BootstrapAdmin calls
+// against a shared empty DB serialize cleanly: exactly one admin user is
+// created, and every losing call returns nil (not a confusing duplicate-email
+// error). Guards the advisory-lock atomicity fix (7ys0 / CF-425 A3/E1).
+func TestBootstrapAdminConcurrent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	authStore := &dbauth.Store{DB: env.DB}
+	userStore := &user.Store{DB: env.DB}
+
+	os.Setenv("ADMIN_BOOTSTRAP_EMAIL", "admin@example.com")
+	os.Setenv("ADMIN_BOOTSTRAP_PASSWORD", "adminpassword123")
+	defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
+	defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
+
+	const goroutines = 8
+	var wg sync.WaitGroup
+	errs := make([]error, goroutines)
+	start := make(chan struct{})
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-start // line all goroutines up to maximize contention
+			errs[idx] = auth.BootstrapAdmin(context.Background(), env.DB, nil)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	// Every call must succeed — the losers no-op rather than surfacing a
+	// duplicate-email / duplicate-key error.
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("BootstrapAdmin goroutine %d returned error, want nil: %v", i, err)
+		}
+	}
+
+	// Exactly one user must exist.
+	count, err := userStore.CountUsers(context.Background())
+	if err != nil {
+		t.Fatalf("CountUsers failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 user after concurrent bootstrap, got %d", count)
+	}
+
+	// And that one user is the admin.
+	admin, err := authStore.GetUserByEmail(context.Background(), "admin@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail failed: %v", err)
+	}
+	isAdmin, err := authStore.IsUserAdmin(context.Background(), admin.ID)
+	if err != nil {
+		t.Fatalf("IsUserAdmin failed: %v", err)
+	}
+	if !isAdmin {
+		t.Error("the bootstrapped user should be admin")
+	}
 }
 
 // TestPasswordAuthenticationTiming tests that authentication has consistent timing

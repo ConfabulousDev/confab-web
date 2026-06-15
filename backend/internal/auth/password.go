@@ -226,10 +226,19 @@ func BootstrapAdmin(ctx context.Context, database *db.DB, allowedDomains []strin
 		return fmt.Errorf("failed to hash bootstrap password: %w", err)
 	}
 
-	// Create admin user with password identity
-	user, err := authStore.CreatePasswordUser(ctx, email, passwordHash, true /* isAdmin */)
+	// Create the admin atomically. BootstrapPasswordAdmin takes a Postgres
+	// advisory lock and re-checks the user count inside it, so concurrent
+	// server starts against an empty DB serialize: exactly one creates the
+	// admin and the rest no-op (created=false) instead of surfacing a
+	// confusing duplicate-email error (CF-425 A3/E1).
+	user, created, err := authStore.BootstrapPasswordAdmin(ctx, email, passwordHash)
 	if err != nil {
 		return fmt.Errorf("failed to create admin user: %w", err)
+	}
+	if !created {
+		log.Info("Admin already bootstrapped by a concurrent start, skipping",
+			"reason", "already_bootstrapped")
+		return nil
 	}
 
 	log.Warn("=== ADMIN USER CREATED ===",
