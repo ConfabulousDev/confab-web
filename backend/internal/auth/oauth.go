@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
@@ -268,6 +269,24 @@ func redirectUserIneligible(w http.ResponseWriter, r *http.Request, frontendURL,
 	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
 }
 
+// redirectInactiveUser sends a deactivated user back to /login with a generic
+// "contact support" message (w8tz). The three OAuth callbacks call this after
+// FindOrCreateUserByOAuth resolves to a user whose status is inactive, BEFORE
+// CreateWebSession — so no session is minted and the app→401→login→app loop can
+// never start (re-login no longer silently succeeds for a deactivated account).
+//
+// The copy is deliberately generic: it does not confirm the account is
+// deactivated (the ticket asks not to reveal too much), matching the
+// account-state opacity the password path already has via ErrInvalidCredentials.
+// Centralized so the three callbacks stay identical and a copy change touches
+// one place. Caller must already have logged the rejection.
+func redirectInactiveUser(w http.ResponseWriter, r *http.Request, frontendURL string) {
+	const message = "Your account is not active. Please contact support."
+	errorURL := fmt.Sprintf("%s/login?error=account_inactive&error_description=%s",
+		frontendURL, url.QueryEscape(message))
+	http.Redirect(w, r, errorURL, http.StatusTemporaryRedirect)
+}
+
 // oauthHTTPClient returns an HTTP client with timeout for OAuth API calls
 func oauthHTTPClient() *http.Client {
 	return &http.Client{
@@ -478,8 +497,17 @@ func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 		return nil
 	}
 
-	// Check if user is inactive
+	// Check if user is inactive. This is the security-relevant case: a session
+	// cookie that resolves to a deactivated account. Log it decisively (the
+	// other nil returns above are ordinary anonymous/expired traffic and stay
+	// silent to avoid spamming on every unauthenticated request).
 	if session.UserStatus == models.UserStatusInactive {
+		logger.Ctx(r.Context()).Warn("Session auth rejected: user inactive",
+			"reason", "user_inactive",
+			"user_id", session.UserID,
+			"client_ip", clientip.FromRequest(r).Primary,
+			"method", r.Method,
+			"path", r.URL.Path)
 		return nil
 	}
 
@@ -505,12 +533,23 @@ func RequireSession(database *db.DB, config *OAuthConfig) func(http.Handler) htt
 				authResult = AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey)
 			}
 			if authResult == nil {
+				logger.Ctx(r.Context()).Warn("Session auth rejected",
+					"reason", "no_valid_session",
+					"client_ip", clientip.FromRequest(r).Primary,
+					"method", r.Method,
+					"path", r.URL.Path)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Check email domain restriction
 			if !validation.IsAllowedEmailDomain(authResult.userEmail, config.AllowedEmailDomains) {
+				logger.Ctx(r.Context()).Warn("Session auth rejected: email domain not permitted",
+					"reason", "email_domain_not_permitted",
+					"user_id", authResult.userID,
+					"client_ip", clientip.FromRequest(r).Primary,
+					"method", r.Method,
+					"path", r.URL.Path)
 				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}

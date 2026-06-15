@@ -116,6 +116,26 @@ describe('LoginPage', () => {
     });
   });
 
+  // w8tz: a deactivated user is rejected at the OAuth callback and bounced to
+  // /login?error=account_inactive. The page must show a generic, friendly
+  // message ("contact support") and must NOT confirm the account is
+  // deactivated (don't reveal too much).
+  it('shows a generic contact-support message for account_inactive', async () => {
+    mockFetchConfig(twoProviders);
+
+    renderWithRouter('/login?error=account_inactive&error_description=ignored');
+
+    // The generic message is present (split across text + a "support" link).
+    expect(await screen.findByText(/your account is not active/i)).toBeInTheDocument();
+    const supportLink = screen.getByRole('link', { name: /support/i });
+    expect(supportLink.getAttribute('href') ?? '').toMatch(/^mailto:/);
+    // The server-supplied description is ignored, not rendered.
+    expect(screen.queryByText('ignored')).not.toBeInTheDocument();
+    // Must not leak that the account specifically is deactivated.
+    expect(screen.queryByText(/deactivat/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/disabled/i)).not.toBeInTheDocument();
+  });
+
   it('redirects to /sessions when already authenticated', async () => {
     mockUseAuth.mockReturnValue({
       isAuthenticated: true,

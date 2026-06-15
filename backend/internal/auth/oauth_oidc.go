@@ -255,6 +255,14 @@ func HandleOIDCCallback(config *OAuthConfig, database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// w8tz: reject deactivated accounts BEFORE minting a session, so the
+		// login loop (app→401→login→app) can never start for an inactive user.
+		if dbUser.Status == models.UserStatusInactive {
+			log.Warn("OAuth login blocked for inactive user", "email", user.Email, "provider", "oidc")
+			redirectInactiveUser(w, r, frontendURL)
+			return
+		}
+
 		// Create web session
 		sessionID, err := generateRandomString(32)
 		if err != nil {

@@ -40,6 +40,19 @@ interface LoginPageLayoutProps {
   providers?: Array<{ name: string; display_name: string }>;
 }
 
+// Mirrors LoginPage.tsx's getErrorContent so the story shows the same copy for
+// each error type (access_denied, w8tz account_inactive, and the generic case).
+function renderError(error: { type: string; message: string }) {
+  switch (error.type) {
+    case 'access_denied':
+      return <>Please request access <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>;
+    case 'account_inactive':
+      return <>Your account is not active. Please contact <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Confabulous account access')}`}>support</a>.</>;
+    default:
+      return error.message;
+  }
+}
+
 function LoginPageLayout({ emailHint, error, showPassword = false, providers = [] }: LoginPageLayoutProps) {
   const oauthProviders = providers.filter((p) => p.name !== 'password');
   const hasPassword = showPassword;
@@ -74,11 +87,7 @@ function LoginPageLayout({ emailHint, error, showPassword = false, providers = [
 
         {error && (
           <Alert variant="error" className={styles.errorAlert}>
-            {error.type === 'access_denied' ? (
-              <>Please request access <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>
-            ) : (
-              error.message
-            )}
+            {renderError(error)}
           </Alert>
         )}
 
@@ -207,6 +216,21 @@ export const WithAccessDeniedError: Story = {
     },
     providers: [
       { name: 'github', display_name: 'GitHub' },
+    ],
+  },
+};
+
+// w8tz: a deactivated user bounced from an OAuth callback sees a generic
+// "contact support" message that does not confirm the account is deactivated.
+export const WithAccountInactiveError: Story = {
+  args: {
+    error: {
+      type: 'account_inactive',
+      message: 'Your account is not active. Please contact support.',
+    },
+    providers: [
+      { name: 'github', display_name: 'GitHub' },
+      { name: 'google', display_name: 'Google' },
     ],
   },
 };

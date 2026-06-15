@@ -16,7 +16,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`). Execute (`dry_run: false`) requires a `confirm` echo of the affected-session count; the handler re-counts and rejects on mismatch before deleting (kyrr). |
 | `card_invalidations_test.go` | Integration tests for the card invalidation handlers |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
-| `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v) |
+| `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v). Logs every access decision: `log.Warn("Admin access denied", reason=not_admin, …)` on the 403 and `log.Info("Admin access granted", …)` on the pass, each with `user_id`, `email`, `client_ip`, `method`, `path` (xr71). |
 
 ## Key Types
 
