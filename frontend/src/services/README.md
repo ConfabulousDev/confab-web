@@ -11,6 +11,7 @@ API client and business logic services. All HTTP communication with the backend 
 | `codexTranscriptService.ts` | Codex rollout transcript: parses the Codex JSONL shape, normalizes raw lines into render items, and mirrors the Claude fetch / poll surface. CF-574: each fall-through that produces a `CodexUnknownItem` now sets `reason` (`CodexUnknownReason`) + the precise `unrecognizedType` for the "Report bug" affordance |
 | `opencodeTranscriptService.ts` | OpenCode transcript: parses the per-message `{ info, parts }` JSONL, normalizes into `OpenCodeRenderItem[]`, and mirrors the Claude/Codex fetch / poll surface. CF-574: the accumulated stream is `OpenCodeRawEntry[]` (`RawOpenCodeLine \| OpenCodeInvalidLine`) — malformed lines are kept (not dropped) and, alongside unrecognized message roles and unrecognized part types (outside `KNOWN_OPENCODE_PART_TYPES`), surface as `kind:'unknown'` render items. Non-terminal tool statuses and known-but-ignored part types are deliberate skips, not unknowns |
 | `claudeMessageParser.ts` | Extracts display-ready data from raw Claude transcript messages |
+| `transcriptErrorReporting.ts` | Shared `reportTranscriptErrors(sessionId, errors, category)` — builds the `/api/v1/client-errors` payload (slice to 50, 500-char raw preview) and fire-and-forgets the POST. The Claude/Codex services are thin wrappers passing their own `category`; per-session dedup stays in each caller (c8gn) |
 
 ## Key Components
 

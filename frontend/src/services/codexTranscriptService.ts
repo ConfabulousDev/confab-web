@@ -28,51 +28,22 @@ import {
 } from '@/schemas/codexTranscript';
 import { isRecord } from '@/utils/utils';
 import { syncFilesAPI } from './api';
-
-// Maximum errors per report (must match backend maxClientErrors).
-const MAX_ERRORS_PER_REPORT = 50;
+import { reportTranscriptErrors } from './transcriptErrorReporting';
 
 // Dedupe across re-parses: only report each session once per page-load.
 const reportedSessions = new Set<string>();
 
 /**
  * Report Codex transcript validation errors to the backend for observability.
- * Uses raw fetch (bypasses APIClient) so 401s don't redirect the user.
- * Fire-and-forget: errors are silently ignored.
- *
- * Separate category from Claude's `transcript_validation` so the two can be
- * triaged independently in observability tooling.
+ * Thin wrapper over the shared reporter with Codex's own category — kept
+ * separate from Claude's `transcript_validation` so the two can be triaged
+ * independently in observability tooling (c8gn).
  */
 export function reportCodexTranscriptErrors(
   sessionId: string,
   errors: TranscriptValidationError[],
 ): void {
-  const payload = {
-    category: 'codex_transcript_validation',
-    session_id: sessionId,
-    errors: errors.slice(0, MAX_ERRORS_PER_REPORT).map((e) => ({
-      line: e.line,
-      message_type: e.messageType,
-      details: e.errors.map((d) => ({
-        path: d.path,
-        message: d.message,
-        expected: d.expected,
-        received: d.received,
-      })),
-      raw_json_preview: e.rawJson.slice(0, 500),
-    })),
-    context: {
-      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-    },
-  };
-
-  fetch('/api/v1/client-errors', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  }).catch(() => {}); // Fire-and-forget
+  reportTranscriptErrors(sessionId, errors, 'codex_transcript_validation');
 }
 
 /** Reset the dedup set (exposed for testing) */

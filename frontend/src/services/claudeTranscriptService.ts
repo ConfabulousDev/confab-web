@@ -10,9 +10,7 @@ import {
 import { isAssistantMessage } from '@/types';
 import { normalizeClaudeUsage } from '@/utils/tokenStats';
 import { syncFilesAPI } from './api';
-
-// Maximum errors per report (must match backend maxClientErrors)
-const MAX_ERRORS_PER_REPORT = 50;
+import { reportTranscriptErrors } from './transcriptErrorReporting';
 
 // Message types that are metadata-only and should be silently skipped during parsing.
 // These are not conversation content and don't match the TranscriptLine schema.
@@ -40,37 +38,11 @@ const SKIPPED_MESSAGE_TYPES = new Set([
 const reportedSessions = new Set<string>();
 
 /**
- * Report transcript validation errors to the backend for observability.
- * Uses raw fetch (bypasses APIClient) so 401s don't redirect the user.
- * Fire-and-forget: errors are silently ignored.
+ * Report Claude transcript validation errors to the backend for observability.
+ * Thin wrapper over the shared reporter with Claude's category (c8gn).
  */
 export function reportClaudeTranscriptErrors(sessionId: string, errors: TranscriptValidationError[]): void {
-  const payload = {
-    category: 'transcript_validation',
-    session_id: sessionId,
-    errors: errors.slice(0, MAX_ERRORS_PER_REPORT).map((e) => ({
-      line: e.line,
-      message_type: e.messageType,
-      details: e.errors.map((d) => ({
-        path: d.path,
-        message: d.message,
-        expected: d.expected,
-        received: d.received,
-      })),
-      raw_json_preview: e.rawJson.slice(0, 500),
-    })),
-    context: {
-      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-    },
-  };
-
-  fetch('/api/v1/client-errors', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  }).catch(() => {}); // Fire-and-forget
+  reportTranscriptErrors(sessionId, errors, 'transcript_validation');
 }
 
 /** Reset the dedup set (exposed for testing) */
