@@ -279,7 +279,11 @@ func (s *Store) modelFilterOptions(ctx context.Context, userID int64, shareAllSe
 
 	query := `WITH ` + db.VisibleSessionsCTE(shareAllSessions) + `,
 		visible_unique AS (SELECT DISTINCT id FROM visible_sessions)
-		SELECT s.session_type, mdl.key` + visibleV2ModelKeysFrom
+		SELECT s.session_type, mdl.key` + visibleV2ModelKeysFrom +
+		// 0407: gate the dropdown source to listable sessions so a model whose
+		// only sessions aren't listable can't orphan to an empty list.
+		`
+		WHERE ` + db.ListableSessionPredicate("s")
 
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
