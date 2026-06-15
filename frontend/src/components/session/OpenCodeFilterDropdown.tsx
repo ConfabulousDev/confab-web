@@ -1,18 +1,16 @@
-// OpenCode transcript filter dropdown (MVP). Parallel to CodexFilterDropdown
-// but with a flat three-category model (User / Assistant / Tool) — no
-// subcategories. Shares FilterDropdownShared.module.css for visual parity.
+// OpenCode transcript filter dropdown (MVP). A thin wrapper that assembles flat
+// chips (no subcategories) for the shared ProviderFilterDropdown (ew9f).
 //
 // Zero-count chips render disabled+greyed; the toggle hides/shows that
 // category's rows in the transcript pane.
 
-import { useDropdown } from '@/hooks';
-import { FilterIcon, CheckIcon } from '../icons';
 import type {
   OpenCodeCategory,
   OpenCodeFilterState,
   OpenCodeHierarchicalCounts,
 } from './opencodeCategories';
-import styles from './FilterDropdownShared.module.css';
+import ProviderFilterDropdown from './ProviderFilterDropdown';
+import type { FilterChip } from './filterChips';
 
 interface OpenCodeFilterDropdownProps {
   counts: OpenCodeHierarchicalCounts;
@@ -32,53 +30,14 @@ export default function OpenCodeFilterDropdown({
   filterState,
   onToggleCategory,
 }: OpenCodeFilterDropdownProps) {
-  const { isOpen, toggle, containerRef } = useDropdown<HTMLDivElement>();
+  const flatItems: FilterChip[] = CATEGORIES.map(({ category, label, color }) => ({
+    key: category,
+    label,
+    count: counts[category],
+    visible: filterState[category],
+    color,
+    onToggle: () => onToggleCategory(category),
+  }));
 
-  const hasActiveFilters = CATEGORIES.some(
-    ({ category }) => counts[category] > 0 && !filterState[category],
-  );
-
-  return (
-    <div className={styles.container} ref={containerRef}>
-      <button
-        className={`${styles.filterBtn} ${hasActiveFilters ? styles.active : ''}`}
-        onClick={toggle}
-        title="Message Filters"
-        aria-label="Message Filters"
-        aria-expanded={isOpen}
-      >
-        {FilterIcon}
-      </button>
-
-      {isOpen && (
-        <div className={styles.dropdown}>
-          <div className={styles.dropdownHeader}>Message Filters</div>
-          <div className={styles.dropdownContent}>
-            {CATEGORIES.map(({ category, label, color }) => {
-              const count = counts[category];
-              const isVisible = filterState[category];
-              const isDisabled = count === 0;
-              return (
-                <button
-                  key={category}
-                  className={`${styles.filterItem} ${styles.flatItem} ${isDisabled ? styles.disabled : ''}`}
-                  onClick={() => !isDisabled && onToggleCategory(category)}
-                  disabled={isDisabled}
-                >
-                  <span
-                    className={`${styles.checkbox} ${isVisible ? styles.checked : ''}`}
-                    style={{ color: isVisible ? color : undefined }}
-                  >
-                    {CheckIcon}
-                  </span>
-                  <span className={styles.filterLabel}>{label}</span>
-                  <span className={styles.filterCount}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <ProviderFilterDropdown groups={[]} flatItems={flatItems} />;
 }
