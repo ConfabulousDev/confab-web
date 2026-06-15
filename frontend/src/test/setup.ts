@@ -73,13 +73,24 @@ vi.mock('recharts', async () => {
   type AxisProps = {
     tickFormatter?: (value: unknown) => unknown;
     tick?: unknown;
+    'data-testid'?: string;
   };
 
-  const Axis = ({ tickFormatter }: AxisProps) => {
-    // Exercise tickFormatter for both zero and non-zero so cards' inline
-    // formatters get covered without a real recharts render.
-    try { tickFormatter?.(0); tickFormatter?.(5); } catch { /* swallow */ }
-    return null;
+  // Sample tick values used to exercise (and surface) the axis tickFormatter
+  // without a real recharts render. Spans zero, a small count, and a value in
+  // the thousands so $/count abbreviation (e.g. '$5.0K') is observable in tests.
+  const AXIS_SAMPLE_TICKS = [0, 5, 5000];
+
+  const Axis = ({ tickFormatter, 'data-testid': testId }: AxisProps) => {
+    // Render the formatted sample ticks into the DOM so a card's inline
+    // tickFormatter is both exercised and assertable (the real recharts axis is
+    // mocked away). Each formatted tick is its own <text> element.
+    const ticks = AXIS_SAMPLE_TICKS.map((v, i) => {
+      let label: unknown = v;
+      try { label = tickFormatter ? tickFormatter(v) : v; } catch { /* swallow */ }
+      return React.createElement('text', { key: i }, String(label));
+    });
+    return React.createElement('g', { 'data-testid': testId }, ...ticks);
   };
 
   type TooltipProps = { content?: React.ReactElement<Record<string, unknown>> };
@@ -94,8 +105,10 @@ vi.mock('recharts', async () => {
     Bar: () => null,
     AreaChart: Passthrough,
     Area: () => null,
-    XAxis: Axis,
-    YAxis: Axis,
+    XAxis: (props: AxisProps) => Axis({ ...props, 'data-testid': 'recharts-xaxis' }),
+    YAxis: (props: AxisProps) => Axis({ ...props, 'data-testid': 'recharts-yaxis' }),
+    CartesianGrid: () => null,
+    ReferenceLine: () => null,
     Tooltip,
     Cell: () => null,
   };

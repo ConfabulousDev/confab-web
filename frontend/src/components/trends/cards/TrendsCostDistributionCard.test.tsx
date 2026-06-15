@@ -166,6 +166,32 @@ describe('TrendsCostDistributionCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('renders an always-visible Y-axis with compact numeric tick labels (readable without hover)', () => {
+    // count metric (default): the Y-axis must surface numeric tick labels up
+    // front, no hover. The recharts mock renders the card's tickFormatter applied
+    // to sample ticks (0, 5, 5000) as <text> under the yaxis test id. In count
+    // mode these are plain abbreviated numbers (no '$', via formatTokenCount).
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    const yAxis = screen.getByTestId('recharts-yaxis');
+    const tickText = within(yAxis).getAllByText(/.+/).map((t) => t.textContent ?? '');
+    expect(tickText.length).toBeGreaterThan(0);
+    // 0 -> '0', 5 -> '5', 5000 -> '5.0k' (formatTokenCount, count metric, no '$').
+    expect(tickText).toContain('0');
+    expect(tickText).toContain('5.0k');
+    expect(tickText.every((t) => !t.includes('$'))).toBe(true);
+  });
+
+  it('formats Y-axis tick labels as compact $ in the cost metric (metric-aware)', () => {
+    // Switching to Total $ must switch the axis formatter to formatCostCompact,
+    // proving the axis is metric-aware: the 5000 sample tick abbreviates to '$5.0K'.
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Total $' }));
+    const yAxis = screen.getByTestId('recharts-yaxis');
+    const tickText = within(yAxis).getAllByText(/.+/).map((t) => t.textContent ?? '');
+    expect(tickText.some((t) => /^\$/.test(t))).toBe(true);
+    expect(tickText).toContain('$5.0K');
+  });
+
   it('shows the ⓘ unit caveat only when a model filter is active', () => {
     const { rerender } = render(<TrendsCostDistributionCard data={makeData()} />);
     expect(screen.queryByRole('note')).not.toBeInTheDocument();

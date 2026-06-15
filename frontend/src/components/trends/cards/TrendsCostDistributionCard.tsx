@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendsCard } from './TrendsCard';
 import { DollarIcon } from '@/components/icons';
-import { formatCostCompact } from '@/utils/tokenStats';
+import { formatCostCompact, formatTokenCount } from '@/utils/tokenStats';
 import type {
   TrendsCostDistributionCard as TrendsCostDistributionCardData,
   TrendsCostDistributionBucket,
@@ -182,6 +182,12 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
   // count mode keeps the neutral accent.
   const barFill = metric === 'cost' ? 'var(--color-cost)' : 'var(--color-accent)';
 
+  // Always-visible Y-axis labels so magnitude is readable in a static screenshot
+  // (no hover). Metric-aware: cost mode abbreviates dollars ($1.2K/$1.2M), count
+  // mode abbreviates plain numbers (1.2k/1.2M) — both via the shared formatters.
+  const yTickFormatter = (value: number) =>
+    metric === 'cost' ? formatCostCompact(value) : formatTokenCount(value);
+
   return (
     <div className={styles.wrapper}>
       <TrendsCard
@@ -205,6 +211,15 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
           </div>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.buckets} margin={{ top: 8, right: 0, left: 0, bottom: 24 }}>
+              {/* Faint horizontal gridlines so the rough level reads across the full
+                  chart width — kept low-opacity so it never competes with the bars. */}
+              <CartesianGrid
+                horizontal
+                vertical={false}
+                stroke="var(--color-text-muted)"
+                strokeDasharray="3 3"
+                strokeOpacity={0.25}
+              />
               <XAxis
                 dataKey="label"
                 tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
@@ -216,7 +231,17 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
                 height={72}
                 interval={0}
               />
-              <YAxis hide domain={[0, 'dataMax']} />
+              {/* Subtle always-visible axis: muted small ticks, no axis/tick lines,
+                  metric-aware numeric labels so screenshots convey magnitude. */}
+              <YAxis
+                domain={[0, 'dataMax']}
+                tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={yTickFormatter}
+                width={40}
+                tickCount={4}
+              />
               <Tooltip
                 content={<CostDistributionTooltip unit={unit} metric={metric} />}
                 cursor={{ fill: 'var(--color-bg-primary)' }}
