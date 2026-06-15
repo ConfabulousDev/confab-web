@@ -111,6 +111,14 @@ func TestComputeOpenCodeTokens_V2Tree(t *testing.T) {
 	if v2.TotalOutput != out.OutputTokens || v2.TotalOutput != 8000 {
 		t.Errorf("TotalOutput = %d, want 8000 (== flat OutputTokens %d)", v2.TotalOutput, out.OutputTokens)
 	}
+	// pjnz: top-level cache scalars mirror the flat card's cache columns. anthropic
+	// CacheRead 3000 + openai CacheRead 2000 = 5000; cache creation 2000 + 0 = 2000.
+	if v2.TotalCacheRead != out.CacheReadTokens || v2.TotalCacheRead != 5000 {
+		t.Errorf("TotalCacheRead = %d, want 5000 (== flat CacheReadTokens %d)", v2.TotalCacheRead, out.CacheReadTokens)
+	}
+	if v2.TotalCacheCreation != out.CacheCreationTokens || v2.TotalCacheCreation != 2000 {
+		t.Errorf("TotalCacheCreation = %d, want 2000 (== flat CacheCreationTokens %d)", v2.TotalCacheCreation, out.CacheCreationTokens)
+	}
 	if v2.TotalCostUSD != out.EstimatedCostUSD.String() {
 		t.Errorf("TotalCostUSD = %q, want %q (flat cost)", v2.TotalCostUSD, out.EstimatedCostUSD.String())
 	}

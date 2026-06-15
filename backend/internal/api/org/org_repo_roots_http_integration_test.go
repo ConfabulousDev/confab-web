@@ -14,7 +14,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/shopspring/decimal"
 )
 
 // CF-510 — Org analytics surfaces (org repo list and org analytics
@@ -108,13 +107,6 @@ func TestOrgAnalytics_HTTP_FilterByRoot_IncludesForkSessions(t *testing.T) {
 		assistantMs := int64(1000)
 		userMs := int64(500)
 		if err := store.UpsertCards(env.Ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sid,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       time.Now().UTC(),
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(1.0),
-			},
 			TokensV2: v2CostCard(sid, 1.0),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,

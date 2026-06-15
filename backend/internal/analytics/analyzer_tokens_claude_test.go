@@ -193,6 +193,47 @@ func TestTokensAnalyzer_V2Tree(t *testing.T) {
 	}
 }
 
+// TestTokensAnalyzer_V2Tree_CacheTotals is the pjnz contract: the v2 tree must
+// expose top-level total_cache_creation / total_cache_read scalars that sum the
+// per-model CacheWrite (= cache creation) and CacheRead leaves, reproducing the
+// flat v1 card's cache_creation_tokens / cache_read_tokens columns exactly. The
+// Trends daily time-series reads these scalars after v1 retirement.
+func TestTokensAnalyzer_V2Tree_CacheTotals(t *testing.T) {
+	// Two models, each with distinct cache creation/read counts.
+	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 10, 20,
+		[]map[string]interface{}{makeTextBlock("sonnet")}) + "\n" +
+		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "claude-opus-4-1-20250805", 200, 100, 30, 40,
+			[]map[string]interface{}{makeTextBlock("opus")}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection: %v", err)
+	}
+	result, err := (&TokensAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if result.TokensV2 == nil {
+		t.Fatal("TokensV2 not populated")
+	}
+	v2 := result.TokensV2
+
+	// Sums of the per-model leaves: cache creation 10+30=40, cache read 20+40=60.
+	if v2.TotalCacheCreation != 40 {
+		t.Errorf("TotalCacheCreation = %d, want 40 (sum of per-model CacheWrite leaves)", v2.TotalCacheCreation)
+	}
+	if v2.TotalCacheRead != 60 {
+		t.Errorf("TotalCacheRead = %d, want 60 (sum of per-model CacheRead leaves)", v2.TotalCacheRead)
+	}
+	// Must reproduce the flat card's cache columns exactly.
+	if v2.TotalCacheCreation != result.CacheCreationTokens {
+		t.Errorf("TotalCacheCreation = %d, want %d (== flat CacheCreationTokens)", v2.TotalCacheCreation, result.CacheCreationTokens)
+	}
+	if v2.TotalCacheRead != result.CacheReadTokens {
+		t.Errorf("TotalCacheRead = %d, want %d (== flat CacheReadTokens)", v2.TotalCacheRead, result.CacheReadTokens)
+	}
+}
+
 // TestTokensAnalyzer_V2Tree_UnknownModelBucket pins the empty/unrecognized-model
 // edge (7eje decision F): such usage lands under the "" family key with tokens
 // counted and $0 cost, keeping the v2 totals equal to the flat card's totals.

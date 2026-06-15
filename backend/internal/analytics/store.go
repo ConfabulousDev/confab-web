@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -38,28 +39,11 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 		CardErrors: r.CardErrors,
 	}
 
-	// Only create card records for cards that computed successfully
-	if _, hasErr := r.CardErrors["tokens"]; !hasErr {
-		cards.Tokens = &TokensCardRecord{
-			SessionID:           sessionID,
-			Version:             TokensCardVersion,
-			ComputedAt:          now,
-			UpToLine:            lineCount,
-			InputTokens:         r.InputTokens,
-			OutputTokens:        r.OutputTokens,
-			CacheCreationTokens: r.CacheCreationTokens,
-			CacheReadTokens:     r.CacheReadTokens,
-			EstimatedCostUSD:    r.EstimatedCostUSD,
-			FastTurns:           r.FastTurns,
-			FastCostUSD:         r.FastCostUSD,
-		}
-	}
-
-	// tokens_v2 is always written (empty data for providers that don't yet build
-	// the per-provider/per-model tree, e.g. Claude/Codex), so it participates in
-	// AllValid and the staleness gate exactly like the other cards — mirroring the
-	// Workflows card's "always written, empty for N/A sessions" pattern. It will
-	// eventually replace the flat tokens card for all providers.
+	// tokens_v2 is always written (empty data for a token-less session), so it
+	// participates in AllValid and the staleness gate exactly like the other
+	// cards — mirroring the Workflows card's "always written, empty for N/A
+	// sessions" pattern. As of pjnz it is the sole tokens card; the flat v1
+	// tokens card is no longer written.
 	if _, hasErr := r.CardErrors["tokens_v2"]; !hasErr {
 		data := TokensV2Data{TotalCostUSD: "0", ByProvider: map[string]TokensV2Provider{}}
 		if r.TokensV2 != nil {
@@ -193,11 +177,11 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 	}
 
 	// Get ComputedAt and ComputedLines from the first available card
-	// (tokens preferred, but fallback to others if tokens failed)
+	// (tokens_v2 preferred, but fallback to others if it failed)
 	switch {
-	case c.Tokens != nil:
-		response.ComputedAt = c.Tokens.ComputedAt
-		response.ComputedLines = c.Tokens.UpToLine
+	case c.TokensV2 != nil:
+		response.ComputedAt = c.TokensV2.ComputedAt
+		response.ComputedLines = c.TokensV2.UpToLine
 	case c.Session != nil:
 		response.ComputedAt = c.Session.ComputedAt
 		response.ComputedLines = c.Session.UpToLine
@@ -221,44 +205,37 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 		response.ComputedLines = c.Workflows.UpToLine
 	}
 
-	if c.Tokens != nil {
-		// Legacy flat format (deprecated)
-		response.Tokens = TokenStats{
-			Input:         c.Tokens.InputTokens,
-			Output:        c.Tokens.OutputTokens,
-			CacheCreation: c.Tokens.CacheCreationTokens,
-			CacheRead:     c.Tokens.CacheReadTokens,
-		}
-		response.Cost = CostStats{
-			EstimatedUSD: c.Tokens.EstimatedCostUSD,
-		}
-
-		// Cards format - tokens includes cost
-		tokensCard := TokensCardData{
-			Input:         c.Tokens.InputTokens,
-			Output:        c.Tokens.OutputTokens,
-			CacheCreation: c.Tokens.CacheCreationTokens,
-			CacheRead:     c.Tokens.CacheReadTokens,
-			EstimatedUSD:  c.Tokens.EstimatedCostUSD.String(),
-		}
-
-		// Only include fast mode breakdown when fast mode was used
-		if c.Tokens.FastTurns > 0 {
-			fastTurns := c.Tokens.FastTurns
-			tokensCard.FastTurns = &fastTurns
-			tokensCard.FastCostUSD = c.Tokens.FastCostUSD.String()
-		}
-
-		response.Cards["tokens"] = tokensCard
-	}
-
-	// tokens_v2: hierarchical per-provider/per-model breakdown. Cached for every
-	// session (empty for providers that don't build the tree yet) so it shares the
-	// uniform staleness gate, but served only when it actually has provider data —
-	// so non-OpenCode responses are unchanged and the frontend keeps showing the
-	// flat tokens card. The stored Data is already the API wire shape.
+	// The flat tokens card (legacy top-level Tokens/Cost plus cards["tokens"]) is
+	// derived from the tokens_v2 top-level scalars: pjnz retired the flat v1
+	// session_card_tokens storage, so v2 is the sole source. The scalars
+	// (total_input/total_output/total_cache_creation/total_cache_read/
+	// total_cost_usd) reproduce the v1 flat columns exactly. The flat card is
+	// served only when v2 carries provider data (i.e. a token-bearing session);
+	// the frontend's dedup gate then suppresses it in favor of tokens_v2. The
+	// fast-mode breakdown is not reconstructable from the v2 top-level scalars and
+	// is dropped here — it surfaced only on this dedup-hidden flat card.
 	if c.TokensV2 != nil && len(c.TokensV2.Data.ByProvider) > 0 {
-		response.Cards["tokens_v2"] = c.TokensV2.Data
+		v2 := c.TokensV2.Data
+		response.Tokens = TokenStats{
+			Input:         v2.TotalInput,
+			Output:        v2.TotalOutput,
+			CacheCreation: v2.TotalCacheCreation,
+			CacheRead:     v2.TotalCacheRead,
+		}
+		estimatedCost, _ := decimal.NewFromString(v2.TotalCostUSD)
+		response.Cost = CostStats{EstimatedUSD: estimatedCost}
+
+		response.Cards["tokens"] = TokensCardData{
+			Input:         v2.TotalInput,
+			Output:        v2.TotalOutput,
+			CacheCreation: v2.TotalCacheCreation,
+			CacheRead:     v2.TotalCacheRead,
+			EstimatedUSD:  v2.TotalCostUSD,
+		}
+
+		// tokens_v2: hierarchical per-provider/per-model breakdown. The stored
+		// Data is already the API wire shape.
+		response.Cards["tokens_v2"] = v2
 	}
 
 	if c.Session != nil {

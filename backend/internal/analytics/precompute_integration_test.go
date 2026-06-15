@@ -130,7 +130,7 @@ func TestFindStaleSessions_SessionWithOutdatedVersion(t *testing.T) {
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 
 	// Insert outdated tokens card (old version)
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion-1, 100)
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion-1, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
@@ -162,7 +162,7 @@ func TestFindStaleSessions_SessionWithNewLines(t *testing.T) {
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 150)
 
 	// Insert tokens card computed at 100 lines (stale because current is 150)
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion, 100)
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
@@ -497,15 +497,15 @@ func TestPrecomputeRegularCards_ComputesAndUpsertsCards(t *testing.T) {
 		t.Fatal("expected cards to be created, got nil")
 	}
 
-	// Verify tokens card
-	if cards.Tokens == nil {
-		t.Error("expected tokens card to be created")
+	// Verify tokens_v2 card
+	if cards.TokensV2 == nil {
+		t.Error("expected tokens_v2 card to be created")
 	} else {
-		if cards.Tokens.UpToLine != 3 {
-			t.Errorf("tokens card up_to_line = %d, want 3", cards.Tokens.UpToLine)
+		if cards.TokensV2.UpToLine != 3 {
+			t.Errorf("tokens_v2 card up_to_line = %d, want 3", cards.TokensV2.UpToLine)
 		}
-		if cards.Tokens.Version != analytics.TokensCardVersion {
-			t.Errorf("tokens card version = %d, want %d", cards.Tokens.Version, analytics.TokensCardVersion)
+		if cards.TokensV2.Version != analytics.TokensV2CardVersion {
+			t.Errorf("tokens_v2 card version = %d, want %d", cards.TokensV2.Version, analytics.TokensV2CardVersion)
 		}
 	}
 
@@ -558,7 +558,7 @@ func TestPrecomputeRegularCards_EmptyTranscript(t *testing.T) {
 		t.Fatalf("GetCards failed: %v", err)
 	}
 
-	if cards != nil && cards.Tokens != nil {
+	if cards != nil && cards.TokensV2 != nil {
 		t.Error("expected no cards for empty transcript")
 	}
 }
@@ -576,7 +576,7 @@ func TestPrecomputeRegularCards_UpdatesExistingCards(t *testing.T) {
 	sessionID := testutil.CreateTestSession(t, env, user.ID, "update-external-id")
 
 	// Insert old tokens card
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion, 1)
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion, 1)
 
 	// Create sync file with more lines
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 3)
@@ -607,8 +607,8 @@ func TestPrecomputeRegularCards_UpdatesExistingCards(t *testing.T) {
 		t.Fatalf("GetCards failed: %v", err)
 	}
 
-	if cards.Tokens.UpToLine != 3 {
-		t.Errorf("tokens card up_to_line = %d, want 3 (updated)", cards.Tokens.UpToLine)
+	if cards.TokensV2.UpToLine != 3 {
+		t.Errorf("tokens_v2 card up_to_line = %d, want 3 (updated)", cards.TokensV2.UpToLine)
 	}
 }
 
@@ -616,21 +616,22 @@ func TestPrecomputeRegularCards_UpdatesExistingCards(t *testing.T) {
 // Helper functions
 // =============================================================================
 
-// insertTokensCard inserts a tokens card with the given version and line count
+// insertTokensCard inserts a tokens_v2 card with the given version and line
+// count. pjnz retired the flat v1 session_card_tokens card and pointed the
+// precompute staleness gate at session_card_tokens_v2, so the tokens card whose
+// version/line drives staleness here is the v2 card.
 func insertTokensCard(t *testing.T, env *testutil.TestEnvironment, sessionID string, version int, upToLine int64) {
 	t.Helper()
 
 	query := `
-		INSERT INTO session_card_tokens (
-			session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
-		) VALUES ($1, $2, $3, $4, 0, 0, 0, 0, '0.00')
+		INSERT INTO session_card_tokens_v2 (
+			session_id, version, computed_at, up_to_line, data
+		) VALUES ($1, $2, $3, $4, '{}')
 	`
 
 	_, err := env.DB.Exec(env.Ctx, query, sessionID, version, time.Now().UTC(), upToLine)
 	if err != nil {
-		t.Fatalf("failed to insert tokens card: %v", err)
+		t.Fatalf("failed to insert tokens_v2 card: %v", err)
 	}
 }
 
@@ -640,20 +641,8 @@ func insertAllCards(t *testing.T, env *testutil.TestEnvironment, sessionID strin
 	t.Helper()
 	now := time.Now().UTC()
 
-	// Tokens card
-	_, err := env.DB.Exec(env.Ctx, `
-		INSERT INTO session_card_tokens (
-			session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
-		) VALUES ($1, $2, $3, $4, 0, 0, 0, 0, '0.00')
-	`, sessionID, analytics.TokensCardVersion, now, upToLine)
-	if err != nil {
-		t.Fatalf("failed to insert tokens card: %v", err)
-	}
-
 	// Session card
-	_, err = env.DB.Exec(env.Ctx, `
+	_, err := env.DB.Exec(env.Ctx, `
 		INSERT INTO session_card_session (
 			session_id, version, computed_at, up_to_line,
 			total_messages, user_messages, assistant_messages,
@@ -806,7 +795,7 @@ func TestFindStaleSmartRecapSessions_RegularCardsStale_NotFound(t *testing.T) {
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 
 	// Insert outdated tokens card (regular cards are stale)
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion-1, 100)
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion-1, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
@@ -1084,7 +1073,7 @@ func TestTwoBucketDiscovery_BothStale_FoundByQuery1Only(t *testing.T) {
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 
 	// Insert outdated tokens card (regular cards stale) - no other cards
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion-1, 100)
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion-1, 100)
 	// No smart recap card either
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
@@ -1250,20 +1239,8 @@ func insertAllCardsWithComputedAt(t *testing.T, env *testutil.TestEnvironment, s
 	// Convert to UTC to match PostgreSQL's timestamp handling
 	computedAt = computedAt.UTC()
 
-	// Tokens card
-	_, err := env.DB.Exec(env.Ctx, `
-		INSERT INTO session_card_tokens (
-			session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
-		) VALUES ($1, $2, $3, $4, 0, 0, 0, 0, '0.00')
-	`, sessionID, analytics.TokensCardVersion, computedAt, upToLine)
-	if err != nil {
-		t.Fatalf("failed to insert tokens card: %v", err)
-	}
-
 	// Session card
-	_, err = env.DB.Exec(env.Ctx, `
+	_, err := env.DB.Exec(env.Ctx, `
 		INSERT INTO session_card_session (
 			session_id, version, computed_at, up_to_line,
 			total_messages, user_messages, assistant_messages,
@@ -1354,22 +1331,22 @@ func insertAllCardsWithComputedAt(t *testing.T, env *testutil.TestEnvironment, s
 	}
 }
 
-// insertAllCardsWithWrongTokensVersion inserts all 7 cards but with the specified version
-// for the tokens card (to test version mismatch scenarios).
+// insertAllCardsWithWrongTokensVersion inserts all regular cards but with the
+// specified version for the tokens_v2 card (to test version mismatch scenarios).
+// pjnz pointed the staleness gate at session_card_tokens_v2, so the wrong
+// version goes on the v2 card.
 func insertAllCardsWithWrongTokensVersion(t *testing.T, env *testutil.TestEnvironment, sessionID string, upToLine int64, tokensVersion int) {
 	t.Helper()
 	computedAt := time.Now().UTC()
 
-	// Tokens card with wrong version
+	// Tokens v2 card with wrong version (only the tokens card is mismatched)
 	_, err := env.DB.Exec(env.Ctx, `
-		INSERT INTO session_card_tokens (
-			session_id, version, computed_at, up_to_line,
-			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-			estimated_cost_usd
-		) VALUES ($1, $2, $3, $4, 0, 0, 0, 0, '0.00')
+		INSERT INTO session_card_tokens_v2 (
+			session_id, version, computed_at, up_to_line, data
+		) VALUES ($1, $2, $3, $4, '{}')
 	`, sessionID, tokensVersion, computedAt, upToLine)
 	if err != nil {
-		t.Fatalf("failed to insert tokens card: %v", err)
+		t.Fatalf("failed to insert tokens_v2 card: %v", err)
 	}
 
 	// Session card (correct version)
@@ -1451,16 +1428,6 @@ func insertAllCardsWithWrongTokensVersion(t *testing.T, env *testutil.TestEnviro
 	`, sessionID, analytics.WorkflowsCardVersion, computedAt, upToLine)
 	if err != nil {
 		t.Fatalf("failed to insert workflows card: %v", err)
-	}
-
-	// Tokens v2 card (correct version — only the flat tokens card is mismatched)
-	_, err = env.DB.Exec(env.Ctx, `
-		INSERT INTO session_card_tokens_v2 (
-			session_id, version, computed_at, up_to_line, data
-		) VALUES ($1, $2, $3, $4, '{}')
-	`, sessionID, analytics.TokensV2CardVersion, computedAt, upToLine)
-	if err != nil {
-		t.Fatalf("failed to insert tokens_v2 card: %v", err)
 	}
 }
 
@@ -1802,7 +1769,10 @@ func TestFindStaleSessions_VersionMismatch_AlwaysFound(t *testing.T) {
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 
 	// Insert tokens card with old version (all others current)
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion-1, 100)
+	// insertTokensCard seeds the tokens_v2 card at the wrong version above; the
+	// rest of the regular cards are current, so the staleness gate fires solely on
+	// the tokens_v2 version mismatch.
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion-1, 100)
 	// Insert other cards with current version
 	now := time.Now().UTC()
 	_, _ = env.DB.Exec(env.Ctx, `
@@ -1815,7 +1785,6 @@ func TestFindStaleSessions_VersionMismatch_AlwaysFound(t *testing.T) {
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_agents_and_skills (session_id, version, computed_at, up_to_line, agent_invocations, skill_invocations, agent_stats, skill_stats) VALUES ($1, $2, $3, $4, 0, 0, '{}', '{}')`, sessionID, analytics.AgentsAndSkillsCardVersion, now, 100)
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_redactions (session_id, version, computed_at, up_to_line, total_redactions, redaction_counts) VALUES ($1, $2, $3, $4, 0, '{}')`, sessionID, analytics.RedactionsCardVersion, now, 100)
 	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_workflows (session_id, version, computed_at, up_to_line, runs) VALUES ($1, $2, $3, $4, '[]')`, sessionID, analytics.WorkflowsCardVersion, now, 100)
-	_, _ = env.DB.Exec(env.Ctx, `INSERT INTO session_card_tokens_v2 (session_id, version, computed_at, up_to_line, data) VALUES ($1, $2, $3, $4, '{}')`, sessionID, analytics.TokensV2CardVersion, now, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
@@ -1853,7 +1822,7 @@ func TestFindStaleSessions_OrdersByPriority(t *testing.T) {
 	session2 := testutil.CreateTestSession(t, env, user.ID, "ordering-2")
 	setSessionFirstSeen(t, env, session2, time.Now().Add(-1*time.Hour))
 	testutil.CreateTestSyncFile(t, env, session2, "transcript.jsonl", "transcript", 100)
-	insertAllCardsWithWrongTokensVersion(t, env, session2, 100, analytics.TokensCardVersion-1) // wrong version
+	insertAllCardsWithWrongTokensVersion(t, env, session2, 100, analytics.TokensV2CardVersion-1) // wrong version
 
 	// Create session 3: large line gap (third priority but larger gap)
 	session3 := testutil.CreateTestSession(t, env, user.ID, "ordering-3")
@@ -2531,7 +2500,7 @@ func TestFindStaleSearchIndexSessions_RegularCardsStale_NotFound(t *testing.T) {
 	testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 
 	// Only insert tokens card (other regular cards missing)
-	insertTokensCard(t, env, sessionID, analytics.TokensCardVersion, 100)
+	insertTokensCard(t, env, sessionID, analytics.TokensV2CardVersion, 100)
 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, defaultTestConfig())
@@ -3138,24 +3107,25 @@ func TestPrecomputeRegularCards_CodexSession(t *testing.T) {
 	if cards == nil {
 		t.Fatal("expected cards to be created")
 	}
-	if cards.Tokens == nil {
-		t.Fatal("expected Tokens card")
+	if cards.TokensV2 == nil {
+		t.Fatal("expected TokensV2 card")
 	}
+	v2 := cards.TokensV2.Data
 	// 500 input - 100 cached = 400 uncached billed at full input rate.
-	if cards.Tokens.InputTokens != 400 {
-		t.Errorf("Tokens.InputTokens = %d, want 400 (500 raw - 100 cached)", cards.Tokens.InputTokens)
+	if v2.TotalInput != 400 {
+		t.Errorf("TokensV2.TotalInput = %d, want 400 (500 raw - 100 cached)", v2.TotalInput)
 	}
-	if cards.Tokens.CacheReadTokens != 100 {
-		t.Errorf("Tokens.CacheReadTokens = %d, want 100", cards.Tokens.CacheReadTokens)
+	if v2.TotalCacheRead != 100 {
+		t.Errorf("TokensV2.TotalCacheRead = %d, want 100", v2.TotalCacheRead)
 	}
 	// CF-471: reasoning_output_tokens is a subset of output_tokens; wire value
 	// passes through unchanged.
-	if cards.Tokens.OutputTokens != 80 {
-		t.Errorf("Tokens.OutputTokens = %d, want 80 (wire output_tokens; reasoning is a subset)", cards.Tokens.OutputTokens)
+	if v2.TotalOutput != 80 {
+		t.Errorf("TokensV2.TotalOutput = %d, want 80 (wire output_tokens; reasoning is a subset)", v2.TotalOutput)
 	}
 	// Cost should be > 0 with gpt-5 pricing in the table.
-	if cards.Tokens.EstimatedCostUSD.IsZero() {
-		t.Error("expected Tokens.EstimatedCostUSD > 0 with gpt-5 pricing")
+	if v2.TotalCostUSD == "" || v2.TotalCostUSD == "0" {
+		t.Errorf("expected TokensV2.TotalCostUSD > 0 with gpt-5 pricing, got %q", v2.TotalCostUSD)
 	}
 	if cards.Session == nil {
 		t.Fatal("expected Session card")

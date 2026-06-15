@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
@@ -20,23 +18,17 @@ var rtComputedAt = time.Date(2026, 2, 3, 4, 5, 6, 123456000, time.UTC)
 
 // buildAllCards returns a Cards with every card populated with distinctive,
 // non-zero values, exercising the non-uniform cards in particular:
-//   - tokens: decimal cost columns stored as strings
+//   - tokens_v2: JSONB tree with top-level scalars + per-provider/per-model nesting
 //   - agents_and_skills: two independent JSONB columns
 //   - conversation: all-scalar (nullable pointer) columns, no JSONB
 //   - workflows: JSONB slice (also see the nil-runs case in its own test)
 func buildAllCards(sessionID string) *analytics.Cards {
 	return &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID: sessionID, Version: analytics.TokensCardVersion, ComputedAt: rtComputedAt, UpToLine: 100,
-			InputTokens: 111, OutputTokens: 222, CacheCreationTokens: 333, CacheReadTokens: 444,
-			// DECIMAL(10,4) columns — use 4-decimal values so the round-trip is lossless.
-			EstimatedCostUSD: decimal.RequireFromString("1.2345"),
-			FastTurns:        7, FastCostUSD: decimal.RequireFromString("0.0099"),
-		},
 		TokensV2: &analytics.TokensV2CardRecord{
 			SessionID: sessionID, Version: analytics.TokensV2CardVersion, ComputedAt: rtComputedAt, UpToLine: 100,
 			Data: analytics.TokensV2Data{
 				TotalCostUSD: "1.25", TotalInput: 111, TotalOutput: 222,
+				TotalCacheCreation: 333, TotalCacheRead: 444,
 				ByProvider: map[string]analytics.TokensV2Provider{
 					"claude-code": {CostUSD: "1.25", Models: map[string]analytics.TokensV2Model{
 						"sonnet": {Input: 111, Output: 222, CacheRead: 444, CacheWrite: 333, Reasoning: 5, CostUSD: "1.25"},
@@ -109,9 +101,6 @@ func assertCardJSONEqual(t *testing.T, name string, want, got any) {
 // normalizeTimes forces every card's ComputedAt to UTC so JSON time strings
 // compare by instant rather than by zone representation.
 func normalizeTimes(c *analytics.Cards) {
-	if c.Tokens != nil {
-		c.Tokens.ComputedAt = c.Tokens.ComputedAt.UTC()
-	}
 	if c.TokensV2 != nil {
 		c.TokensV2.ComputedAt = c.TokensV2.ComputedAt.UTC()
 	}
@@ -160,24 +149,8 @@ func TestStore_UpsertGetCards_RoundTrip(t *testing.T) {
 		t.Fatalf("GetCards: %v", err)
 	}
 
-	// Decimal columns compare by value (representation-independent).
-	if got.Tokens == nil || !got.Tokens.EstimatedCostUSD.Equal(in.Tokens.EstimatedCostUSD) {
-		t.Errorf("tokens EstimatedCostUSD = %v, want %v", got.Tokens.EstimatedCostUSD, in.Tokens.EstimatedCostUSD)
-	}
-	if got.Tokens == nil || !got.Tokens.FastCostUSD.Equal(in.Tokens.FastCostUSD) {
-		t.Errorf("tokens FastCostUSD = %v, want %v", got.Tokens.FastCostUSD, in.Tokens.FastCostUSD)
-	}
-
-	// Decimals verified by value above; normalize representation (DECIMAL scale)
-	// so the JSON comparison below checks the remaining fields.
-	if got.Tokens != nil {
-		got.Tokens.EstimatedCostUSD = in.Tokens.EstimatedCostUSD
-		got.Tokens.FastCostUSD = in.Tokens.FastCostUSD
-	}
-
 	normalizeTimes(in)
 	normalizeTimes(got)
-	assertCardJSONEqual(t, "tokens", in.Tokens, got.Tokens)
 	assertCardJSONEqual(t, "tokens_v2", in.TokensV2, got.TokensV2)
 	assertCardJSONEqual(t, "session", in.Session, got.Session)
 	assertCardJSONEqual(t, "tools", in.Tools, got.Tools)

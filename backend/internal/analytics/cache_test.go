@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/shopspring/decimal"
 )
 
 func TestCardsAllValid(t *testing.T) {
@@ -14,14 +12,6 @@ func TestCardsAllValid(t *testing.T) {
 	makeCards := func(upToLine int64) *Cards {
 		now := time.Now().UTC()
 		return &Cards{
-			Tokens: &TokensCardRecord{
-				SessionID:        "test-session",
-				Version:          TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         upToLine,
-				InputTokens:      1000,
-				EstimatedCostUSD: decimal.NewFromFloat(1.50),
-			},
 			TokensV2: &TokensV2CardRecord{
 				SessionID:  "test-session",
 				Version:    TokensV2CardVersion,
@@ -114,7 +104,6 @@ func TestCardsAllValid(t *testing.T) {
 	makeCardsWithVersion := func(version int, upToLine int64) *Cards {
 		cards := makeCards(upToLine)
 		// Override all versions with the specified version (for testing version mismatch)
-		cards.Tokens.Version = version
 		cards.TokensV2.Version = version
 		cards.Session.Version = version
 		cards.Tools.Version = version
@@ -133,11 +122,11 @@ func TestCardsAllValid(t *testing.T) {
 		}
 	})
 
-	t.Run("returns false when tokens card is nil", func(t *testing.T) {
+	t.Run("returns false when tokens_v2 card is nil", func(t *testing.T) {
 		cards := makeCards(100)
-		cards.Tokens = nil
+		cards.TokensV2 = nil
 		if cards.AllValid(100) {
-			t.Error("expected false when tokens card is nil")
+			t.Error("expected false when tokens_v2 card is nil")
 		}
 	})
 
@@ -221,30 +210,30 @@ func TestCardsAllValid(t *testing.T) {
 	})
 }
 
-func TestTokensCardRecordIsValid(t *testing.T) {
+func TestTokensV2CardRecordIsValid(t *testing.T) {
 	t.Run("returns false when nil", func(t *testing.T) {
-		var card *TokensCardRecord
+		var card *TokensV2CardRecord
 		if card.IsValid(100) {
 			t.Error("expected false for nil card")
 		}
 	})
 
 	t.Run("returns false when version mismatch", func(t *testing.T) {
-		card := &TokensCardRecord{Version: 999, UpToLine: 100}
+		card := &TokensV2CardRecord{Version: 999, UpToLine: 100}
 		if card.IsValid(100) {
 			t.Error("expected false for version mismatch")
 		}
 	})
 
 	t.Run("returns false when line count mismatch", func(t *testing.T) {
-		card := &TokensCardRecord{Version: TokensCardVersion, UpToLine: 100}
+		card := &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: 100}
 		if card.IsValid(150) {
 			t.Error("expected false for line count mismatch")
 		}
 	})
 
 	t.Run("returns true when valid", func(t *testing.T) {
-		card := &TokensCardRecord{Version: TokensCardVersion, UpToLine: 100}
+		card := &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: 100}
 		if !card.IsValid(100) {
 			t.Error("expected true when valid")
 		}
@@ -277,7 +266,6 @@ func TestCardsAllValid_Exhaustive(t *testing.T) {
 	for _, fieldName := range cardFields {
 		t.Run("nil_"+fieldName, func(t *testing.T) {
 			cards := &Cards{
-				Tokens:          &TokensCardRecord{Version: TokensCardVersion, ComputedAt: now, UpToLine: lineCount, EstimatedCostUSD: decimal.Zero},
 				TokensV2:        &TokensV2CardRecord{Version: TokensV2CardVersion, ComputedAt: now, UpToLine: lineCount},
 				Session:         &SessionCardRecord{Version: SessionCardVersion, ComputedAt: now, UpToLine: lineCount},
 				Tools:           &ToolsCardRecord{Version: ToolsCardVersion, ComputedAt: now, UpToLine: lineCount},

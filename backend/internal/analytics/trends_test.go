@@ -93,35 +93,13 @@ func TestGetTrends_WithSessions(t *testing.T) {
 	store := analytics.NewStore(env.DB.Conn())
 
 	// Insert tokens card for session 1
-	tokensCard1 := &analytics.TokensCardRecord{
-		SessionID:           sessionID1,
-		Version:             analytics.TokensCardVersion,
-		ComputedAt:          time.Now().UTC(),
-		UpToLine:            100,
-		InputTokens:         1000,
-		OutputTokens:        500,
-		CacheCreationTokens: 100,
-		CacheReadTokens:     200,
-		EstimatedCostUSD:    decimal.NewFromFloat(0.50),
-	}
-	err := store.UpsertCards(ctx, &analytics.Cards{Tokens: tokensCard1, TokensV2: v2CostCard(sessionID1, 0.50)})
+	err := store.UpsertCards(ctx, &analytics.Cards{TokensV2: v2TokensCard(sessionID1, 1000, 500, 100, 200, 0.50)})
 	if err != nil {
 		t.Fatalf("UpsertCards (session 1) failed: %v", err)
 	}
 
 	// Insert tokens card for session 2
-	tokensCard2 := &analytics.TokensCardRecord{
-		SessionID:           sessionID2,
-		Version:             analytics.TokensCardVersion,
-		ComputedAt:          time.Now().UTC(),
-		UpToLine:            50,
-		InputTokens:         2000,
-		OutputTokens:        1000,
-		CacheCreationTokens: 200,
-		CacheReadTokens:     400,
-		EstimatedCostUSD:    decimal.NewFromFloat(1.00),
-	}
-	err = store.UpsertCards(ctx, &analytics.Cards{Tokens: tokensCard2, TokensV2: v2CostCard(sessionID2, 1.00)})
+	err = store.UpsertCards(ctx, &analytics.Cards{TokensV2: v2TokensCard(sessionID2, 2000, 1000, 200, 400, 1.00)})
 	if err != nil {
 		t.Fatalf("UpsertCards (session 2) failed: %v", err)
 	}
@@ -266,6 +244,86 @@ func TestGetTrends_WithSessions(t *testing.T) {
 	}
 }
 
+// TestGetTrends_DailyTimeSeries_ReadsV2 is the pjnz contract: the daily
+// time-series tokens aggregation reads the four token-count sums AND cost from
+// session_card_tokens_v2's top-level scalars (total_input/total_output/
+// total_cache_creation/total_cache_read/total_cost_usd), NOT the flat v1
+// session_card_tokens table. Two v2-only sessions drive the totals; a third
+// session carrying only a stale v1 row with dominating counts must NOT
+// contribute — proving the daily reader no longer touches the v1 table.
+func TestGetTrends_DailyTimeSeries_ReadsV2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	ctx := context.Background()
+	store := analytics.NewStore(env.DB.Conn())
+
+	user := testutil.CreateTestUser(t, env, "v2-daily@test.com", "V2 Daily User")
+	s1 := testutil.CreateTestSession(t, env, user.ID, "v2-daily-1")
+	s2 := testutil.CreateTestSession(t, env, user.ID, "v2-daily-2")
+	v1Only := testutil.CreateTestSession(t, env, user.ID, "v1-only-daily")
+
+	// v2 cards carrying the four token counts + cost.
+	if err := store.UpsertCards(ctx, &analytics.Cards{
+		TokensV2: v2TokensCard(s1, 1000, 500, 100, 200, 0.50),
+	}); err != nil {
+		t.Fatalf("UpsertCards (s1) failed: %v", err)
+	}
+	if err := store.UpsertCards(ctx, &analytics.Cards{
+		TokensV2: v2TokensCard(s2, 2000, 1000, 200, 400, 1.00),
+	}); err != nil {
+		t.Fatalf("UpsertCards (s2) failed: %v", err)
+	}
+	// Stale v1-only row with dominating counts; must be ignored post-migration.
+	if _, err := env.DB.Exec(env.Ctx, `
+		INSERT INTO session_card_tokens (
+			session_id, version, computed_at, up_to_line,
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+			estimated_cost_usd
+		) VALUES ($1, 2, NOW(), 100, 99999, 99999, 99999, 99999, '99.0000')
+	`, v1Only); err != nil {
+		t.Fatalf("Failed to insert stale session_card_tokens: %v", err)
+	}
+
+	now := time.Now().UTC()
+	req := analytics.TrendsRequest{
+		StartTS:       now.Add(-7 * 24 * time.Hour).Unix(),
+		EndTS:         now.Add(24 * time.Hour).Unix(),
+		TZOffset:      0,
+		Repos:         []string{},
+		IncludeNoRepo: true,
+	}
+
+	response, err := store.GetTrends(ctx, user.ID, req)
+	if err != nil {
+		t.Fatalf("GetTrends failed: %v", err)
+	}
+	tok := response.Cards.Tokens
+	if tok == nil {
+		t.Fatal("expected Tokens card to be non-nil")
+	}
+
+	// Sums across the two v2 sessions (v1-only excluded).
+	if tok.TotalInputTokens != 3000 {
+		t.Errorf("TotalInputTokens = %d, want 3000 (v2 sums; v1-only excluded)", tok.TotalInputTokens)
+	}
+	if tok.TotalOutputTokens != 1500 {
+		t.Errorf("TotalOutputTokens = %d, want 1500", tok.TotalOutputTokens)
+	}
+	if tok.TotalCacheCreationTokens != 300 {
+		t.Errorf("TotalCacheCreationTokens = %d, want 300 (from v2 total_cache_creation)", tok.TotalCacheCreationTokens)
+	}
+	if tok.TotalCacheReadTokens != 600 {
+		t.Errorf("TotalCacheReadTokens = %d, want 600 (from v2 total_cache_read)", tok.TotalCacheReadTokens)
+	}
+	if tok.TotalCostUSD != "1.5" {
+		t.Errorf("TotalCostUSD = %s, want 1.5", tok.TotalCostUSD)
+	}
+}
+
 // TestGetTrends_TopSessions_ReadsV2 pins 37cg: the costliest-sessions card
 // ranks on session_card_tokens_v2 (data->>'total_cost_usd'), not the flat v1
 // table. Two sessions seeded only via v2 rank by their v2 cost; a third session
@@ -353,16 +411,7 @@ func TestGetTrends_RepoFilter(t *testing.T) {
 	store := analytics.NewStore(env.DB.Conn())
 
 	// Insert tokens card
-	tokensCard := &analytics.TokensCardRecord{
-		SessionID:        sessionID,
-		Version:          analytics.TokensCardVersion,
-		ComputedAt:       time.Now().UTC(),
-		UpToLine:         100,
-		InputTokens:      1000,
-		OutputTokens:     500,
-		EstimatedCostUSD: decimal.NewFromFloat(0.50),
-	}
-	err := store.UpsertCards(ctx, &analytics.Cards{Tokens: tokensCard})
+	err := store.UpsertCards(ctx, &analytics.Cards{TokensV2: v2TokensCard(sessionID, 1000, 500, 0, 0, 0.50)})
 	if err != nil {
 		t.Fatalf("UpsertCards failed: %v", err)
 	}
@@ -485,16 +534,7 @@ func TestGetTrends_RepoFilterScenarios(t *testing.T) {
 
 	// Insert tokens cards for all sessions so we can verify aggregation
 	for i, sid := range []string{sessionWithRepo1, sessionWithRepo2, sessionNoRepo} {
-		tokensCard := &analytics.TokensCardRecord{
-			SessionID:        sid,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         100,
-			InputTokens:      int64(1000 * (i + 1)),
-			OutputTokens:     int64(500 * (i + 1)),
-			EstimatedCostUSD: decimal.NewFromFloat(0.50 * float64(i+1)),
-		}
-		err := store.UpsertCards(ctx, &analytics.Cards{Tokens: tokensCard})
+		err := store.UpsertCards(ctx, &analytics.Cards{TokensV2: v2TokensCard(sid, int64(1000*(i+1)), int64(500*(i+1)), 0, 0, 0.50*float64(i+1))})
 		if err != nil {
 			t.Fatalf("UpsertCards failed: %v", err)
 		}
@@ -919,15 +959,7 @@ func TestGetTrends_TimezoneOffset(t *testing.T) {
 
 	// Insert a tokens card so we have data to aggregate
 	err := store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        sessionID,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         10,
-			InputTokens:      100,
-			OutputTokens:     50,
-			EstimatedCostUSD: decimal.NewFromFloat(0.01),
-		},
+		TokensV2: v2TokensCard(sessionID, 100, 50, 0, 0, 0.01),
 	})
 	if err != nil {
 		t.Fatalf("UpsertCards failed: %v", err)
@@ -1004,16 +1036,7 @@ func TestGetTrends_TopSessions(t *testing.T) {
 		FirstUserMessage: "Add dark mode to settings",
 	})
 	err := store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        session1,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         100,
-			InputTokens:      50000,
-			OutputTokens:     25000,
-			EstimatedCostUSD: decimal.NewFromFloat(5.00),
-		},
-		TokensV2: v2CostCard(session1, 5.00),
+		TokensV2: v2TokensCard(session1, 50000, 25000, 0, 0, 5.00),
 		Session: &analytics.SessionCardRecord{
 			SessionID:  session1,
 			Version:    analytics.SessionCardVersion,
@@ -1034,16 +1057,7 @@ func TestGetTrends_TopSessions(t *testing.T) {
 		t.Fatalf("failed to set first_user_message: %v", err)
 	}
 	err = store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        session2,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         200,
-			InputTokens:      100000,
-			OutputTokens:     50000,
-			EstimatedCostUSD: decimal.NewFromFloat(10.00),
-		},
-		TokensV2: v2CostCard(session2, 10.00),
+		TokensV2: v2TokensCard(session2, 100000, 50000, 0, 0, 10.00),
 	})
 	if err != nil {
 		t.Fatalf("UpsertCards (session 2) failed: %v", err)
@@ -1052,16 +1066,7 @@ func TestGetTrends_TopSessions(t *testing.T) {
 	// Session 3: no title fields at all, cost $2.50
 	session3 := testutil.CreateTestSession(t, env, user.ID, "top-session-3")
 	err = store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        session3,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         50,
-			InputTokens:      25000,
-			OutputTokens:     12500,
-			EstimatedCostUSD: decimal.NewFromFloat(2.50),
-		},
-		TokensV2: v2CostCard(session3, 2.50),
+		TokensV2: v2TokensCard(session3, 25000, 12500, 0, 0, 2.50),
 	})
 	if err != nil {
 		t.Fatalf("UpsertCards (session 3) failed: %v", err)
@@ -1070,16 +1075,7 @@ func TestGetTrends_TopSessions(t *testing.T) {
 	// Session 4: cost $0.00 (should be excluded)
 	session4 := testutil.CreateTestSession(t, env, user.ID, "top-session-4")
 	err = store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        session4,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         10,
-			InputTokens:      100,
-			OutputTokens:     50,
-			EstimatedCostUSD: decimal.NewFromFloat(0.00),
-		},
-		TokensV2: v2CostCard(session4, 0.00),
+		TokensV2: v2TokensCard(session4, 100, 50, 0, 0, 0.00),
 	})
 	if err != nil {
 		t.Fatalf("UpsertCards (session 4) failed: %v", err)
@@ -1224,14 +1220,7 @@ func TestGetTrends_TopSessions_PerProvider(t *testing.T) {
 	seed := func(t *testing.T, sessionID string, cost float64) {
 		t.Helper()
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sessionID,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       time.Now().UTC(),
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
-			},
-			TokensV2: v2CostCard(sessionID, cost),
+			TokensV2: v2TokensCard(sessionID, 0, 0, 0, 0, cost),
 		})
 		if err != nil {
 			t.Fatalf("UpsertCards (%s) failed: %v", sessionID, err)
@@ -1323,16 +1312,7 @@ func TestGetTrends_ProviderFilter(t *testing.T) {
 	seedTokens := func(t *testing.T, sessionID string, input, output int64, cost float64) {
 		t.Helper()
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sessionID,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       time.Now().UTC(),
-				UpToLine:         100,
-				InputTokens:      input,
-				OutputTokens:     output,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
-			},
-			TokensV2: v2CostCard(sessionID, cost),
+			TokensV2: v2TokensCard(sessionID, input, output, 0, 0, cost),
 		})
 		if err != nil {
 			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
@@ -1586,17 +1566,7 @@ func TestGetTrends_TokensPerProvider_LegacyAliasFold(t *testing.T) {
 	seed := func(t *testing.T, sessionID string, input, output, cacheCreation, cacheRead int64, cost float64) {
 		t.Helper()
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:           sessionID,
-				Version:             analytics.TokensCardVersion,
-				ComputedAt:          time.Now().UTC(),
-				UpToLine:            100,
-				InputTokens:         input,
-				OutputTokens:        output,
-				CacheCreationTokens: cacheCreation,
-				CacheReadTokens:     cacheRead,
-				EstimatedCostUSD:    decimal.NewFromFloat(cost),
-			},
+			TokensV2: v2TokensCard(sessionID, input, output, cacheCreation, cacheRead, cost),
 		})
 		if err != nil {
 			t.Fatalf("UpsertCards (%s): %v", sessionID, err)
@@ -2186,16 +2156,7 @@ func TestGetTrends_TopSessionsLimit(t *testing.T) {
 	for i := 0; i < seeded; i++ {
 		name := "topn-session-" + decimal.NewFromInt(int64(i)).String()
 		sid := testutil.CreateTestSession(t, env, user.ID, name)
-		card := &analytics.TokensCardRecord{
-			SessionID:        sid,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         100,
-			InputTokens:      1000,
-			OutputTokens:     500,
-			EstimatedCostUSD: decimal.NewFromInt(int64(seeded - i)),
-		}
-		if err := store.UpsertCards(ctx, &analytics.Cards{Tokens: card, TokensV2: v2CostCard(sid, float64(seeded-i))}); err != nil {
+		if err := store.UpsertCards(ctx, &analytics.Cards{TokensV2: v2TokensCard(sid, 1000, 500, 0, 0, float64(seeded-i))}); err != nil {
 			t.Fatalf("UpsertCards (session %d) failed: %v", i, err)
 		}
 	}

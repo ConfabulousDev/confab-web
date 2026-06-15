@@ -2,8 +2,6 @@ package analytics
 
 import (
 	"time"
-
-	"github.com/shopspring/decimal"
 )
 
 // AllCardTableNames is the canonical list of session_card_* table names the admin
@@ -34,8 +32,7 @@ func IsKnownCardTableName(name string) bool {
 
 // Card version constants - increment when compute logic changes
 const (
-	TokensCardVersion          = 3 // v3: dedup by message.id (fixes multi-line + replay over-counting)
-	TokensV2CardVersion        = 3 // v3: <synthetic> excluded from the tree at compute time (xz6g)
+	TokensV2CardVersion        = 4 // v4: top-level total_cache_creation/total_cache_read scalars (pjnz)
 	SessionCardVersion         = 5 // v5: dedup assistant counts by message.id, non-exclusive breakdown
 	ToolsCardVersion           = 3 // v3: Codex spawn_agent/wait_agent excluded — surfaced via AgentsAndSkills (CF-443)
 	CodeActivityCardVersion    = 2 // v2: Edit counts full old/new lines (matches GitHub diff)
@@ -50,23 +47,6 @@ const (
 // =============================================================================
 // Database record types (stored in session_card_* tables)
 // =============================================================================
-
-// TokensCardRecord is the DB record for the tokens card (includes cost).
-type TokensCardRecord struct {
-	SessionID           string          `json:"session_id"`
-	Version             int             `json:"version"`
-	ComputedAt          time.Time       `json:"computed_at"`
-	UpToLine            int64           `json:"up_to_line"`
-	InputTokens         int64           `json:"input_tokens"`
-	OutputTokens        int64           `json:"output_tokens"`
-	CacheCreationTokens int64           `json:"cache_creation_tokens"`
-	CacheReadTokens     int64           `json:"cache_read_tokens"`
-	EstimatedCostUSD    decimal.Decimal `json:"estimated_cost_usd"`
-
-	// Fast mode breakdown
-	FastTurns   int             `json:"fast_turns"`
-	FastCostUSD decimal.Decimal `json:"fast_cost_usd"`
-}
 
 // fastModelKeySuffix marks a fast-mode model entry in the tokens_v2 tree. Fast
 // turns are split into a synthetic "<family> · fast" model key (billed at the 6×
@@ -97,20 +77,24 @@ type TokensV2Provider struct {
 // per-provider → per-model breakdown. Stored verbatim as JSONB in
 // session_card_tokens_v2.data and served verbatim as the tokens_v2 card.
 type TokensV2Data struct {
-	TotalCostUSD string                      `json:"total_cost_usd"`
-	TotalInput   int64                       `json:"total_input"`
-	TotalOutput  int64                       `json:"total_output"`
-	ByProvider   map[string]TokensV2Provider `json:"by_provider"`
+	TotalCostUSD       string                      `json:"total_cost_usd"`
+	TotalInput         int64                       `json:"total_input"`
+	TotalOutput        int64                       `json:"total_output"`
+	TotalCacheCreation int64                       `json:"total_cache_creation"`
+	TotalCacheRead     int64                       `json:"total_cache_read"`
+	ByProvider         map[string]TokensV2Provider `json:"by_provider"`
 }
 
 // TokensV2CardRecord is the DB record for the hierarchical (per-provider /
 // per-model) tokens card. It is a universal card written for every session and
 // participates in Cards.AllValid and the staleness gate exactly like the others
-// — for providers that don't yet build the per-model tree (Claude/Codex) it is
-// written with empty Data, mirroring the Workflows card's "always written, empty
-// for N/A sessions" pattern. It is served (ToResponse) only when it has provider
-// data, so non-OpenCode API responses are unchanged. The long-term plan is for
-// tokens_v2 to replace the flat tokens card for all providers.
+// — a token-less session is written with empty Data, mirroring the Workflows
+// card's "always written, empty for N/A sessions" pattern. It is served
+// (ToResponse) only when it has provider data, so token-less API responses are
+// unchanged. As of pjnz it is the sole tokens card: it replaced the retired flat
+// v1 tokens card as the source for every per-session cost/token reader, and its
+// top-level scalars (total_input/total_output/total_cache_creation/
+// total_cache_read/total_cost_usd) reproduce the v1 flat columns exactly.
 type TokensV2CardRecord struct {
 	SessionID  string       `json:"session_id"`
 	Version    int          `json:"version"`
@@ -292,8 +276,7 @@ type SearchIndexRecord struct {
 
 // Cards aggregates all card data for a session.
 type Cards struct {
-	Tokens          *TokensCardRecord
-	TokensV2        *TokensV2CardRecord // optional; OpenCode only — not part of AllValid
+	TokensV2        *TokensV2CardRecord
 	Session         *SessionCardRecord
 	Tools           *ToolsCardRecord
 	CodeActivity    *CodeActivityCardRecord
@@ -426,7 +409,6 @@ type CardValidator interface {
 
 // Compile-time checks that all card types implement CardValidator.
 var (
-	_ CardValidator = (*TokensCardRecord)(nil)
 	_ CardValidator = (*TokensV2CardRecord)(nil)
 	_ CardValidator = (*SessionCardRecord)(nil)
 	_ CardValidator = (*ToolsCardRecord)(nil)
@@ -435,11 +417,6 @@ var (
 	_ CardValidator = (*AgentsAndSkillsCardRecord)(nil)
 	_ CardValidator = (*RedactionsCardRecord)(nil)
 )
-
-// IsValid checks if a tokens card record is valid for the current line count.
-func (c *TokensCardRecord) IsValid(currentLineCount int64) bool {
-	return c != nil && c.Version == TokensCardVersion && c.UpToLine == currentLineCount
-}
 
 // IsValid checks if a tokens_v2 card record is valid for the current line count.
 func (c *TokensV2CardRecord) IsValid(currentLineCount int64) bool {
@@ -508,8 +485,7 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 	if c == nil {
 		return false
 	}
-	return c.Tokens.IsValid(currentLineCount) &&
-		c.TokensV2.IsValid(currentLineCount) &&
+	return c.TokensV2.IsValid(currentLineCount) &&
 		c.Session.IsValid(currentLineCount) &&
 		c.Tools.IsValid(currentLineCount) &&
 		c.CodeActivity.IsValid(currentLineCount) &&

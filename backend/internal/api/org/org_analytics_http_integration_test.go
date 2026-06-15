@@ -148,13 +148,6 @@ func seedOrgSession(t *testing.T, env *testutil.TestEnvironment, userID int64, e
 	}
 	store := analytics.NewStore(env.DB.Conn())
 	err := store.UpsertCards(env.Ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        sessionID,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       time.Now().UTC(),
-			UpToLine:         100,
-			EstimatedCostUSD: decimal.NewFromFloat(costUSD),
-		},
 		TokensV2: v2CostCard(sessionID, costUSD),
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID:                sessionID,
@@ -372,13 +365,6 @@ func TestOrgAnalytics_HTTP_EmptyReposEqualsAllRepos(t *testing.T) {
 		assistantMs := int64(10000)
 		userMs := int64(20000)
 		err := store.UpsertCards(env.Ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sid,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
-			},
 			TokensV2: v2CostCard(sid, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,

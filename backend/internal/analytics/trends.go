@@ -479,6 +479,11 @@ func (s *Store) aggregateOverviewAndActivity(ctx context.Context, tq trendsQuery
 // every day in the range so empty days still appear. Provider keys are
 // normalized via models.NormalizeProvider at the Scan site so legacy
 // 'Claude Code' rows fold into 'claude-code'.
+//
+// The four token counts and cost are read from session_card_tokens_v2's
+// top-level scalars (pjnz retired the flat v1 session_card_tokens table); the
+// counts never re-price, so summing the provider-agnostic v2 count scalars
+// reproduces the v1 flat columns exactly.
 func (s *Store) aggregateTokens(ctx context.Context, tq trendsQuery) (*TrendsTokensCard, error) {
 	query := tq.cteSQL + `,
 		date_range AS (
@@ -492,13 +497,13 @@ func (s *Store) aggregateTokens(ctx context.Context, tq trendsQuery) (*TrendsTok
 			SELECT
 				fs.session_date,
 				fs.session_type,
-				COALESCE(SUM(t.input_tokens), 0) as input_tokens,
-				COALESCE(SUM(t.output_tokens), 0) as output_tokens,
-				COALESCE(SUM(t.cache_creation_tokens), 0) as cache_creation_tokens,
-				COALESCE(SUM(t.cache_read_tokens), 0) as cache_read_tokens,
-				COALESCE(SUM(t.estimated_cost_usd::numeric), 0) as cost_usd
+				COALESCE(SUM(COALESCE(` + db.V2TotalInputExpr("t") + `, '0')::bigint), 0) as input_tokens,
+				COALESCE(SUM(COALESCE(` + db.V2TotalOutputExpr("t") + `, '0')::bigint), 0) as output_tokens,
+				COALESCE(SUM(COALESCE(` + db.V2TotalCacheCreationExpr("t") + `, '0')::bigint), 0) as cache_creation_tokens,
+				COALESCE(SUM(COALESCE(` + db.V2TotalCacheReadExpr("t") + `, '0')::bigint), 0) as cache_read_tokens,
+				COALESCE(SUM(COALESCE(` + db.V2TotalCostExpr("t") + `, '0')::numeric), 0) as cost_usd
 			FROM filtered_sessions fs
-			LEFT JOIN session_card_tokens t ON fs.id = t.session_id
+			LEFT JOIN session_card_tokens_v2 t ON fs.id = t.session_id
 			GROUP BY fs.session_date, fs.session_type
 		)
 		SELECT

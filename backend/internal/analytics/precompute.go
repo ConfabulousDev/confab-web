@@ -178,12 +178,12 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				sl.total_lines,
 				s.first_seen,
 				-- Check if ALL cards exist (not missing)
-				CASE WHEN tc.session_id IS NOT NULL AND sc.session_id IS NOT NULL AND tl.session_id IS NOT NULL
+				CASE WHEN tv.session_id IS NOT NULL AND sc.session_id IS NOT NULL AND tl.session_id IS NOT NULL
 				     AND ca.session_id IS NOT NULL AND cv.session_id IS NOT NULL AND as_card.session_id IS NOT NULL
-				     AND rd.session_id IS NOT NULL AND wf.session_id IS NOT NULL AND tv.session_id IS NOT NULL
+				     AND rd.session_id IS NOT NULL AND wf.session_id IS NOT NULL
 				THEN TRUE ELSE FALSE END AS all_cards_exist,
 				-- Check if any existing card has wrong version (only meaningful when all cards exist)
-				CASE WHEN (tc.session_id IS NOT NULL AND tc.version != $1)
+				CASE WHEN (tv.session_id IS NOT NULL AND tv.version != $1)
 				     OR (sc.session_id IS NOT NULL AND sc.version != $2)
 				     OR (tl.session_id IS NOT NULL AND tl.version != $3)
 				     OR (ca.session_id IS NOT NULL AND ca.version != $4)
@@ -191,28 +191,24 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				     OR (as_card.session_id IS NOT NULL AND as_card.version != $6)
 				     OR (rd.session_id IS NOT NULL AND rd.version != $7)
 				     OR (wf.session_id IS NOT NULL AND wf.version != $15)
-				     OR (tv.session_id IS NOT NULL AND tv.version != $16)
 				THEN TRUE ELSE FALSE END AS has_version_mismatch,
 				-- Minimum up_to_line across all cards (most stale point)
 				LEAST(
-					COALESCE(tc.up_to_line, 0), COALESCE(sc.up_to_line, 0),
+					COALESCE(tv.up_to_line, 0), COALESCE(sc.up_to_line, 0),
 					COALESCE(tl.up_to_line, 0), COALESCE(ca.up_to_line, 0),
 					COALESCE(cv.up_to_line, 0), COALESCE(as_card.up_to_line, 0),
-					COALESCE(rd.up_to_line, 0), COALESCE(wf.up_to_line, 0),
-					COALESCE(tv.up_to_line, 0)
+					COALESCE(rd.up_to_line, 0), COALESCE(wf.up_to_line, 0)
 				) AS min_up_to_line,
 				-- Oldest computed_at across all cards (earliest computation)
 				LEAST(
-					COALESCE(tc.computed_at, NOW()), COALESCE(sc.computed_at, NOW()),
+					COALESCE(tv.computed_at, NOW()), COALESCE(sc.computed_at, NOW()),
 					COALESCE(tl.computed_at, NOW()), COALESCE(ca.computed_at, NOW()),
 					COALESCE(cv.computed_at, NOW()), COALESCE(as_card.computed_at, NOW()),
-					COALESCE(rd.computed_at, NOW()), COALESCE(wf.computed_at, NOW()),
-					COALESCE(tv.computed_at, NOW())
+					COALESCE(rd.computed_at, NOW()), COALESCE(wf.computed_at, NOW())
 				) AS min_computed_at,
 				s.last_sync_at
 			FROM session_lines sl
 			JOIN sessions s ON sl.session_id = s.id
-			LEFT JOIN session_card_tokens tc ON sl.session_id = tc.session_id
 			LEFT JOIN session_card_session sc ON sl.session_id = sc.session_id
 			LEFT JOIN session_card_tools tl ON sl.session_id = tl.session_id
 			LEFT JOIN session_card_code_activity ca ON sl.session_id = ca.session_id
@@ -274,7 +270,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 	`
 
 	rows, err := p.db.QueryContext(ctx, query,
-		TokensCardVersion,                 // $1
+		TokensV2CardVersion,               // $1
 		SessionCardVersion,                // $2
 		ToolsCardVersion,                  // $3
 		CodeActivityCardVersion,           // $4
@@ -289,7 +285,6 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		limit,                             // $13
 		pq.Array(models.AllowedProviders), // $14
 		WorkflowsCardVersion,              // $15
-		TokensV2CardVersion,               // $16
 	)
 	if err != nil {
 		span.RecordError(err)
@@ -557,8 +552,8 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			FROM session_lines sl
 			JOIN sessions s ON sl.session_id = s.id
 			-- All regular cards must be valid
-			JOIN session_card_tokens tc ON sl.session_id = tc.session_id
-				AND tc.version = $1 AND tc.up_to_line = sl.total_lines
+			JOIN session_card_tokens_v2 tv ON sl.session_id = tv.session_id
+				AND tv.version = $1 AND tv.up_to_line = sl.total_lines
 			JOIN session_card_session sc ON sl.session_id = sc.session_id
 				AND sc.version = $2 AND sc.up_to_line = sl.total_lines
 			JOIN session_card_tools tl ON sl.session_id = tl.session_id
@@ -622,7 +617,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	`
 
 	rows, err := p.db.QueryContext(ctx, query,
-		TokensCardVersion,                 // $1
+		TokensV2CardVersion,               // $1
 		SessionCardVersion,                // $2
 		ToolsCardVersion,                  // $3
 		CodeActivityCardVersion,           // $4
@@ -693,8 +688,8 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 		FROM session_lines sl
 		JOIN sessions s ON sl.session_id = s.id
 		-- All 7 regular cards must be current
-		JOIN session_card_tokens tc ON sl.session_id = tc.session_id
-			AND tc.version = $1 AND tc.up_to_line = sl.total_lines
+		JOIN session_card_tokens_v2 tv ON sl.session_id = tv.session_id
+			AND tv.version = $1 AND tv.up_to_line = sl.total_lines
 		JOIN session_card_session sc ON sl.session_id = sc.session_id
 			AND sc.version = $2 AND sc.up_to_line = sl.total_lines
 		JOIN session_card_tools tl ON sl.session_id = tl.session_id
@@ -731,7 +726,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 	`
 
 	rows, err := p.db.QueryContext(ctx, query,
-		TokensCardVersion,                 // $1
+		TokensV2CardVersion,               // $1
 		SessionCardVersion,                // $2
 		ToolsCardVersion,                  // $3
 		CodeActivityCardVersion,           // $4
