@@ -35,6 +35,8 @@ const baseProps: AdminCardInvalidationsPageContentProps = {
   isPreviewing: false,
   onExecuteClick: noop,
   showConfirmModal: false,
+  confirmInput: '',
+  onConfirmInputChange: noop,
   onConfirmClose: noop,
   onConfirmExecute: noop,
   isExecuting: false,
@@ -93,6 +95,8 @@ export const PreviewShown: Story = {
   },
 };
 
+// Confirm modal open with the count-echo input empty: the execute button is
+// disabled until the admin types the affected-session count (kyrr).
 export const ConfirmModalOpen: Story = {
   args: {
     ...baseProps,
@@ -102,6 +106,20 @@ export const ConfirmModalOpen: Story = {
     reason: 'Opus 4.7 pricing backfill',
     preview: previewResponse,
     showConfirmModal: true,
+  },
+};
+
+// Same modal with a matching count typed in: the execute button is now enabled.
+export const ConfirmModalCountMatched: Story = {
+  args: {
+    ...baseProps,
+    startDate: '2026-04-01T00:00',
+    endDate: '2026-04-20T00:00',
+    selectedCards: new Set<string>(['session_card_tokens']),
+    reason: 'Opus 4.7 pricing backfill',
+    preview: previewResponse,
+    showConfirmModal: true,
+    confirmInput: String(previewResponse.affected_sessions),
   },
 };
 

@@ -297,6 +297,7 @@ func TestInvalidateCards_ExecuteDeletesAndAudits(t *testing.T) {
 		CardTypes: []string{"session_card_tokens"},
 		Reason:    "execute test",
 		DryRun:    &dryRun,
+		Confirm:   "2", // kyrr: echo the affected-session count (2 seeded sessions)
 	})
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -330,6 +331,94 @@ func TestInvalidateCards_ExecuteDeletesAndAudits(t *testing.T) {
 	}
 }
 
+// TestInvalidateCards_ExecuteRequiresMatchingCount verifies the kyrr typed-
+// confirmation on the execute path: the admin must echo the affected-session count.
+// Absent/wrong count → 400 with NO deletion (the server re-counts and rejects on
+// mismatch, which also guards against a stale preview); correct count → executes.
+func TestInvalidateCards_ExecuteRequiresMatchingCount(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	tokensCount := func(t *testing.T) int {
+		t.Helper()
+		var n int
+		if err := env.DB.QueryRow(env.Ctx, `SELECT COUNT(*) FROM session_card_tokens`).Scan(&n); err != nil {
+			t.Fatalf("count tokens cards: %v", err)
+		}
+		return n
+	}
+
+	// setup seeds 2 sessions in-window and returns a ready execute request body
+	// (dry_run=false) with the given confirm value.
+	setup := func(t *testing.T) (*testutil.TestClient, func(confirm string) admin.InvalidateCardsRequest) {
+		t.Helper()
+		env.CleanDB(t)
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+		now := time.Now().UTC()
+		seedSessionWithTokens(t, env, user.ID, now.Add(-1*time.Hour))
+		seedSessionWithTokens(t, env, user.ID, now.Add(-2*time.Hour))
+		ts := setupTestServer(t, env)
+		client := adminClient(t, env, ts, adminUser.ID)
+		dryRun := false
+		return client, func(confirm string) admin.InvalidateCardsRequest {
+			return admin.InvalidateCardsRequest{
+				StartDate: now.Add(-4 * time.Hour).Format(time.RFC3339),
+				EndDate:   now.Format(time.RFC3339),
+				CardTypes: []string{"session_card_tokens"},
+				Reason:    "confirm test",
+				DryRun:    &dryRun,
+				Confirm:   confirm,
+			}
+		}
+	}
+
+	t.Run("absent confirm → 400, nothing deleted", func(t *testing.T) {
+		client, body := setup(t)
+		resp, err := client.Post("/api/v1/admin/cards/invalidate", body(""))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		if n := tokensCount(t); n != 2 {
+			t.Errorf("tokens cards after rejected execute = %d, want 2 (unchanged)", n)
+		}
+	})
+
+	t.Run("wrong count → 400, nothing deleted", func(t *testing.T) {
+		client, body := setup(t)
+		resp, err := client.Post("/api/v1/admin/cards/invalidate", body("5"))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		if n := tokensCount(t); n != 2 {
+			t.Errorf("tokens cards after wrong-count execute = %d, want 2 (unchanged)", n)
+		}
+	})
+
+	t.Run("matching count → 200, deletes", func(t *testing.T) {
+		client, body := setup(t)
+		resp, err := client.Post("/api/v1/admin/cards/invalidate", body("2"))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		var out admin.InvalidateCardsResponse
+		testutil.ParseJSON(t, resp, &out)
+		if !out.Executed {
+			t.Error("Executed should be true with a matching confirm count")
+		}
+		if n := tokensCount(t); n != 0 {
+			t.Errorf("tokens cards after confirmed execute = %d, want 0", n)
+		}
+	})
+}
+
 func TestListCardInvalidations_ReturnsRecentWithEmail(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -356,6 +445,7 @@ func TestListCardInvalidations_ReturnsRecentWithEmail(t *testing.T) {
 		CardTypes: []string{"session_card_tokens"},
 		Reason:    "listing test",
 		DryRun:    &dryRun,
+		Confirm:   "1", // kyrr: 1 seeded session
 	})
 	if err != nil {
 		t.Fatalf("invalidate: %v", err)
@@ -412,6 +502,7 @@ func TestListCardInvalidations_FilterByCorrelationID(t *testing.T) {
 		CardTypes: []string{"session_card_tokens"},
 		Reason:    "first",
 		DryRun:    &dryRun,
+		Confirm:   "2", // kyrr: 2 seeded sessions in window
 	})
 	if err != nil {
 		t.Fatalf("first: %v", err)
@@ -427,6 +518,7 @@ func TestListCardInvalidations_FilterByCorrelationID(t *testing.T) {
 		CardTypes: []string{"session_card_tokens"},
 		Reason:    "second",
 		DryRun:    &dryRun,
+		Confirm:   "1", // kyrr: first execute deleted the 2 original cards; only the reseeded session remains
 	})
 	if err != nil {
 		t.Fatalf("second: %v", err)

@@ -8,10 +8,12 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 |------|------|
 | `admin.go` | Super-admin handling: `ParseSuperAdminEmails` (validate + normalize + dedup, returning warnings), `SetSuperAdmins` (install the startup-validated cached set), `SuperAdminEmails` (sorted list), `IsSuperAdmin` (reads the cached set; falls back to a live `SUPER_ADMIN_EMAILS` parse when uninitialized), and `wouldOrphanLastAdmin` (the pure last-effective-admin guard decision). The set is validated + logged once at startup in `cmd/server/main.go` (g0bq). |
 | `admin_test.go` / `admin_internal_test.go` | Unit tests for `IsSuperAdmin`, the env parser, and the last-admin guard decision |
-| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, grant/revoke-admin (5k4v), delete, system shares, and smart recap prompt settings. Revoke/deactivate/delete run `guardLastAdmin` — 409 Conflict if the action would orphan the last effective admin (g0bq); for delete the guard runs before the S3 wipe. |
+| `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, grant/revoke-admin (5k4v), delete, system shares, and smart recap prompt settings. Revoke/deactivate/delete run `guardLastAdmin` — 409 Conflict if the action would orphan the last effective admin (g0bq); for delete the guard runs before the S3 wipe. Deactivate (body `confirm`) and delete (`?confirm=` query param) additionally require a typed-confirmation echo of the target email, checked after the guard via `verifyConfirmation` (kyrr). |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
-| `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`) |
+| `confirmation.go` | `verifyConfirmation` (trim + case-insensitive compare; empty expected never matches) and `respondConfirmationMismatch` (shared 400) — the typed-confirmation echo gate for destructive actions (kyrr / g0bq item #1). Reused by deactivate, delete, and card-invalidate execute. No token store, no migration. |
+| `confirmation_internal_test.go` | Unit tests for `verifyConfirmation` (trim, case-fold, empty-expected guard) |
+| `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`). Execute (`dry_run: false`) requires a `confirm` echo of the affected-session count; the handler re-counts and rejects on mismatch before deleting (kyrr). |
 | `card_invalidations_test.go` | Integration tests for the card invalidation handlers |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v) |
@@ -38,10 +40,10 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 |--------|--------------|-------------|
 | `HandleListUsersAPI` | `GET /api/v1/admin/users` | Returns JSON user list with recap stats and totals |
 | `HandleCreateUserAPI` | `POST /api/v1/admin/users` | Creates a password-authenticated user (when password auth enabled) |
-| `HandleDeactivateUserAPI` | `POST /api/v1/admin/users/{id}/deactivate` | Sets user status to inactive |
+| `HandleDeactivateUserAPI` | `POST /api/v1/admin/users/{id}/deactivate` | Sets user status to inactive. Body `confirm` must echo the target email (kyrr). |
 | `HandleActivateUserAPI` | `POST /api/v1/admin/users/{id}/activate` | Sets user status to active |
 | `HandleGrantAdminAPI` / `HandleRevokeAdminAPI` | `POST /api/v1/admin/users/{id}/grant-admin` \| `/revoke-admin` | Toggles the `users.is_admin` column (5k4v). Grant on a `read_only` user is rejected (D-S2). No last-admin lockout. |
-| `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}` | Deletes user, their S3 objects, then DB record |
+| `HandleDeleteUserAPI` | `DELETE /api/v1/admin/users/{id}?confirm=<email>` | Deletes user, their S3 objects, then DB record. `?confirm=` must echo the target email (kyrr). |
 | `HandleListSystemSharesAPI` | `GET /api/v1/admin/system-shares` | Returns all system-wide shares |
 | `HandleCreateSystemShareAPI` | `POST /api/v1/admin/system-shares` | Creates a system-wide share |
 | `HandleGetSmartRecapPrompt` | `GET /api/v1/admin/settings/smart-recap-prompt` | Returns current prompt (custom or default) plus fixed sections |
@@ -50,7 +52,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleDeleteSmartRecapPrompt` | `DELETE /api/v1/admin/settings/smart-recap-prompt` | Resets to default by deleting the custom setting |
 | `HandleGetSmartRecapRegenerateCount` | `GET /api/v1/admin/settings/smart-recap-prompt/regenerate-count` | Returns count of sessions with smart recap cards |
 | `HandleRegenerateAllSmartRecaps` | `POST /api/v1/admin/settings/smart-recap-prompt/regenerate-all` | Triggers bulk regeneration via timestamp in `admin_settings` |
-| `HandleInvalidateCards` | `POST /api/v1/admin/cards/invalidate` | Dry-run or execute DELETE of `session_card_*` rows for sessions in a date window. Writes audit rows so the smart-recap quota is bypassed on recompute. Defaults to `dry_run: true` |
+| `HandleInvalidateCards` | `POST /api/v1/admin/cards/invalidate` | Dry-run or execute DELETE of `session_card_*` rows for sessions in a date window. Writes audit rows so the smart-recap quota is bypassed on recompute. Defaults to `dry_run: true`. On execute, `confirm` must echo the affected-session count; the handler re-counts and rejects on mismatch before deleting (kyrr). |
 | `HandleListCardInvalidations` | `GET /api/v1/admin/cards/invalidations` | Returns up to 500 recent audit rows; `?correlation_id=` filters to one run |
 | `HandleGetCardTypes` | `GET /api/v1/admin/cards/types` | Serves `analytics.AllCardTableNames` — the source of truth for the invalidation UI's card-type checkboxes, so the frontend list can't drift (vd31). The same list backs the inbound `card_types` validation |
 

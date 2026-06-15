@@ -1095,8 +1095,9 @@ POST /api/v1/admin/users
 ```
 POST /api/v1/admin/users/{id}/deactivate
 ```
+**Request:** `{ "confirm": "<target user email>" }` — typed-confirmation echo (kyrr). The server compares it (trim + case-insensitive) to the target's email and rejects on mismatch **before** mutating. Checked after the last-admin guard.
 **Response:** `{ "id": 1, "status": "inactive" }`
-**Errors:** 409 (Conflict — would deactivate the last effective admin; g0bq)
+**Errors:** 400 (`confirm` missing or doesn't match the target email), 409 (Conflict — would deactivate the last effective admin; g0bq)
 
 ### Activate User
 ```
@@ -1117,11 +1118,13 @@ In the user-list response, `is_admin` is the raw column and `is_super_admin` is 
 
 ### Delete User
 ```
-DELETE /api/v1/admin/users/{id}
+DELETE /api/v1/admin/users/{id}?confirm=<target user email>
 ```
 Deletes S3 data first, then DB record (CASCADE). Uses 60s timeout. The last-effective-admin guard runs **before** the S3 wipe, so a blocked delete mutates nothing.
+
+`confirm` is a typed-confirmation echo (kyrr) carried as a **query param** (DELETE has no body); the server compares it (trim + case-insensitive) to the target's email and rejects on mismatch, after the last-admin guard and before the wipe.
 **Response:** 204 No Content
-**Errors:** 404 (not found), 409 (would delete the last effective admin; g0bq)
+**Errors:** 400 (`confirm` missing or doesn't match the target email), 404 (not found), 409 (would delete the last effective admin; g0bq)
 
 ### List System Shares
 ```
@@ -1279,7 +1282,8 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
   "end_date": "2026-04-20T23:59:59Z",
   "card_types": ["session_card_tokens"],
   "reason": "Opus 4.7 pricing backfill",
-  "dry_run": false
+  "dry_run": false,
+  "confirm": "1234"
 }
 ```
 
@@ -1290,6 +1294,7 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 | `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_workflows`, `session_card_smart_recap`. |
 | `reason` | string | Required, 1–500 chars. Stored in the audit row. |
 | `dry_run` | bool | Defaults to `true`. `false` to actually delete. |
+| `confirm` | string | Required on execute (`dry_run: false`) — a typed-confirmation echo (kyrr) of the affected-session count. The server **re-counts** affected sessions at execute time and rejects with `400` unless `confirm` equals that fresh count, binding the action to the current blast radius (a stale preview is rejected too). Ignored on dry-run. |
 
 **Response (dry-run or success):**
 ```json
@@ -1311,6 +1316,8 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 | `executed` | bool | `false` for dry-run; `true` for actual execute. |
 
 **Partial-failure response (500):** the body includes `completed_batches` and `affected_sessions_executed` reporting progress before the failure, plus an `error` string. Already-committed batches remain invalidated; re-running the same window is safe.
+
+**Errors:** 400 (validation, or — on execute — `confirm` missing or not equal to the freshly-counted affected-session count).
 
 **Auth:** super-admin only (`admin.Middleware`).
 
