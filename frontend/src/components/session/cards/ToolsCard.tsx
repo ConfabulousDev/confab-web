@@ -1,4 +1,5 @@
-import { CardWrapper, CardLoading, CardError } from './Card';
+import { CardWrapper } from './Card';
+import { useCardState } from './useCardState';
 import { WrenchIcon } from '@/components/icons';
 import type { ToolsCardData } from '@/schemas/api';
 import type { CardProps } from './types';
@@ -99,17 +100,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function ToolsCard({ data, loading, error }: CardProps<ToolsCardData>) {
-  if (error && !data) {
-    return <CardError title="Tools" error={error} icon={WrenchIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Tools" icon={WrenchIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Tools', icon: WrenchIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 

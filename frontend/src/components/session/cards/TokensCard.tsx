@@ -1,4 +1,5 @@
-import { CardWrapper, StatRow, CardLoading, CardError } from './Card';
+import { CardWrapper, StatRow } from './Card';
+import { useCardState } from './useCardState';
 import { CostAmount } from '@/components/CostAmount';
 import { formatTokenCount, formatCost } from '@/utils/tokenStats';
 import {
@@ -44,17 +45,8 @@ export function TokensCardForRegistry(
 }
 
 export function TokensCard({ data, loading, error, provider }: TokensCardProps) {
-  if (error && !data) {
-    return <CardError title="Tokens" error={error} icon={TokenIcon} />;
-  }
-
-  if (loading && !data) {
-    return (
-      <CardWrapper title="Tokens" icon={TokenIcon}>
-        <CardLoading />
-      </CardWrapper>
-    );
-  }
+  const guard = useCardState(data, loading, error, { title: 'Tokens', icon: TokenIcon });
+  if (guard) return guard;
 
   if (!data) return null;
 
