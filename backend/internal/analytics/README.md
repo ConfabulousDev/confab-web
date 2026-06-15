@@ -43,7 +43,8 @@ The orchestrators follow the same convention: `claude_compute.go` ↔ `codex_com
 | `agent_provider.go` | `AgentFileInfo`, `AgentDownloader`, and `NewAgentProvider()` — streams agent files from storage one at a time, capping at `maxAgents` (0 = unlimited). |
 | `cards.go` | Card record types (DB schema), card data types (API response), version constants, `IsValid`/`AllValid` staleness helpers. |
 | `models.go` | `AnalyticsResponse` (API envelope), legacy flat types (`TokenStats`, `CostStats`, `CompactionInfo`). |
-| `store.go` | `Store` — DB CRUD for all card tables (`session_card_*`), search index, and smart recap. `GetCards`/`UpsertCards` run all queries in parallel. `ToCards` and `ToResponse` handle `ComputeResult <-> Cards <-> AnalyticsResponse` conversions. |
+| `store.go` | `Store` — search-index and smart-recap DB ops, plus the `ToCards`/`ToResponse` (`ComputeResult <-> Cards <-> AnalyticsResponse`) conversions. The per-card CRUD lives in `store_cards.go`. |
+| `store_cards.go` | Generic session_card_* get/upsert (4thv). One `cardTable` descriptor + per-card scan/bind closures drive `getCard[T]`/`upsertCard[T]`, which generate the SELECT/INSERT/ON CONFLICT SQL from the shared header + data columns. JSONB and DECIMAL columns are handled by `sql.Scanner`/`driver.Valuer` wrappers (`jsonCol`, `jsonSliceCol` — nil slice → `[]`, `decimalStrCol`). The `cardOps` registry wires each card into the parallel `GetCards`/`UpsertCards` fan-outs, so adding a card is one registry entry plus its table+scan+bind. |
 | `precompute.go` | `Precomputer` — background worker entry points. `FindStaleSessions`, `PrecomputeRegularCards`, `FindStaleSmartRecapSessions`, `PrecomputeSmartRecapOnly`, `FindStaleSearchIndexSessions`, `BuildSearchIndexOnly`. Stale-session filters cover all analytics-eligible providers via `models.AllowedProviders`; the three top-level compute methods dispatch through `ProviderFor(StaleSession.Provider)`. |
 | `provider.go` | `SessionProvider`, `ParseInput`, `RegisterProvider`, `ProviderFor` — registry contract. Providers register a canonical name plus aliases at init time; unknown providers return loud errors. `SessionProvider.DisplayName()` returns the human-facing label (used by `email/email.go` for share invitation subjects). |
 | `claude_provider.go` | `claudeProvider` — Claude-Code implementation of `SessionProvider`. Registers canonical `claude-code` plus legacy `Claude Code`. `claudeRollout` caches parsed agent files on `cachedAgents` after the first traversal, so subsequent calls to `ComputeCards`, `SearchText`, and `PrepareTranscript` on the same rollout instance reuse them without a second S3 download. |
@@ -110,7 +111,7 @@ Each analyzer has its own result struct (`TokensResult`, `SessionResult`, `Tools
 
 ### Store
 
-`Store` wraps `*sql.DB` and provides get/upsert for every card table plus the search index. `GetCards` and `UpsertCards` fan out all queries in parallel.
+`Store` wraps `*sql.DB` and provides get/upsert for every card table plus the search index. `GetCards` and `UpsertCards` fan out all queries in parallel, driven by the `cardOps` registry in `store_cards.go`; the per-card SQL is generated from a `cardTable` descriptor rather than hand-written (4thv).
 
 ## How to Extend
 
@@ -126,7 +127,7 @@ Follow the `/add-session-card` skill (referenced in CLAUDE.md) for the full play
 6. **Register in `ComputeStreaming`** -- instantiate the analyzer and add it to the `processors` slice.
 7. **Wire into `ComputeResult`** -- add fields, populate them from the analyzer result.
 8. **`ToCards` / `ToResponse`** -- add conversion logic in `store.go`.
-9. **Store operations** -- add `getFooCard` / `upsertFooCard` methods and wire them into `GetCards` / `UpsertCards`.
+9. **Store operations** -- in `store_cards.go` add a `fooTable` (`cardTable`) plus `fooScan`/`fooBind` closures and the two thin `getFooCard`/`upsertFooCard` methods, then add a `cardOps` registry entry to wire it into the parallel `GetCards`/`UpsertCards`.
 10. **Staleness queries** -- update `FindStaleSessions`, `FindStaleSmartRecapSessions`, and `FindStaleSearchIndexSessions` to JOIN the new `session_card_foo` table and check its version.
 11. **DB migration** -- create the `session_card_foo` table.
 12. **Frontend** -- add Zod schema, component, and registry entry.
