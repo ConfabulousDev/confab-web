@@ -2625,3 +2625,175 @@ func TestListUserSessionsPaginated_EstimatedCostUSD_ReadsV2(t *testing.T) {
 		t.Error("v1-only session not found in results")
 	}
 }
+
+// =============================================================================
+// Filter-option listability gate (0407)
+//
+// A filter option (repo/branch/owner) must never map to zero listable
+// sessions: every value the dropdown offers must be reachable in the session
+// list with no other filter active. A session is "listable" only when it has
+// synced lines (> 0) AND a summary or first_user_message. Options derived from
+// non-listable-only sessions previously leaked into the dropdowns and orphaned
+// to an empty list when selected.
+// =============================================================================
+
+func containsStr(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// TestFilterOptions_ExcludesNonListableRepoBranchOwner asserts that a
+// repo/branch/owner whose ONLY sessions are non-listable (no synced lines, or
+// no summary/first_user_message) is absent from filter options, while a
+// listable session's values are present.
+func TestFilterOptions_ExcludesNonListableRepoBranchOwner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	listable := testutil.CreateTestUser(t, env, "listable@test.com", "Listable Owner")
+	noLines := testutil.CreateTestUser(t, env, "nolines@test.com", "No Lines Owner")
+	noSummary := testutil.CreateTestUser(t, env, "nosummary@test.com", "No Summary Owner")
+
+	// Listable session: has summary + sync lines.
+	testutil.CreateTestSessionFull(t, env, listable.ID, "listable-s", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/listable-repo.git",
+		Branch:  "listable-branch",
+		Summary: "real session",
+	})
+	// Non-listable: no sync file (SyncLines: -1).
+	testutil.CreateTestSessionFull(t, env, noLines.ID, "nolines-s", testutil.TestSessionFullOpts{
+		RepoURL:   "https://github.com/org/nolines-repo.git",
+		Branch:    "nolines-branch",
+		Summary:   "has summary but no lines",
+		SyncLines: -1,
+	})
+	// Non-listable: has sync lines but no summary / first_user_message.
+	testutil.CreateTestSessionFull(t, env, noSummary.ID, "nosummary-s", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/nosummary-repo.git",
+		Branch:  "nosummary-branch",
+	})
+
+	ctx := context.Background()
+	result, err := store.ListUserSessionsPaginated(ctx, listable.ID, db.SessionListParams{})
+	if err != nil {
+		t.Fatalf("ListUserSessionsPaginated failed: %v", err)
+	}
+	opts := result.FilterOptions
+
+	// Listable values present.
+	if !containsStr(opts.Repos, "org/listable-repo") {
+		t.Errorf("listable repo missing from options: %v", opts.Repos)
+	}
+	if !containsStr(opts.Branches, "listable-branch") {
+		t.Errorf("listable branch missing from options: %v", opts.Branches)
+	}
+	if !containsStr(opts.Owners, "listable@test.com") {
+		t.Errorf("listable owner missing from options: %v", opts.Owners)
+	}
+
+	// Non-listable-only values absent.
+	if containsStr(opts.Repos, "org/nolines-repo") {
+		t.Errorf("no-lines repo should be absent from options: %v", opts.Repos)
+	}
+	if containsStr(opts.Repos, "org/nosummary-repo") {
+		t.Errorf("no-summary repo should be absent from options: %v", opts.Repos)
+	}
+	if containsStr(opts.Branches, "nolines-branch") {
+		t.Errorf("no-lines branch should be absent from options: %v", opts.Branches)
+	}
+	if containsStr(opts.Branches, "nosummary-branch") {
+		t.Errorf("no-summary branch should be absent from options: %v", opts.Branches)
+	}
+	if containsStr(opts.Owners, "nolines@test.com") {
+		t.Errorf("no-lines owner should be absent from options: %v", opts.Owners)
+	}
+	if containsStr(opts.Owners, "nosummary@test.com") {
+		t.Errorf("no-summary owner should be absent from options: %v", opts.Owners)
+	}
+}
+
+// TestFilterOptions_EveryOptionYieldsResults asserts the core invariant: every
+// option the dropdown offers maps to >= 1 listable session when selected as the
+// sole active filter (no orphans).
+func TestFilterOptions_EveryOptionYieldsResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	user := testutil.CreateTestUser(t, env, "facet@test.com", "Facet User")
+
+	// Two listable sessions in different repos/branches.
+	testutil.CreateTestSessionFull(t, env, user.ID, "facet-a", testutil.TestSessionFullOpts{
+		RepoURL: "https://github.com/org/repo-a.git",
+		Branch:  "main",
+		Summary: "A",
+	})
+	testutil.CreateTestSessionFull(t, env, user.ID, "facet-b", testutil.TestSessionFullOpts{
+		RepoURL: "git@github.com:org/repo-b.git",
+		Branch:  "dev",
+		Summary: "B",
+	})
+	// A non-listable session whose values would orphan if leaked.
+	testutil.CreateTestSessionFull(t, env, user.ID, "facet-orphan", testutil.TestSessionFullOpts{
+		RepoURL:   "https://github.com/org/orphan.git",
+		Branch:    "orphan-branch",
+		Summary:   "orphan",
+		SyncLines: -1,
+	})
+
+	ctx := context.Background()
+	opts := func() db.SessionFilterOptions {
+		r, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{})
+		if err != nil {
+			t.Fatalf("ListUserSessionsPaginated failed: %v", err)
+		}
+		return r.FilterOptions
+	}()
+
+	for _, repo := range opts.Repos {
+		r, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Repos: []string{repo}})
+		if err != nil {
+			t.Fatalf("repo filter %q failed: %v", repo, err)
+		}
+		if len(r.Sessions) == 0 {
+			t.Errorf("repo option %q orphaned: yields zero sessions", repo)
+		}
+	}
+	for _, branch := range opts.Branches {
+		r, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Branches: []string{branch}})
+		if err != nil {
+			t.Fatalf("branch filter %q failed: %v", branch, err)
+		}
+		if len(r.Sessions) == 0 {
+			t.Errorf("branch option %q orphaned: yields zero sessions", branch)
+		}
+	}
+	for _, owner := range opts.Owners {
+		r, err := store.ListUserSessionsPaginated(ctx, user.ID, db.SessionListParams{Owners: []string{owner}})
+		if err != nil {
+			t.Fatalf("owner filter %q failed: %v", owner, err)
+		}
+		if len(r.Sessions) == 0 {
+			t.Errorf("owner option %q orphaned: yields zero sessions", owner)
+		}
+	}
+}

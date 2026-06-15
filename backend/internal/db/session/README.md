@@ -31,13 +31,13 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 
 ## Invariants
 
-- Sessions are only visible if `total_lines > 0` AND (`summary IS NOT NULL` OR `first_user_message IS NOT NULL`). This is enforced in the paginated query filters.
+- Sessions are only visible ("listable") if `total_lines > 0` AND (`summary IS NOT NULL` OR `first_user_message IS NOT NULL`). This gate is the shared `db.ListableSessionPredicate` fragment (0407), applied by both the paginated list query (`buildPushdownFilters`) and the filter-option queries (`queryFilterOptions`) so the list and its dropdowns can never drift.
 - Cursor pagination uses `(COALESCE(last_message_at, first_seen), id)` as the keyset. Cursors are base64-encoded `RFC3339Nano|UUID` strings.
 - Access type priority during deduplication: `owner` (1) > `private_share` (2) > `system_share` (3).
 - `FindOrCreateSyncSession` uses an optimistic insert with unique-violation fallback to handle concurrent syncs for the same external ID.
 - Session uniqueness is `(user_id, session_type, external_id)`. New code writes the canonical `session_type` values `'claude-code'` and `'codex'`; legacy `'Claude Code'` rows persist **permanently** in OSS self-hosted installs (no one-time backfill is run). Read paths apply `models.NormalizeProvider` so the application layer always sees canonical values; see `internal/models/provider.go`.
 - `UpdateSyncFileState` increments `chunk_count` on each upsert; this is an estimate that may drift. The read path self-heals via `UpdateSyncFileChunkCount`.
-- Filter option dropdowns (repos, branches, owners) derive live from the viewer's visible sessions' `git_info` via `queryFilterOptions` — there are no precomputed lookup tables.
+- Filter option dropdowns (repos, branches, owners) derive live from the viewer's visible sessions' `git_info` via `queryFilterOptions` — there are no precomputed lookup tables. Each dimension applies `db.ListableSessionPredicate` (0407), so a shown option always maps to ≥1 listable session and never orphans to an empty list (the owners sub-select gained a `sessions` join for this).
 - **CF-510 fork→upstream collapsing**: a fork session surfaces under its upstream chip because `db.RepoRootExpr`/`db.RepoMatchExpr` resolve the upstream live from that session's own `git_info` (`tracking_remote` → matching `remotes` entry's URL). Used by both the filter list (`queryFilterOptions`) and the filter match (`buildPushdownFilters`). Per-session, never shared across sessions; sessions without CLI-shipped remotes stay under their own repo. Replaced the global `session_repos.root_name` dictionary (dropped in migration 049).
 
 ## Design Decisions
