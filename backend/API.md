@@ -1149,6 +1149,8 @@ GET /api/v1/admin/system-shares
 
 `provider` is the canonical session provider (`"claude-code"` or `"codex"`). Legacy `"Claude Code"` rows are normalized at the DB boundary so the wire value is always canonical.
 
+Expired shares (`expires_at <= NOW()`) are omitted from this listing — only shares that still grant access are returned.
+
 ### Create System Share
 ```
 POST /api/v1/admin/system-shares

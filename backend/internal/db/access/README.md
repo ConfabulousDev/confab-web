@@ -8,15 +8,15 @@ Session access control and share management (create, list, revoke shares; check 
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
 | `access.go` | `GetSessionAccessType` (determines how a user can access a session) and `GetSessionDetailWithAccess` (returns session detail with PII redaction for non-owners) |
-| `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `RevokeShare`, `CountUserSharesSince` (daily-quota counter), and the private `loadShareRecipients` helper |
+| `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `ListSystemShares`, `RevokeShare`, `CountUserSharesSince` (daily-quota counter), and the private `loadShareRecipients` helper |
 
 ## Key API
 
 - **`GetSessionAccessType(ctx, sessionID, viewerUserID)`** -- Determines access level by checking, in order: owner, `ShareAllSessions` flag, then share rows (recipient > system > public). Returns a `SessionAccessInfo` with the access type, share ID, and an `AuthMayHelp` hint for unauthenticated users.
 - **`GetSessionDetailWithAccess(ctx, sessionID, viewerUserID, accessInfo)`** -- Loads full session detail for any user with access. Redacts PII (hostname, username, cwd, transcript path) for non-owners. For **public** access (reachable anonymously) it additionally blanks `OwnerEmail` and leaves `SharedByEmail` nil so the owner's email never leaks to anonymous viewers (p99d); recipient/system viewers are authenticated and entitled to it, so they keep both. For **all** non-owners it also sanitizes the free-form `git_info` JSONB via `db.SanitizeGitInfoForSharing` — keeping only `branch` and a host/credential-stripped `owner/repo` display name, dropping remote URLs (which can embed credentials), `tracking_remote`, author, and every other key (d29s). Blocks access if the session owner is deactivated. Updates `last_accessed_at` on the share as a non-critical analytics side effect.
 - **`CreateShare(ctx, sessionID, userID, isPublic, expiresAt, recipientEmails)`** -- Creates a public or recipient-only share in a transaction. For recipient shares, batch-resolves email addresses to user IDs.
-- **`CreateSystemShare(ctx, sessionID, expiresAt)`** -- Creates a system-wide share (admin operation, no ownership check). Accessible to any authenticated user.
-- **`ListShares(ctx, sessionID, userID)` / `ListAllUserShares(ctx, userID)`** -- Lists shares for a session or across all of a user's sessions, including recipient emails.
+- **`CreateSystemShare(ctx, sessionID, expiresAt)`** -- Creates a system-wide share (admin operation, no ownership check). Accessible to any authenticated user. **Does not verify admin status itself** — callers must enforce admin auth before invoking (the HTTP handler sits behind `admin.Middleware`).
+- **`ListShares(ctx, sessionID, userID)` / `ListAllUserShares(ctx, userID)` / `ListSystemShares(ctx)`** -- Lists shares for a session, across all of a user's sessions, or all system-wide shares (admin). Each filters out expired shares (`expires_at <= NOW()`) so owners/admins never see ghost rows for shares that no longer grant access; the owner lists also include recipient emails (CF-433 / H3).
 - **`RevokeShare(ctx, shareID, userID)`** -- Deletes a share, verified through session ownership. Returns `ErrUnauthorized` for both not-found and wrong-owner cases (security by obscurity).
 - **`CountUserSharesSince(ctx, userID, since)`** -- Counts shares the user has created since an instant, joining `session_shares` → `sessions` on the owning `user_id` (the table has no owner column). Backs the per-user daily share-creation quota (CF-429 / H2) enforced in the `POST /sessions/{id}/share` handler.
 
@@ -29,7 +29,7 @@ Session access control and share management (create, list, revoke shares; check 
 ## Invariants
 
 - Access check priority: owner > `ShareAllSessions` flag > recipient share > system share > public share.
-- Share expiration is enforced in all queries via `(sh.expires_at IS NULL OR sh.expires_at > NOW())`.
+- Share expiration is enforced in **all** share queries via `(ss.expires_at IS NULL OR ss.expires_at > NOW())` — both the access-grant query in `GetSessionAccessType` and the three list queries (`ListShares`, `ListAllUserShares`, `ListSystemShares`). The list queries must keep this predicate so listings never surface expired ghost rows (CF-433 / H3).
 - Deactivated session owners cause `ErrOwnerInactive` for all non-owner access, preventing visibility of content from disabled accounts.
 - PII fields are never returned for non-owner access (enforced via `RedactForSharing()`).
 - The owner's email is never exposed to **public** (anonymous-reachable) access: `OwnerEmail` is blanked and `SharedByEmail` stays nil for `SessionAccessPublic`. Recipient/system access keeps both — the viewer is authenticated and entitled to know who shared with them (p99d).
@@ -47,7 +47,7 @@ Session access control and share management (create, list, revoke shares; check 
 
 ## Testing
 
-- Integration tests: `access_test.go` (access type resolution, detail retrieval with redaction), `shares_test.go` (share lifecycle, recipients, revocation)
+- Integration tests: `access_test.go` (access type resolution, detail retrieval with redaction), `shares_test.go` (share lifecycle, recipients, revocation, and expired-share filtering on all three list endpoints)
 - Tests cover all access paths: owner, recipient, system, public, unauthenticated, and deactivated owner scenarios.
 
 ## Dependencies
