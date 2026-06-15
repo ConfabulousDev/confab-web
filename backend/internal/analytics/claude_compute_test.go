@@ -119,38 +119,49 @@ func TestToCards(t *testing.T) {
 		CacheCreationTokens: 100,
 		CacheReadTokens:     200,
 		EstimatedCostUSD:    decimal.NewFromFloat(1.50),
-		UserTurns:           5,
-		AssistantTurns:      4,
-		ModelsUsed:          []string{"claude-sonnet-4"},
-		CompactionAuto:      2,
-		CompactionManual:    1,
+		TokensV2: &TokensV2Data{
+			TotalCostUSD:       "1.5",
+			TotalInput:         1000,
+			TotalOutput:        500,
+			TotalCacheCreation: 100,
+			TotalCacheRead:     200,
+			ByProvider:         map[string]TokensV2Provider{"claude-code": {CostUSD: "1.5"}},
+		},
+		UserTurns:        5,
+		AssistantTurns:   4,
+		ModelsUsed:       []string{"claude-sonnet-4"},
+		CompactionAuto:   2,
+		CompactionManual: 1,
 	}
 
 	cards := result.ToCards("session-123", 500)
 
-	// Check tokens card (now includes cost)
-	if cards.Tokens == nil {
-		t.Fatal("Tokens card should not be nil")
+	// tokens_v2 is the sole tokens card (pjnz retired the flat v1 card).
+	if cards.TokensV2 == nil {
+		t.Fatal("TokensV2 card should not be nil")
 	}
-	if cards.Tokens.SessionID != "session-123" {
-		t.Errorf("Tokens.SessionID = %s, want session-123", cards.Tokens.SessionID)
+	if cards.TokensV2.SessionID != "session-123" {
+		t.Errorf("TokensV2.SessionID = %s, want session-123", cards.TokensV2.SessionID)
 	}
-	if cards.Tokens.Version != TokensCardVersion {
-		t.Errorf("Tokens.Version = %d, want %d", cards.Tokens.Version, TokensCardVersion)
+	if cards.TokensV2.Version != TokensV2CardVersion {
+		t.Errorf("TokensV2.Version = %d, want %d", cards.TokensV2.Version, TokensV2CardVersion)
 	}
-	if cards.Tokens.UpToLine != 500 {
-		t.Errorf("Tokens.UpToLine = %d, want 500", cards.Tokens.UpToLine)
+	if cards.TokensV2.UpToLine != 500 {
+		t.Errorf("TokensV2.UpToLine = %d, want 500", cards.TokensV2.UpToLine)
 	}
-	if cards.Tokens.InputTokens != 1000 {
-		t.Errorf("Tokens.InputTokens = %d, want 1000", cards.Tokens.InputTokens)
+	if cards.TokensV2.Data.TotalInput != 1000 {
+		t.Errorf("TokensV2.Data.TotalInput = %d, want 1000", cards.TokensV2.Data.TotalInput)
 	}
-	if !cards.Tokens.EstimatedCostUSD.Equal(decimal.NewFromFloat(1.50)) {
-		t.Errorf("Tokens.EstimatedCostUSD = %s, want 1.50", cards.Tokens.EstimatedCostUSD)
+	if cards.TokensV2.Data.TotalCacheCreation != 100 {
+		t.Errorf("TokensV2.Data.TotalCacheCreation = %d, want 100", cards.TokensV2.Data.TotalCacheCreation)
+	}
+	if cards.TokensV2.Data.TotalCostUSD != "1.5" {
+		t.Errorf("TokensV2.Data.TotalCostUSD = %s, want 1.5", cards.TokensV2.Data.TotalCostUSD)
 	}
 
 	// Verify ComputedAt is in UTC (catches timezone bugs)
-	if cards.Tokens.ComputedAt.Location().String() != "UTC" {
-		t.Errorf("Tokens.ComputedAt should be UTC, got %s", cards.Tokens.ComputedAt.Location())
+	if cards.TokensV2.ComputedAt.Location().String() != "UTC" {
+		t.Errorf("TokensV2.ComputedAt should be UTC, got %s", cards.TokensV2.ComputedAt.Location())
 	}
 	if cards.Session.ComputedAt.Location().String() != "UTC" {
 		t.Errorf("Session.ComputedAt should be UTC, got %s", cards.Session.ComputedAt.Location())
@@ -171,13 +182,18 @@ func TestToCards(t *testing.T) {
 func TestCardsToResponse(t *testing.T) {
 	avgTime := 5000
 	cards := &Cards{
-		Tokens: &TokensCardRecord{
-			UpToLine:            1500,
-			InputTokens:         1000,
-			OutputTokens:        500,
-			CacheCreationTokens: 100,
-			CacheReadTokens:     200,
-			EstimatedCostUSD:    decimal.NewFromFloat(1.50),
+		// The flat tokens card is now derived from the tokens_v2 top-level scalars
+		// (pjnz retired the v1 storage), so seed v2 with provider data.
+		TokensV2: &TokensV2CardRecord{
+			UpToLine: 1500,
+			Data: TokensV2Data{
+				TotalCostUSD:       "1.5",
+				TotalInput:         1000,
+				TotalOutput:        500,
+				TotalCacheCreation: 100,
+				TotalCacheRead:     200,
+				ByProvider:         map[string]TokensV2Provider{"claude-code": {CostUSD: "1.5"}},
+			},
 		},
 		Session: &SessionCardRecord{
 			ModelsUsed:          []string{"claude-sonnet-4"},
@@ -220,11 +236,12 @@ func TestCardsToResponse(t *testing.T) {
 	if response.Cards == nil {
 		t.Fatal("Cards should not be nil")
 	}
-	if len(response.Cards) != 3 {
-		t.Errorf("Cards length = %d, want 3", len(response.Cards))
+	// tokens + tokens_v2 (both derived from the v2 card) + session + tools.
+	if len(response.Cards) != 4 {
+		t.Errorf("Cards length = %d, want 4", len(response.Cards))
 	}
 
-	// Verify tokens card (now includes cost)
+	// Verify the flat tokens card (derived from the v2 scalars).
 	tokens, ok := response.Cards["tokens"].(TokensCardData)
 	if !ok {
 		t.Fatal("tokens card not found or wrong type")
@@ -232,8 +249,16 @@ func TestCardsToResponse(t *testing.T) {
 	if tokens.Input != 1000 {
 		t.Errorf("cards.tokens.Input = %d, want 1000", tokens.Input)
 	}
+	if tokens.CacheCreation != 100 {
+		t.Errorf("cards.tokens.CacheCreation = %d, want 100", tokens.CacheCreation)
+	}
 	if tokens.EstimatedUSD != "1.5" {
 		t.Errorf("cards.tokens.EstimatedUSD = %s, want 1.5", tokens.EstimatedUSD)
+	}
+
+	// Verify tokens_v2 card is present (provider data → served).
+	if _, ok := response.Cards["tokens_v2"].(TokensV2Data); !ok {
+		t.Fatal("tokens_v2 card not found or wrong type")
 	}
 
 	// Verify session card (now includes compaction)

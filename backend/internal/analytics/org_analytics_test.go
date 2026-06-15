@@ -7,7 +7,6 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/shopspring/decimal"
 )
 
 func TestGetOrgAnalytics_EmptyResults(t *testing.T) {
@@ -85,15 +84,6 @@ func TestGetOrgAnalytics_MultipleUsers(t *testing.T) {
 	insertCards := func(sessionID string, cost float64, claudeMs, userMs int64, durationMs int64) {
 		t.Helper()
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sessionID,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				InputTokens:      1000,
-				OutputTokens:     500,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
-			},
 			TokensV2: v2CostCard(sessionID, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sessionID,
@@ -235,13 +225,6 @@ func TestGetOrgAnalytics_ReadsV2Cost(t *testing.T) {
 	// v1-only-org: flat v1 tokens + conversation but NO v2 → excluded by the
 	// INNER JOIN onto session_card_tokens_v2 (its $7.00 must never be summed).
 	if err := store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        v1Only,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       now,
-			UpToLine:         100,
-			EstimatedCostUSD: decimal.NewFromFloat(7.00),
-		},
 		Conversation: conversation(v1Only),
 	}); err != nil {
 		t.Fatalf("UpsertCards (v1-only-org) failed: %v", err)
@@ -292,13 +275,6 @@ func TestGetOrgAnalytics_DateRangeFiltering(t *testing.T) {
 	userMs := int64(20000)
 
 	err := store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        sid,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       now,
-			UpToLine:         100,
-			EstimatedCostUSD: decimal.NewFromFloat(1.00),
-		},
 		TokensV2: v2CostCard(sid, 1.00),
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID:                sid,
@@ -376,13 +352,6 @@ func TestGetOrgAnalytics_DeactivatedUsersExcluded(t *testing.T) {
 		claudeMs := int64(10000)
 		userMs := int64(20000)
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sid,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(1.00),
-			},
 			TokensV2: v2CostCard(sid, 1.00),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,
@@ -442,13 +411,6 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 
 	// Session 1: both the cost (v2) and conversation cards → counted.
 	err := store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        sid1,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       now,
-			UpToLine:         100,
-			EstimatedCostUSD: decimal.NewFromFloat(1.00),
-		},
 		TokensV2: v2CostCard(sid1, 1.00),
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID:                sid1,
@@ -465,13 +427,6 @@ func TestGetOrgAnalytics_SessionsMissingOneCardExcluded(t *testing.T) {
 
 	// Session 2: cost cards but no conversation card → excluded.
 	err = store.UpsertCards(ctx, &analytics.Cards{
-		Tokens: &analytics.TokensCardRecord{
-			SessionID:        sid2,
-			Version:          analytics.TokensCardVersion,
-			ComputedAt:       now,
-			UpToLine:         100,
-			EstimatedCostUSD: decimal.NewFromFloat(5.00),
-		},
 		TokensV2: v2CostCard(sid2, 5.00),
 	})
 	if err != nil {
@@ -530,13 +485,6 @@ func TestGetOrgAnalytics_ProviderFilter(t *testing.T) {
 	seed := func(sessionID string, cost float64, claudeMs, userMs int64) {
 		t.Helper()
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sessionID,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
-			},
 			TokensV2: v2CostCard(sessionID, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sessionID,
@@ -652,13 +600,6 @@ func TestGetOrgAnalytics_RepoFilter(t *testing.T) {
 		assistantMs := int64(10000)
 		userMs := int64(20000)
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sessionID,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
-			},
 			TokensV2: v2CostCard(sessionID, cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sessionID,
@@ -792,13 +733,6 @@ func TestGetOrgAnalytics_RepoAndProviderCoFilter(t *testing.T) {
 		assistantMs := int64(10000)
 		userMs := int64(20000)
 		err := store.UpsertCards(ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sid,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				EstimatedCostUSD: decimal.NewFromFloat(s.cost),
-			},
 			TokensV2: v2CostCard(sid, s.cost),
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,

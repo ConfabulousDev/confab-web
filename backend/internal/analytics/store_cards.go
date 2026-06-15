@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/shopspring/decimal"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -67,30 +66,6 @@ func (c jsonSliceCol[E]) Value() (driver.Value, error) {
 	}
 	return json.Marshal(s)
 }
-
-// decimalStrCol adapts a decimal.Decimal stored as a DECIMAL/text column,
-// parsing on read and emitting the canonical string on write.
-type decimalStrCol struct{ ptr *decimal.Decimal }
-
-func (c decimalStrCol) Scan(src any) error {
-	var str string
-	switch s := src.(type) {
-	case string:
-		str = s
-	case []byte:
-		str = string(s)
-	default:
-		return fmt.Errorf("decimalStrCol: unsupported source type %T", src)
-	}
-	d, err := decimal.NewFromString(str)
-	if err != nil {
-		return fmt.Errorf("parsing decimal: %w", err)
-	}
-	*c.ptr = d
-	return nil
-}
-
-func (c decimalStrCol) Value() (driver.Value, error) { return c.ptr.String(), nil }
 
 // cardHeaderCols are the columns every session_card_* table shares, in order.
 var cardHeaderCols = []string{"session_id", "version", "computed_at", "up_to_line"}
@@ -153,30 +128,6 @@ func upsertCard[T any](ctx context.Context, s *Store, ct cardTable, record *T,
 // =============================================================================
 // Per-card tables and bindings
 // =============================================================================
-
-var tokensTable = cardTable{name: "session_card_tokens", dataCols: []string{
-	"input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens",
-	"estimated_cost_usd", "fast_turns", "fast_cost_usd"}}
-
-func tokensScan(r *TokensCardRecord) []any {
-	return []any{&r.SessionID, &r.Version, &r.ComputedAt, &r.UpToLine,
-		&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens,
-		decimalStrCol{&r.EstimatedCostUSD}, &r.FastTurns, decimalStrCol{&r.FastCostUSD}}
-}
-
-func tokensBind(r *TokensCardRecord) []any {
-	return []any{r.SessionID, r.Version, r.ComputedAt, r.UpToLine,
-		r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens,
-		decimalStrCol{&r.EstimatedCostUSD}, r.FastTurns, decimalStrCol{&r.FastCostUSD}}
-}
-
-func (s *Store) getTokensCard(ctx context.Context, sessionID string) (*TokensCardRecord, error) {
-	return getCard(ctx, s, tokensTable, sessionID, tokensScan)
-}
-
-func (s *Store) upsertTokensCard(ctx context.Context, record *TokensCardRecord) error {
-	return upsertCard(ctx, s, tokensTable, record, tokensBind)
-}
 
 var tokensV2Table = cardTable{name: "session_card_tokens_v2", dataCols: []string{"data"}}
 
@@ -374,15 +325,6 @@ type cardOp struct {
 
 var cardOps = []cardOp{
 	{
-		name: "tokens",
-		fetch: func(ctx context.Context, s *Store, id string) (func(*Cards), error) {
-			r, err := s.getTokensCard(ctx, id)
-			return func(c *Cards) { c.Tokens = r }, err
-		},
-		present: func(c *Cards) bool { return c.Tokens != nil },
-		upsert:  func(ctx context.Context, s *Store, c *Cards) error { return s.upsertTokensCard(ctx, c.Tokens) },
-	},
-	{
 		name: "tokens_v2",
 		fetch: func(ctx context.Context, s *Store, id string) (func(*Cards), error) {
 			r, err := s.getTokensV2Card(ctx, id)
@@ -512,8 +454,8 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 	// Get session ID from the first available card for tracing.
 	var sessionID string
-	if cards.Tokens != nil {
-		sessionID = cards.Tokens.SessionID
+	if cards.TokensV2 != nil {
+		sessionID = cards.TokensV2.SessionID
 	} else if cards.Session != nil {
 		sessionID = cards.Session.SessionID
 	}

@@ -448,13 +448,16 @@ func TestHandleGetTrends_EmptyReposEqualsAllRepos(t *testing.T) {
 		assistantMs := int64(10000)
 		userMs := int64(20000)
 		err := store.UpsertCards(env.Ctx, &analytics.Cards{
-			Tokens: &analytics.TokensCardRecord{
-				SessionID:        sid,
-				Version:          analytics.TokensCardVersion,
-				ComputedAt:       now,
-				UpToLine:         100,
-				InputTokens:      inputTokens,
-				EstimatedCostUSD: decimal.NewFromFloat(cost),
+			TokensV2: &analytics.TokensV2CardRecord{
+				SessionID:  sid,
+				Version:    analytics.TokensV2CardVersion,
+				ComputedAt: now,
+				UpToLine:   100,
+				Data: analytics.TokensV2Data{
+					TotalCostUSD: decimal.NewFromFloat(cost).String(),
+					TotalInput:   inputTokens,
+					ByProvider:   map[string]analytics.TokensV2Provider{},
+				},
 			},
 			Conversation: &analytics.ConversationCardRecord{
 				SessionID:                sid,

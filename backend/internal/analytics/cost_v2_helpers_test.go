@@ -25,3 +25,24 @@ func v2CostCard(sessionID string, cost float64) *analytics.TokensV2CardRecord {
 		},
 	}
 }
+
+// v2TokensCard builds a session_card_tokens_v2 record carrying the top-level
+// scalars the Trends daily time-series reads after v1 retirement: the four
+// token counts plus cost. pjnz migrated that reader off the flat v1 table onto
+// these scalars, so tests driving the daily aggregation seed a v2 card here.
+func v2TokensCard(sessionID string, input, output, cacheCreation, cacheRead int64, cost float64) *analytics.TokensV2CardRecord {
+	return &analytics.TokensV2CardRecord{
+		SessionID:  sessionID,
+		Version:    analytics.TokensV2CardVersion,
+		ComputedAt: time.Now().UTC(),
+		UpToLine:   100,
+		Data: analytics.TokensV2Data{
+			TotalCostUSD:       decimal.NewFromFloat(cost).String(),
+			TotalInput:         input,
+			TotalOutput:        output,
+			TotalCacheCreation: cacheCreation,
+			TotalCacheRead:     cacheRead,
+			ByProvider:         map[string]analytics.TokensV2Provider{},
+		},
+	}
+}

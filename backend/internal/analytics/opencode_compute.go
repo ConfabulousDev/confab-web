@@ -187,10 +187,12 @@ func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, rollouts [][]*O
 	out.FastCostUSD = decimal.Zero
 
 	out.TokensV2 = &TokensV2Data{
-		TotalCostUSD: totalCost.String(),
-		TotalInput:   totalInput,
-		TotalOutput:  totalOutput,
-		ByProvider:   providers,
+		TotalCostUSD:       totalCost.String(),
+		TotalInput:         totalInput,
+		TotalOutput:        totalOutput,
+		TotalCacheCreation: totalCacheWrite,
+		TotalCacheRead:     totalCacheRead,
+		ByProvider:         providers,
 	}
 }
 

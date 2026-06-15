@@ -1,9 +1,50 @@
 package analytics
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
+
+// TestTokensV2Data_CacheScalarsRoundTrip is the pjnz contract: TokensV2Data must
+// serialize the new top-level cache-count scalars under the snake_case keys
+// total_cache_creation / total_cache_read and read them back unchanged. These
+// scalars reproduce the retired flat v1 card's cache columns for the Trends
+// daily time-series reader.
+func TestTokensV2Data_CacheScalarsRoundTrip(t *testing.T) {
+	in := TokensV2Data{
+		TotalCostUSD:       "1.25",
+		TotalInput:         100,
+		TotalOutput:        50,
+		TotalCacheCreation: 40,
+		TotalCacheRead:     60,
+		ByProvider:         map[string]TokensV2Provider{},
+	}
+
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	js := string(b)
+	if !strings.Contains(js, `"total_cache_creation":40`) {
+		t.Errorf("marshaled JSON missing total_cache_creation key: %s", js)
+	}
+	if !strings.Contains(js, `"total_cache_read":60`) {
+		t.Errorf("marshaled JSON missing total_cache_read key: %s", js)
+	}
+
+	var out TokensV2Data
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if out.TotalCacheCreation != 40 {
+		t.Errorf("TotalCacheCreation = %d, want 40", out.TotalCacheCreation)
+	}
+	if out.TotalCacheRead != 60 {
+		t.Errorf("TotalCacheRead = %d, want 60", out.TotalCacheRead)
+	}
+}
 
 func TestSmartRecapCardRecord_HasValidVersion(t *testing.T) {
 	tests := []struct {
@@ -165,11 +206,11 @@ func TestRegularCardRecord_IsValid(t *testing.T) {
 		current int64
 		want    bool
 	}{
-		{"tokens nil", (*TokensCardRecord)(nil), upTo, false},
-		{"tokens valid", &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo}, upTo, true},
-		{"tokens wrong version", &TokensCardRecord{Version: TokensCardVersion - 1, UpToLine: upTo}, upTo, false},
-		{"tokens stale line count", &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo - 1}, upTo, false},
-		{"tokens future line count", &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo + 1}, upTo, false},
+		{"tokens_v2 nil", (*TokensV2CardRecord)(nil), upTo, false},
+		{"tokens_v2 valid", &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: upTo}, upTo, true},
+		{"tokens_v2 wrong version", &TokensV2CardRecord{Version: TokensV2CardVersion - 1, UpToLine: upTo}, upTo, false},
+		{"tokens_v2 stale line count", &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: upTo - 1}, upTo, false},
+		{"tokens_v2 future line count", &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: upTo + 1}, upTo, false},
 
 		{"session nil", (*SessionCardRecord)(nil), upTo, false},
 		{"session valid", &SessionCardRecord{Version: SessionCardVersion, UpToLine: upTo}, upTo, true},
@@ -215,7 +256,6 @@ func TestCards_AllValid(t *testing.T) {
 	const upTo = int64(50)
 
 	allFresh := &Cards{
-		Tokens:          &TokensCardRecord{Version: TokensCardVersion, UpToLine: upTo},
 		TokensV2:        &TokensV2CardRecord{Version: TokensV2CardVersion, UpToLine: upTo},
 		Session:         &SessionCardRecord{Version: SessionCardVersion, UpToLine: upTo},
 		Tools:           &ToolsCardRecord{Version: ToolsCardVersion, UpToLine: upTo},

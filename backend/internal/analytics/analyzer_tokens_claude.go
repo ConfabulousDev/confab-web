@@ -64,7 +64,7 @@ func buildV2Tree(providerID string, byModel map[string]*v2ModelAgg) *TokensV2Dat
 		return nil
 	}
 	modelEntries := make(map[string]TokensV2Model, len(byModel))
-	var totalInput, totalOutput int64
+	var totalInput, totalOutput, totalCacheCreation, totalCacheRead int64
 	totalCost := decimal.Zero
 	for key, agg := range byModel {
 		modelEntries[key] = TokensV2Model{
@@ -77,12 +77,16 @@ func buildV2Tree(providerID string, byModel map[string]*v2ModelAgg) *TokensV2Dat
 		}
 		totalInput += agg.input
 		totalOutput += agg.output
+		totalCacheCreation += agg.cacheCreation
+		totalCacheRead += agg.cacheRead
 		totalCost = totalCost.Add(agg.cost)
 	}
 	return &TokensV2Data{
-		TotalCostUSD: totalCost.String(),
-		TotalInput:   totalInput,
-		TotalOutput:  totalOutput,
+		TotalCostUSD:       totalCost.String(),
+		TotalInput:         totalInput,
+		TotalOutput:        totalOutput,
+		TotalCacheCreation: totalCacheCreation,
+		TotalCacheRead:     totalCacheRead,
 		ByProvider: map[string]TokensV2Provider{
 			providerID: {CostUSD: totalCost.String(), Models: modelEntries},
 		},
