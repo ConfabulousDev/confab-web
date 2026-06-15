@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
@@ -21,6 +20,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
+	"github.com/go-chi/chi/v5"
 )
 
 // MaxShareRecipients is the maximum number of recipients allowed per share
@@ -246,7 +246,13 @@ func HandleCreateShare(database *db.DB, frontendURL string, emailService *email.
 			provider := models.NormalizeProvider(session.Provider)
 			shareIDStr := strconv.FormatInt(share.ID, 10)
 			for _, toEmail := range req.Recipients {
-				// Include recipient email in URL so login flow can guide them to the right account
+				// ACCEPTED RISK (CF-425 finding H4): the recipient's email is embedded in the
+				// invitation URL as ?email=<recipient>. It leaks into that recipient's own browser
+				// history, the login redirect, and Referer headers. We keep it intentionally: the
+				// login flow uses it to pre-fill the email and to drive the expected-account mismatch
+				// nudge for logged-out / multi-account recipients, and that UX is worth more than the
+				// self-leak. If this URL ever needs to carry more sensitive context, replace the
+				// query param with a one-time accept token instead.
 				recipientShareURL := shareURL + "?email=" + url.QueryEscape(toEmail)
 				emailParams := email.ShareInvitationParams{
 					ToEmail:      toEmail,
@@ -421,4 +427,3 @@ func HandleListAllUserShares(database *db.DB) http.HandlerFunc {
 		respondJSON(w, http.StatusOK, shares)
 	}
 }
-

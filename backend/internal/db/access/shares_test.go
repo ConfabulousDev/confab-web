@@ -346,6 +346,120 @@ func TestListAllUserShares_Empty(t *testing.T) {
 }
 
 // =============================================================================
+// Expired-share filtering on list endpoints (CF-433 / 0as2, finding H3)
+// =============================================================================
+
+// TestListShares_ExcludesExpired verifies that ListShares omits shares whose
+// expires_at is in the past — owners must not see ghost rows for shares that no
+// longer grant access (GetSessionAccessType already rejects them).
+func TestListShares_ExcludesExpired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "list-shares-expiry")
+
+	past := time.Now().UTC().Add(-24 * time.Hour)
+	future := time.Now().UTC().Add(24 * time.Hour)
+	testutil.CreateTestShare(t, env, sessionID, true, &past, nil)   // expired
+	testutil.CreateTestShare(t, env, sessionID, true, &future, nil) // live (expires later)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)     // live (never expires)
+
+	ctx := context.Background()
+	shares, err := store.ListShares(ctx, sessionID, owner.ID)
+	if err != nil {
+		t.Fatalf("ListShares failed: %v", err)
+	}
+	if len(shares) != 2 {
+		t.Fatalf("expected 2 live shares (expired filtered out), got %d", len(shares))
+	}
+	for _, share := range shares {
+		if share.ExpiresAt != nil && !share.ExpiresAt.After(time.Now()) {
+			t.Errorf("ListShares returned an expired share (id=%d, expires_at=%v)", share.ID, share.ExpiresAt)
+		}
+	}
+}
+
+// TestListAllUserShares_ExcludesExpired verifies the cross-session owner listing
+// also filters out expired shares.
+func TestListAllUserShares_ExcludesExpired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	session1 := testutil.CreateTestSession(t, env, owner.ID, "all-shares-expiry-1")
+	session2 := testutil.CreateTestSession(t, env, owner.ID, "all-shares-expiry-2")
+
+	past := time.Now().UTC().Add(-24 * time.Hour)
+	future := time.Now().UTC().Add(24 * time.Hour)
+	testutil.CreateTestShare(t, env, session1, true, &past, nil)   // expired
+	testutil.CreateTestShare(t, env, session2, true, &future, nil) // live
+	testutil.CreateTestShare(t, env, session2, true, nil, nil)     // live (never expires)
+
+	ctx := context.Background()
+	shares, err := store.ListAllUserShares(ctx, owner.ID)
+	if err != nil {
+		t.Fatalf("ListAllUserShares failed: %v", err)
+	}
+	if len(shares) != 2 {
+		t.Fatalf("expected 2 live shares (expired filtered out), got %d", len(shares))
+	}
+	for _, share := range shares {
+		if share.ExpiresAt != nil && !share.ExpiresAt.After(time.Now()) {
+			t.Errorf("ListAllUserShares returned an expired share (id=%d, expires_at=%v)", share.ID, share.ExpiresAt)
+		}
+	}
+}
+
+// TestListSystemShares_ExcludesExpired verifies the admin system-share listing
+// filters out expired shares (the ticket named only the owner lists, but the
+// system-share list has the identical gap).
+func TestListSystemShares_ExcludesExpired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	session1 := testutil.CreateTestSession(t, env, owner.ID, "sys-shares-expiry-1")
+	session2 := testutil.CreateTestSession(t, env, owner.ID, "sys-shares-expiry-2")
+	session3 := testutil.CreateTestSession(t, env, owner.ID, "sys-shares-expiry-3")
+
+	past := time.Now().UTC().Add(-24 * time.Hour)
+	future := time.Now().UTC().Add(24 * time.Hour)
+	testutil.CreateTestSystemShare(t, env, session1, &past)   // expired
+	testutil.CreateTestSystemShare(t, env, session2, &future) // live
+	testutil.CreateTestSystemShare(t, env, session3, nil)     // live (never expires)
+
+	ctx := context.Background()
+	shares, err := store.ListSystemShares(ctx)
+	if err != nil {
+		t.Fatalf("ListSystemShares failed: %v", err)
+	}
+	if len(shares) != 2 {
+		t.Fatalf("expected 2 live system shares (expired filtered out), got %d", len(shares))
+	}
+	for _, share := range shares {
+		if share.ExpiresAt != nil && !share.ExpiresAt.After(time.Now()) {
+			t.Errorf("ListSystemShares returned an expired share (id=%d, expires_at=%v)", share.ID, share.ExpiresAt)
+		}
+	}
+}
+
+// =============================================================================
 // Provider canonicalization on share reads (CF-370)
 // =============================================================================
 

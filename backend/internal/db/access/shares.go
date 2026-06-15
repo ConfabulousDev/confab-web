@@ -142,6 +142,9 @@ func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64,
 
 // CreateSystemShare creates a system-wide share for a session (admin only, no ownership check)
 // System shares are accessible to any authenticated user
+//
+// AUTHORIZATION: This function does NOT verify admin status. Callers must enforce
+// admin auth before invoking.
 func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*db.SessionShare, error) {
 	ctx, span := tracer.Start(ctx, "db.create_system_share",
 		trace.WithAttributes(attribute.String("session.id", sessionID)))
@@ -223,6 +226,7 @@ func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error)
 		FROM session_shares ss
 		JOIN session_share_system sss ON ss.id = sss.share_id
 		JOIN sessions se ON ss.session_id = se.id
+		WHERE (ss.expires_at IS NULL OR ss.expires_at > NOW())
 		ORDER BY ss.created_at DESC
 	`
 
@@ -289,6 +293,7 @@ func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) 
 	          FROM session_shares ss
 	          LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
 	          WHERE ss.session_id = $1
+	            AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
 	          ORDER BY ss.created_at DESC`
 
 	rows, err := s.conn().QueryContext(ctx, query, sessionID)
@@ -344,6 +349,7 @@ func (s *Store) ListAllUserShares(ctx context.Context, userID int64) ([]db.Share
 		JOIN sessions s ON ss.session_id = s.id
 		LEFT JOIN session_share_public ssp ON ss.id = ssp.share_id
 		WHERE s.user_id = $1
+		  AND (ss.expires_at IS NULL OR ss.expires_at > NOW())
 		ORDER BY ss.created_at DESC
 	`
 
