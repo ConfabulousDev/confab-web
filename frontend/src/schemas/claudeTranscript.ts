@@ -150,13 +150,33 @@ const ThinkingMetadataSchema = z.object({
   maxThinkingTokens: z.number().optional(),
 }).passthrough();
 
+// Bash tool result (Claude Code >= 2.1.143). All fields optional: interrupted/
+// isImage/noOutputExpected ride on every recent Bash result; returnCodeInterpretation
+// and persistedOutput* appear only when their condition is met. `.passthrough()`
+// keeps any sibling fields (e.g. backgroundTaskId) that we don't model yet.
+export const BashToolResultSchema = z.object({
+  stdout: z.string().optional(),
+  stderr: z.string().optional(),
+  exitCode: z.number().nullable().optional(),
+  interrupted: z.boolean().optional(),
+  isImage: z.boolean().optional(),
+  noOutputExpected: z.boolean().optional(),
+  returnCodeInterpretation: z.string().optional(),
+  persistedOutputPath: z.string().optional(),
+  persistedOutputSize: z.number().optional(),
+}).passthrough();
+
+export type BashToolResult = z.infer<typeof BashToolResultSchema>;
+
 // ToolUseResult contains tool-specific metadata about what the tool returned.
-// This is highly variable depending on the tool (Bash, Read, Grep, etc.) so we use
-// a flexible schema that accepts any structure.
+// This is highly variable depending on the tool (Bash, Read, Grep, etc.). The
+// typed Bash variant comes FIRST so Bash results parse into a known shape; the
+// open z.record branch stays LAST as the forward-compatible catch-all.
 const ToolUseResultSchema = z.union([
   z.string(), // Error messages or simple results
-  z.record(z.string(), z.unknown()), // Tool-specific structured data
+  BashToolResultSchema, // Typed Bash tool result (CC >= 2.1.143)
   z.array(z.unknown()), // Array of content blocks (e.g., MCP tool results)
+  z.record(z.string(), z.unknown()), // Tool-specific structured data (catch-all)
 ]);
 
 // Todo item from TodoWrite tool

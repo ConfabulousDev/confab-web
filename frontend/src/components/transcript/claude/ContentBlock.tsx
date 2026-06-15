@@ -1,4 +1,5 @@
 import type { ContentBlock as ContentBlockType } from '@/types';
+import type { BashToolResult } from '@/schemas/claudeTranscript';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, isToolReferenceBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
 import { stripAnsi, renderMarkdownToHtml, tryParseAsJson } from '@/utils';
 import { getHighlightClass, highlightTextInHtml, splitTextByQuery } from '@/utils/highlightSearch';
@@ -13,6 +14,9 @@ interface ContentBlockProps {
   toolName?: string;
   searchQuery?: string;
   isCurrentSearchMatch?: boolean;
+  // Sibling metadata from the message's `toolUseResult` (Bash results, CC >= 2.1.143).
+  // Threaded in for the Bash branch to surface interrupted/persisted/exit-code hints.
+  toolUseResult?: BashToolResult;
 }
 
 // Detect if this is Bash-like output
@@ -22,7 +26,7 @@ function isBashOutput(content: string, tool: string): boolean {
   return content.includes('$ ') || content.match(/^[\w@-]+:/) !== null || content.includes('\n$ ');
 }
 
-function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCurrentSearchMatch }: ContentBlockProps) {
+function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCurrentSearchMatch, toolUseResult }: ContentBlockProps) {
   // Derive tool name from block if it's a tool_use block, otherwise use the passed-in name
   const toolName = isToolUseBlock(block) ? block.name : initialToolName;
   const highlightClass = getHighlightClass(isCurrentSearchMatch ?? false);
@@ -95,7 +99,18 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
         <div className={styles.toolResultContent}>
           {typeof block.content === 'string' ? (
             isBashOutput(block.content, toolName) ? (
-              <BashOutput output={block.content} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
+              <BashOutput
+                output={block.content}
+                exitCode={toolUseResult?.exitCode}
+                interrupted={toolUseResult?.interrupted}
+                isImage={toolUseResult?.isImage}
+                noOutputExpected={toolUseResult?.noOutputExpected}
+                returnCodeInterpretation={toolUseResult?.returnCodeInterpretation}
+                persistedOutputPath={toolUseResult?.persistedOutputPath}
+                persistedOutputSize={toolUseResult?.persistedOutputSize}
+                searchQuery={searchQuery}
+                isCurrentSearchMatch={isCurrentSearchMatch}
+              />
             ) : (
               <CodeBlock code={block.content} language="plain" maxHeight="500px" truncateLines={100} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
             )

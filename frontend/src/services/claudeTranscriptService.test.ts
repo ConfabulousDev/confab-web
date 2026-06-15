@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseClaudeJSONL, fetchNewClaudeTranscriptMessages, fetchParsedClaudeTranscript, reportClaudeTranscriptErrors, _resetReportedClaudeSessions } from './claudeTranscriptService';
 import type { TranscriptValidationError } from '@/schemas/claudeTranscript';
+import { isUserMessage } from '@/types';
 import * as api from './api';
 
 // Mock the api module
@@ -185,6 +186,102 @@ ${createSystemMessage(2)}`;
     expect(result.errorCount).toBe(0);
     expect(result.messages).toHaveLength(1);
     expect(result.messages[0]?.type).toBe('user');
+  });
+
+  it('parses a Bash tool_result with the typed toolUseResult variant (CC >= 2.1.143)', () => {
+    // Shape grounded in real CC session JSONL: the sibling `toolUseResult`
+    // carries the six new Bash fields. The typed BashToolResult variant must
+    // parse and preserve them (not collapse into the open z.record branch).
+    const bashResult = JSON.stringify({
+      parentUuid: '53f0d714-310e-4524-aa06-95f46421b30d',
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/Users/jackie/dev/spreadsheet',
+      sessionId: '52ec9a7c-98aa-430f-aed1-53e81c1a4f40',
+      version: '2.1.150',
+      gitBranch: 'HEAD',
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            tool_use_id: 'toolu_01APxkoBPMGimAqbgwNnYZ2g',
+            type: 'tool_result',
+            content: 'matches\nquery\ntotal',
+            is_error: false,
+          },
+        ],
+      },
+      uuid: '2f2dcd6f-8d7d-4032-9842-6c65fe23e402',
+      timestamp: '2026-05-26T18:16:02.913Z',
+      toolUseResult: {
+        stdout: 'matches\nquery\ntotal',
+        stderr: '',
+        interrupted: true,
+        isImage: false,
+        noOutputExpected: false,
+        returnCodeInterpretation: 'No matches found',
+        persistedOutputPath: '/Users/x/.claude/projects/p/tool-results/abc.txt',
+        persistedOutputSize: 44276,
+      },
+    });
+
+    const result = parseClaudeJSONL(bashResult);
+
+    expect(result.successCount).toBe(1);
+    expect(result.errorCount).toBe(0);
+    const msg = result.messages[0];
+    expect(msg).toBeDefined();
+    if (!msg || !isUserMessage(msg)) throw new Error('expected a user message');
+    // The toolUseResult must be parsed as the typed object variant.
+    const tur = msg.toolUseResult;
+    expect(tur).toBeDefined();
+    if (typeof tur !== 'object' || tur === null || Array.isArray(tur)) throw new Error('expected object toolUseResult');
+    expect(tur.interrupted).toBe(true);
+    expect(tur.isImage).toBe(false);
+    expect(tur.noOutputExpected).toBe(false);
+    expect(tur.returnCodeInterpretation).toBe('No matches found');
+    expect(tur.persistedOutputPath).toBe('/Users/x/.claude/projects/p/tool-results/abc.txt');
+    expect(tur.persistedOutputSize).toBe(44276);
+  });
+
+  it('parses a legacy Bash tool_result without the new fields', () => {
+    // Pre-2.1.143 (and many current) results carry only stdout/stderr/interrupted/
+    // isImage/noOutputExpected; the typed variant keeps every field optional.
+    const legacy = JSON.stringify({
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/test',
+      sessionId: 'session-123',
+      version: '2.1.141',
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ tool_use_id: 'toolu_x', type: 'tool_result', content: 'ok', is_error: false }],
+      },
+      uuid: 'uuid-legacy',
+      timestamp: '2026-05-26T18:16:02.913Z',
+      toolUseResult: {
+        stdout: 'ok',
+        stderr: '',
+        interrupted: false,
+        isImage: false,
+        noOutputExpected: false,
+      },
+    });
+
+    const result = parseClaudeJSONL(legacy);
+
+    expect(result.successCount).toBe(1);
+    expect(result.errorCount).toBe(0);
+    const msg = result.messages[0];
+    if (!msg || !isUserMessage(msg)) throw new Error('expected a user message');
+    const tur = msg.toolUseResult;
+    if (typeof tur !== 'object' || tur === null || Array.isArray(tur)) throw new Error('expected object toolUseResult');
+    expect(tur.stdout).toBe('ok');
+    expect(tur.interrupted).toBe(false);
+    expect(tur.persistedOutputPath).toBeUndefined();
   });
 });
 

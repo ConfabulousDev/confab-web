@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
+import { BashToolResultSchema, type BashToolResult } from '@/schemas/claudeTranscript';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
@@ -129,6 +130,24 @@ function extractTextContent(blocks: ContentBlock[]): string {
 }
 
 /**
+ * Extract the typed Bash `toolUseResult` sibling from a message, when present.
+ *
+ * `toolUseResult` rides on the message (not the content block) and is only the
+ * Bash variant when it's an object carrying a Bash signal (interrupted /
+ * persistedOutputPath / returnCodeInterpretation / isImage / noOutputExpected).
+ * Subagent results (agentId) and array/string variants are skipped so they don't
+ * leak into the BashOutput render path.
+ */
+function getBashToolUseResult(message: TranscriptLine): BashToolResult | undefined {
+  if (!isUserMessage(message)) return undefined;
+  const tur = message.toolUseResult;
+  if (!tur || typeof tur !== 'object' || Array.isArray(tur)) return undefined;
+  if ('agentId' in tur) return undefined; // subagent result, not a Bash result
+  const parsed = BashToolResultSchema.safeParse(tur);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/**
  * Get tool name for a tool result block
  */
 function getToolNameForResult(block: ContentBlock, toolNameMap: Map<string, string>): string {
@@ -195,6 +214,10 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
   // the markdown content even though AwaySummary renders the visual body.
   const hasCustomBody = isAttachmentMessage(message);
   const contentBlocks = useMemo(() => (hasCustomBody ? [] : getContentBlocks(message)), [message, hasCustomBody]);
+
+  // Bash `toolUseResult` metadata (interrupted / persisted-output / exit-code
+  // interpretation) rides on the message as a sibling of its tool_result block.
+  const bashToolUseResult = useMemo(() => getBashToolUseResult(message), [message]);
 
   // Get timestamp if available
   const timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
@@ -395,6 +418,7 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
               toolName={getToolNameForResult(block, toolNameMap)}
               searchQuery={searchQuery}
               isCurrentSearchMatch={isCurrentSearchMatch}
+              toolUseResult={isToolResultBlock(block) ? bashToolUseResult : undefined}
             />
           ))
         )}

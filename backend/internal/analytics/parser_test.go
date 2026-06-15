@@ -146,6 +146,63 @@ func TestParseToolUseResult_CacheCreation(t *testing.T) {
 	}
 }
 
+// TestParseToolUseResult_BashFields: Bash tool results (CC >= 2.1.143) carry six
+// fields the hand-parse must extract explicitly (struct json tags alone do nothing
+// since parseToolUseResult reads from a map). Shape grounded in real session JSONL.
+func TestParseToolUseResult_BashFields(t *testing.T) {
+	m := map[string]interface{}{
+		"stdout":                  "hello\nworld",
+		"stderr":                  "",
+		"interrupted":             true,
+		"isImage":                 true,
+		"noOutputExpected":        true,
+		"returnCodeInterpretation": "No matches found",
+		"persistedOutputPath":     "/Users/x/.claude/projects/p/tool-results/abc.txt",
+		"persistedOutputSize":     float64(44276),
+	}
+	r := parseToolUseResult(m)
+	if !r.Interrupted {
+		t.Error("Interrupted = false, want true")
+	}
+	if !r.IsImage {
+		t.Error("IsImage = false, want true")
+	}
+	if !r.NoOutputExpected {
+		t.Error("NoOutputExpected = false, want true")
+	}
+	if r.ReturnCodeInterpretation != "No matches found" {
+		t.Errorf("ReturnCodeInterpretation = %q, want %q", r.ReturnCodeInterpretation, "No matches found")
+	}
+	if r.PersistedOutputPath != "/Users/x/.claude/projects/p/tool-results/abc.txt" {
+		t.Errorf("PersistedOutputPath = %q, unexpected", r.PersistedOutputPath)
+	}
+	if r.PersistedOutputSize != 44276 {
+		t.Errorf("PersistedOutputSize = %d, want 44276", r.PersistedOutputSize)
+	}
+}
+
+// TestParseToolUseResult_BashFields_Absent: a legacy result with none of the new
+// fields leaves them at their zero values, and the existing subagent path still
+// parses (the extraction is additive).
+func TestParseToolUseResult_BashFields_Absent(t *testing.T) {
+	m := map[string]interface{}{
+		"agentId": "agent-1",
+		"usage": map[string]interface{}{
+			"input_tokens": float64(10),
+		},
+	}
+	r := parseToolUseResult(m)
+	if r.AgentID != "agent-1" {
+		t.Errorf("AgentID = %q, want agent-1 (subagent path must still parse)", r.AgentID)
+	}
+	if r.Interrupted || r.IsImage || r.NoOutputExpected {
+		t.Errorf("bool Bash fields should be false when absent, got interrupted=%v isImage=%v noOutputExpected=%v", r.Interrupted, r.IsImage, r.NoOutputExpected)
+	}
+	if r.ReturnCodeInterpretation != "" || r.PersistedOutputPath != "" || r.PersistedOutputSize != 0 {
+		t.Error("string/int Bash fields should be zero when absent")
+	}
+}
+
 // TestParseToolUseResult_CacheCreation_Absent: subagent usage without the nested
 // object leaves CacheCreation nil.
 func TestParseToolUseResult_CacheCreation_Absent(t *testing.T) {
