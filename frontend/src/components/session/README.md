@@ -14,9 +14,12 @@ Session viewer components for displaying session details, transcript timeline, a
 | `OpenCodeTranscriptPane.tsx` | Transcript tab for OpenCode: presentational, virtualized list of user / assistant / tool / unknown render items with the shared `TimelineBar` minimap (ag2x), the green `CostBar` rail in cost mode (hfk7), and Cmd-F in-transcript search (5p9j). Search reuses the shared `useTranscriptSearch` toolkit driven by `extractOpenCodeItemText`; since OpenCode has no divider rows, the filtered index IS the virtual index (no Codex-style `itemIndexToVirtualIndex` map). The current-match effect scrolls the virtualizer to the match and brings its `<mark>` into view (finds matches in unmounted rows), and force-opens any collapsed reasoning / tool-output `<details>` holding the active match |
 | `extractOpenCodeItemText.ts` | 5p9j per-kind text projection (`(item: OpenCodeRenderItem) => string`) consumed by the generic `useTranscriptSearch` hook. Module-level / stable reference so the hook's search index doesn't churn. Returns user `text`, assistant `reasoning` + `text`, tool `input` + `output`, and the unknown row's stringified raw line (via `stringifyUnknownRaw`, shared with `OpenCodeUnknownItem` so the index matches the rendered `<pre>`) |
 | `TranscriptSearchBar.tsx` | Cmd+F search bar with match count and prev/next navigation. Shared by the Claude, Codex, and OpenCode transcript panes |
-| `ClaudeFilterDropdown.tsx` | Hierarchical dropdown for filtering Claude messages by category/subcategory. Imports `FilterDropdownShared.module.css` (shared chrome with `CodexFilterDropdown`) |
-| `CodexFilterDropdown.tsx` | Hierarchical dropdown for filtering Codex transcripts (CF-361). Two hierarchical parents (`assistant`, `tool_call`) plus five flat categories (`user`, `reasoning_hidden`, `compacted`, `turn_separator`, `unknown`). Same visual chrome as Claude's dropdown via shared CSS module |
-| `FilterDropdownShared.module.css` | CSS chrome shared by `ClaudeFilterDropdown` (Claude) and `CodexFilterDropdown` (Codex) |
+| `ProviderFilterDropdown.tsx` | Generic transcript filter dropdown (ew9f): owns all rendering — filter button, hierarchical groups (expand/collapse + tri-state parent) and flat chips — from a declarative `{ groups, flatItems }`. The per-provider dropdowns are thin wrappers that assemble chips and render this once |
+| `filterChips.ts` | Shared `FilterChip`/`FilterChipGroup` types + `getColorValue` (SidebarItemColor → hex) for `ProviderFilterDropdown`; split out so the component file only exports a component (react-refresh) |
+| `ClaudeFilterDropdown.tsx` | Thin wrapper: assembles Claude chips (3 hierarchical groups + flat) for `ProviderFilterDropdown` |
+| `CodexFilterDropdown.tsx` | Thin wrapper: assembles Codex chips (CF-361 — `assistant`/`tool_call` hierarchical + 6 flat) for `ProviderFilterDropdown` |
+| `OpenCodeFilterDropdown.tsx` | Thin wrapper: assembles OpenCode flat chips (`user`/`assistant`/`tool`/`unknown`) for `ProviderFilterDropdown` |
+| `FilterDropdownShared.module.css` | CSS chrome for `ProviderFilterDropdown` (shared across all providers) |
 | `GitHubLinksCard.tsx` | Card displaying linked GitHub PRs and commits |
 | `GitInfoMeta.tsx` | Git branch/commit metadata display in session header |
 | `MetaItem.tsx` | Small metadata item (icon + label + value) used in header |
@@ -132,7 +135,8 @@ Add a new `MetaItem` component in `SessionHeader.tsx` with the appropriate icon.
 - `SessionSummaryPanel.test.tsx` -- Card rendering, analytics polling integration
 - `SessionViewer.test.tsx` -- Summary-tab routing across providers (CF-364)
 - `TranscriptSearchBar.test.tsx` -- Search open/close, match navigation
-- `ClaudeFilterDropdown.test.tsx` -- Open/close, tri-state rollup, subcategory expand, callback wiring
+- `ProviderFilterDropdown.test.tsx` -- Generic dropdown: flat/disabled chips, tri-state parent, expand, parent + chip callback wiring, active-button state
+- `ClaudeFilterDropdown.test.tsx` -- Open/close, tri-state rollup, subcategory expand, callback wiring (through the generic)
 - `CodexFilterDropdown.test.tsx` -- Same surface, tuned to Codex categories
 - `claudeCategories.test.ts` -- Message classification and filter matching logic
 - `codexCategories.test.ts` -- Codex categorization rules + `codexItemMatchesFilter` contract (CF-361)
