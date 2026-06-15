@@ -27,6 +27,8 @@ function baseProps(cardTypes: string[]): AdminCardInvalidationsPageContentProps 
     isPreviewing: false,
     onExecuteClick: noop,
     showConfirmModal: false,
+    confirmInput: '',
+    onConfirmInputChange: noop,
     onConfirmClose: noop,
     onConfirmExecute: noop,
     isExecuting: false,
@@ -62,5 +64,46 @@ describe('AdminCardInvalidationsPageContent card-type checkboxes', () => {
     render(<AdminCardInvalidationsPageContent {...baseProps([])} />);
     expect(screen.getByText('Card types unavailable.')).toBeInTheDocument();
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+});
+
+// kyrr: the execute confirm modal requires the admin to type the affected-session
+// count from the preview before "Confirm & Execute" enables.
+describe('AdminCardInvalidationsPageContent execute confirmation (kyrr)', () => {
+  const preview = {
+    correlation_id: 'c0ffee00-0000-0000-0000-000000000000',
+    affected_sessions: 42,
+    affected_cards: { session_card_tokens: 42 },
+    executed: false,
+  };
+
+  function modalProps(confirmInput: string): AdminCardInvalidationsPageContentProps {
+    return {
+      ...baseProps(['session_card_tokens']),
+      selectedCards: new Set<string>(['session_card_tokens']),
+      reason: 'pricing backfill',
+      preview,
+      showConfirmModal: true,
+      confirmInput,
+    };
+  }
+
+  function executeButton(): HTMLButtonElement {
+    return screen.getByRole('button', { name: /confirm & execute/i });
+  }
+
+  it('disables Confirm & Execute until the typed count matches', () => {
+    render(<AdminCardInvalidationsPageContent {...modalProps('')} />);
+    expect(executeButton()).toBeDisabled();
+  });
+
+  it('keeps Confirm & Execute disabled when the typed count is wrong', () => {
+    render(<AdminCardInvalidationsPageContent {...modalProps('7')} />);
+    expect(executeButton()).toBeDisabled();
+  });
+
+  it('enables Confirm & Execute when the typed count matches the preview', () => {
+    render(<AdminCardInvalidationsPageContent {...modalProps('42')} />);
+    expect(executeButton()).toBeEnabled();
   });
 });

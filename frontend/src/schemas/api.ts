@@ -849,6 +849,9 @@ export const InvalidateCardsRequestSchema = z.object({
   card_types: z.array(z.string()).min(1),
   reason: z.string().min(1).max(500),
   dry_run: z.boolean().optional(),
+  // kyrr: on execute (dry_run=false), the admin must echo the affected-session count
+  // from the dry-run preview; the server re-counts and rejects (400) on mismatch.
+  confirm: z.string().optional(),
 });
 export type InvalidateCardsRequest = z.infer<typeof InvalidateCardsRequestSchema>;
 

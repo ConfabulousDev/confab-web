@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -253,8 +254,8 @@ func TestAdminDeactivateActivateUserAPI(t *testing.T) {
 		ts := setupTestServer(t, env)
 		client := adminClient(t, env, ts, adminUser.ID)
 
-		// Deactivate
-		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", target.ID), map[string]string{})
+		// Deactivate (kyrr: confirm echoes the target email)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", target.ID), map[string]string{"confirm": "target@example.com"})
 		if err != nil {
 			t.Fatalf("deactivate request failed: %v", err)
 		}
@@ -361,7 +362,7 @@ func TestAdminLastAdminGuard(t *testing.T) {
 
 		ts := setupTestServer(t, env)
 		client := adminClient(t, env, ts, admin1.ID)
-		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", admin2.ID), map[string]string{})
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", admin2.ID), map[string]string{"confirm": "admin2@example.com"})
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -511,7 +512,7 @@ func TestAdminDeleteUserAPI(t *testing.T) {
 		ts := setupTestServer(t, env)
 		client := adminClient(t, env, ts, adminUser.ID)
 
-		resp, err := client.Delete(fmt.Sprintf("/api/v1/admin/users/%d", target.ID))
+		resp, err := client.Delete(fmt.Sprintf("/api/v1/admin/users/%d?confirm=%s", target.ID, url.QueryEscape("target@example.com")))
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
@@ -583,6 +584,143 @@ func TestAdminDeleteUserAPI(t *testing.T) {
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Errorf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+}
+
+// ===================================================================
+// kyrr: typed-confirmation echo on destructive admin endpoints
+// ===================================================================
+
+// TestAdminDeactivateUserAPI_Confirmation verifies POST /admin/users/{id}/deactivate
+// requires a `confirm` body field echoing the target's email; mismatch/blank → 400
+// with no mutation, correct (case/space-tolerant) → 200 + inactive.
+func TestAdminDeactivateUserAPI_Confirmation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	// statusOf returns the target's current DB status.
+	statusOf := func(t *testing.T, id int64) models.UserStatus {
+		t.Helper()
+		u, err := (&dbuser.Store{DB: env.DB}).GetUserByID(env.Ctx, id)
+		if err != nil {
+			t.Fatalf("GetUserByID: %v", err)
+		}
+		return u.Status
+	}
+
+	setup := func(t *testing.T) (*testutil.TestClient, int64) {
+		t.Helper()
+		env.CleanDB(t)
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		target := testutil.CreateTestUser(t, env, "target@example.com", "Target")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+		ts := setupTestServer(t, env)
+		return adminClient(t, env, ts, adminUser.ID), target.ID
+	}
+
+	t.Run("missing confirm → 400, still active", func(t *testing.T) {
+		client, id := setup(t)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", id), map[string]string{})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		if s := statusOf(t, id); s != models.UserStatusActive {
+			t.Errorf("status after rejected deactivate = %s, want active", s)
+		}
+	})
+
+	t.Run("wrong confirm → 400, still active", func(t *testing.T) {
+		client, id := setup(t)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", id), map[string]string{"confirm": "wrong@example.com"})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		if s := statusOf(t, id); s != models.UserStatusActive {
+			t.Errorf("status after wrong confirm = %s, want active", s)
+		}
+	})
+
+	t.Run("correct confirm (case/space-tolerant) → 200, inactive", func(t *testing.T) {
+		client, id := setup(t)
+		resp, err := client.Post(fmt.Sprintf("/api/v1/admin/users/%d/deactivate", id), map[string]string{"confirm": "  Target@Example.COM  "})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		if s := statusOf(t, id); s != models.UserStatusInactive {
+			t.Errorf("status after confirmed deactivate = %s, want inactive", s)
+		}
+	})
+}
+
+// TestAdminDeleteUserAPI_Confirmation verifies DELETE /admin/users/{id} requires a
+// `?confirm=` query param echoing the target's email; mismatch/absent → 400 with the
+// user still present, correct → 204 and the user gone.
+func TestAdminDeleteUserAPI_Confirmation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	exists := func(t *testing.T, id int64) bool {
+		t.Helper()
+		_, err := (&dbuser.Store{DB: env.DB}).GetUserByID(env.Ctx, id)
+		return err == nil
+	}
+
+	setup := func(t *testing.T) (*testutil.TestClient, int64) {
+		t.Helper()
+		env.CleanDB(t)
+		adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+		target := testutil.CreateTestUser(t, env, "target@example.com", "Target")
+		testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+		ts := setupTestServer(t, env)
+		return adminClient(t, env, ts, adminUser.ID), target.ID
+	}
+
+	t.Run("absent confirm → 400, user still exists", func(t *testing.T) {
+		client, id := setup(t)
+		resp, err := client.Delete(fmt.Sprintf("/api/v1/admin/users/%d", id))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		if !exists(t, id) {
+			t.Error("user must NOT be deleted when confirm is absent")
+		}
+	})
+
+	t.Run("wrong confirm → 400, user still exists", func(t *testing.T) {
+		client, id := setup(t)
+		resp, err := client.Delete(fmt.Sprintf("/api/v1/admin/users/%d?confirm=%s", id, url.QueryEscape("wrong@example.com")))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+		if !exists(t, id) {
+			t.Error("user must NOT be deleted when confirm is wrong")
+		}
+	})
+
+	t.Run("correct confirm → 204, user gone", func(t *testing.T) {
+		client, id := setup(t)
+		resp, err := client.Delete(fmt.Sprintf("/api/v1/admin/users/%d?confirm=%s", id, url.QueryEscape("target@example.com")))
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d", resp.StatusCode)
+		}
+		if exists(t, id) {
+			t.Error("user should be deleted after confirmed delete")
 		}
 	})
 }

@@ -714,8 +714,9 @@ export const adminAPI = {
   createUser: (data: { email: string; password: string }): Promise<CreateAdminUserResponse> =>
     api.postValidated('/admin/users', CreateAdminUserResponseSchema, data),
 
-  deactivateUser: (id: number): Promise<StatusChangeResponse> =>
-    api.postValidated(`/admin/users/${id}/deactivate`, StatusChangeResponseSchema),
+  // kyrr: confirm echoes the target's email; the server verifies it before deactivating.
+  deactivateUser: (id: number, confirm: string): Promise<StatusChangeResponse> =>
+    api.postValidated(`/admin/users/${id}/deactivate`, StatusChangeResponseSchema, { confirm }),
 
   activateUser: (id: number): Promise<StatusChangeResponse> =>
     api.postValidated(`/admin/users/${id}/activate`, StatusChangeResponseSchema),
@@ -726,7 +727,10 @@ export const adminAPI = {
   revokeAdmin: (id: number): Promise<AdminChangeResponse> =>
     api.postValidated(`/admin/users/${id}/revoke-admin`, AdminChangeResponseSchema),
 
-  deleteUser: (id: number): Promise<void> => api.deleteVoid(`/admin/users/${id}`),
+  // kyrr: confirm echoes the target's email via query param (DELETE has no body);
+  // the server verifies it before the irreversible wipe.
+  deleteUser: (id: number, confirm: string): Promise<void> =>
+    api.deleteVoid(`/admin/users/${id}?confirm=${encodeURIComponent(confirm)}`),
 
   listSystemShares: (): Promise<AdminSystemSharesResponse> =>
     api.getValidated('/admin/system-shares', AdminSystemSharesResponseSchema),

@@ -277,6 +277,17 @@ func (h *Handlers) setUserStatusAPI(w http.ResponseWriter, r *http.Request, stat
 		if h.guardLastAdmin(w, r, ctx, userStore, userID, false) {
 			return
 		}
+		// kyrr: require a typed-confirmation echo of the target email before this
+		// destructive action. Runs AFTER the last-admin guard so its 409 still wins
+		// (D4: guard-first). Activation is non-destructive and stays unguarded.
+		var body struct {
+			Confirm string `json:"confirm"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if !verifyConfirmation(targetEmail, body.Confirm) {
+			respondConfirmationMismatch(w)
+			return
+		}
 	}
 
 	modelStatus := models.UserStatus(status)
@@ -423,6 +434,15 @@ func (h *Handlers) HandleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
 	// Last-admin guard MUST run before the irreversible S3 wipe + DB delete
 	// (g0bq). Deleting a user removes them from the effective-admin set.
 	if h.guardLastAdmin(w, r, ctx, userStore, userID, false) {
+		return
+	}
+
+	// kyrr: require a typed-confirmation echo of the target email before this
+	// irreversible action. DELETE carries no body, so the echo arrives as the
+	// ?confirm= query param. After the last-admin guard (D4: guard-first), before
+	// the S3 wipe.
+	if !verifyConfirmation(targetUser.Email, r.URL.Query().Get("confirm")) {
+		respondConfirmationMismatch(w)
 		return
 	}
 

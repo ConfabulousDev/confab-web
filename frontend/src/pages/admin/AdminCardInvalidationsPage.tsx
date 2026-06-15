@@ -50,6 +50,9 @@ export interface AdminCardInvalidationsPageContentProps {
 
   onExecuteClick: () => void;
   showConfirmModal: boolean;
+  /** kyrr: typed echo of the affected-session count, gating the execute. */
+  confirmInput: string;
+  onConfirmInputChange: (v: string) => void;
   onConfirmClose: () => void;
   onConfirmExecute: () => void;
   isExecuting: boolean;
@@ -76,6 +79,8 @@ export function AdminCardInvalidationsPageContent({
   isPreviewing,
   onExecuteClick,
   showConfirmModal,
+  confirmInput,
+  onConfirmInputChange,
   onConfirmClose,
   onConfirmExecute,
   isExecuting,
@@ -86,6 +91,8 @@ export function AdminCardInvalidationsPageContent({
 }: AdminCardInvalidationsPageContentProps) {
   const canPreview = startDate.trim() !== '' && selectedCards.size > 0 && reason.trim() !== '';
   const canExecute = canPreview && preview !== null;
+  // kyrr: the admin must echo the previewed affected-session count to execute.
+  const confirmMatches = preview !== null && confirmInput.trim() === String(preview.affected_sessions);
 
   return (
     <div>
@@ -240,8 +247,27 @@ export function AdminCardInvalidationsPageContent({
             across <strong>{selectedCards.size}</strong> card type(s).
             The worker will recompute them over the next few minutes. This action cannot be undone.
           </p>
+          <label className={styles.label}>
+            Type the affected-session count (<strong>{preview?.affected_sessions ?? '?'}</strong>) to confirm
+            <input
+              type="text"
+              inputMode="numeric"
+              className={styles.input}
+              value={confirmInput}
+              onChange={(e) => onConfirmInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && confirmMatches && !isExecuting) {
+                  e.preventDefault();
+                  onConfirmExecute();
+                }
+              }}
+              placeholder={String(preview?.affected_sessions ?? '')}
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
           <div className={styles.modalActions}>
-            <Button variant="danger" onClick={onConfirmExecute} disabled={isExecuting}>
+            <Button variant="danger" onClick={onConfirmExecute} disabled={isExecuting || !confirmMatches}>
               {isExecuting ? 'Executing...' : 'Confirm & Execute'}
             </Button>
             <Button variant="secondary" onClick={onConfirmClose} disabled={isExecuting}>
@@ -264,6 +290,8 @@ function AdminCardInvalidationsPage() {
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<InvalidateCardsResponse | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  // kyrr: typed echo of the affected-session count, required to confirm the execute.
+  const [confirmInput, setConfirmInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const { data: history, isLoading: historyLoading } = useQuery({
@@ -309,6 +337,9 @@ function AdminCardInvalidationsPage() {
       card_types: Array.from(selectedCards),
       reason: reason.trim(),
       dry_run: dryRun,
+      // kyrr: on execute, echo the affected-session count from the preview; the
+      // server re-counts and rejects on mismatch. Irrelevant on dry-run.
+      ...(dryRun ? {} : { confirm: confirmInput.trim() }),
     };
   }
 
@@ -372,9 +403,17 @@ function AdminCardInvalidationsPage() {
       onReasonChange={setAndInvalidatePreview(setReason)}
       onPreview={() => previewMutation.mutate()}
       isPreviewing={previewMutation.isPending}
-      onExecuteClick={() => setShowConfirmModal(true)}
+      onExecuteClick={() => {
+        setConfirmInput('');
+        setShowConfirmModal(true);
+      }}
       showConfirmModal={showConfirmModal}
-      onConfirmClose={() => setShowConfirmModal(false)}
+      confirmInput={confirmInput}
+      onConfirmInputChange={setConfirmInput}
+      onConfirmClose={() => {
+        setShowConfirmModal(false);
+        setConfirmInput('');
+      }}
       onConfirmExecute={() => executeMutation.mutate()}
       isExecuting={executeMutation.isPending}
       feedback={feedback}

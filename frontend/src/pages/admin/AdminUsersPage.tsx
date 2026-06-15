@@ -20,6 +20,13 @@ interface ConfirmAction {
   userEmail: string;
 }
 
+// kyrr: destructive user actions require the admin to re-type the target email; the
+// server verifies the echo before mutating. Activate and self-revoke don't (the
+// former is non-destructive, the latter is the user's own account).
+function requiresEmailEcho(type: ConfirmActionType): boolean {
+  return type === 'deactivate' || type === 'delete';
+}
+
 const CONFIRM_LABELS: Record<ConfirmActionType, { title: string; button: string; variant: 'primary' | 'danger' }> = {
   activate: { title: 'Activate User', button: 'Activate', variant: 'primary' },
   deactivate: { title: 'Deactivate User', button: 'Deactivate', variant: 'primary' },
@@ -37,6 +44,9 @@ function AdminUsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  // The typed email echo for destructive confirmations (kyrr). Reset whenever the
+  // active confirmation changes (open, close, or switch target).
+  const [confirmInput, setConfirmInput] = useState('');
 
   const usersQueryKey = ['admin', 'users'];
 
@@ -68,7 +78,7 @@ function AdminUsersPage() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: adminAPI.deactivateUser,
+    mutationFn: ({ id, confirm }: { id: number; confirm: string }) => adminAPI.deactivateUser(id, confirm),
     onSuccess: () => {
       showFeedback('success', 'User deactivated.');
       queryClient.invalidateQueries({ queryKey: usersQueryKey });
@@ -90,7 +100,7 @@ function AdminUsersPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: adminAPI.deleteUser,
+    mutationFn: ({ id, confirm }: { id: number; confirm: string }) => adminAPI.deleteUser(id, confirm),
     onSuccess: () => {
       showFeedback('success', 'User deleted.');
       queryClient.invalidateQueries({ queryKey: usersQueryKey });
@@ -124,23 +134,40 @@ function AdminUsersPage() {
     },
   });
 
+  function openConfirm(action: ConfirmAction): void {
+    setConfirmAction(action);
+    setConfirmInput('');
+  }
+
+  function closeConfirm(): void {
+    setConfirmAction(null);
+    setConfirmInput('');
+  }
+
+  // Whether the typed email echo matches the target (kyrr); gates the confirm button
+  // for destructive actions. Trim + case-insensitive, mirroring the server compare.
+  const echoMatches =
+    confirmAction != null &&
+    confirmInput.trim().toLowerCase() === confirmAction.userEmail.trim().toLowerCase();
+
   function handleConfirm(): void {
     if (!confirmAction) return;
+    if (requiresEmailEcho(confirmAction.type) && !echoMatches) return;
     switch (confirmAction.type) {
       case 'deactivate':
-        deactivateMutation.mutate(confirmAction.userId);
+        deactivateMutation.mutate({ id: confirmAction.userId, confirm: confirmInput });
         break;
       case 'activate':
         activateMutation.mutate(confirmAction.userId);
         break;
       case 'delete':
-        deleteMutation.mutate(confirmAction.userId);
+        deleteMutation.mutate({ id: confirmAction.userId, confirm: confirmInput });
         break;
       case 'revoke-admin-self':
         revokeAdminMutation.mutate(confirmAction.userId);
         break;
     }
-    setConfirmAction(null);
+    closeConfirm();
   }
 
   // Toggle the is_admin column. Revoking your OWN access goes through a soft
@@ -152,7 +179,7 @@ function AdminUsersPage() {
     }
     // Self-detection by email (the /me User shape doesn't carry id); email is unique.
     if (currentUser && currentUser.email === user.email) {
-      setConfirmAction({ type: 'revoke-admin-self', userId: user.id, userEmail: user.email });
+      openConfirm({ type: 'revoke-admin-self', userId: user.id, userEmail: user.email });
       return;
     }
     revokeAdminMutation.mutate(user.id);
@@ -317,7 +344,7 @@ function AdminUsersPage() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            onClick={() => setConfirmAction({ type: 'deactivate', userId: user.id, userEmail: user.email })}
+                            onClick={() => openConfirm({ type: 'deactivate', userId: user.id, userEmail: user.email })}
                           >
                             Deactivate
                           </Button>
@@ -325,7 +352,7 @@ function AdminUsersPage() {
                           <Button
                             size="sm"
                             variant="primary"
-                            onClick={() => setConfirmAction({ type: 'activate', userId: user.id, userEmail: user.email })}
+                            onClick={() => openConfirm({ type: 'activate', userId: user.id, userEmail: user.email })}
                           >
                             Activate
                           </Button>
@@ -333,7 +360,7 @@ function AdminUsersPage() {
                         <Button
                           size="sm"
                           variant="danger"
-                          onClick={() => setConfirmAction({ type: 'delete', userId: user.id, userEmail: user.email })}
+                          onClick={() => openConfirm({ type: 'delete', userId: user.id, userEmail: user.email })}
                         >
                           Delete
                         </Button>
@@ -349,7 +376,7 @@ function AdminUsersPage() {
 
       <Modal
         isOpen={confirmAction !== null}
-        onClose={() => setConfirmAction(null)}
+        onClose={closeConfirm}
         ariaLabel="Confirm action"
       >
         {confirmAction && (
@@ -368,14 +395,34 @@ function AdminUsersPage() {
                 {confirmAction.type === 'delete' && ' This action cannot be undone.'}
               </p>
             )}
+            {requiresEmailEcho(confirmAction.type) && (
+              <FormField label={`Type ${confirmAction.userEmail} to confirm`}>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && echoMatches) {
+                      e.preventDefault();
+                      handleConfirm();
+                    }
+                  }}
+                  placeholder={confirmAction.userEmail}
+                  autoComplete="off"
+                  autoFocus
+                />
+              </FormField>
+            )}
             <div className={styles.modalActions}>
               <Button
                 variant={CONFIRM_LABELS[confirmAction.type].variant}
                 onClick={handleConfirm}
+                disabled={requiresEmailEcho(confirmAction.type) && !echoMatches}
               >
                 {CONFIRM_LABELS[confirmAction.type].button}
               </Button>
-              <Button variant="secondary" onClick={() => setConfirmAction(null)}>
+              <Button variant="secondary" onClick={closeConfirm}>
                 Cancel
               </Button>
             </div>

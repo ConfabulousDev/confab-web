@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,11 @@ type InvalidateCardsRequest struct {
 	CardTypes []string `json:"card_types"`
 	Reason    string   `json:"reason"`
 	DryRun    *bool    `json:"dry_run,omitempty"` // defaults to true when nil
+	// Confirm is the typed-confirmation echo for the execute path (kyrr): the admin
+	// must echo the affected-session count from the dry-run preview. The server
+	// re-counts at execute time and rejects (400) on mismatch — binding the action
+	// to the actual current blast radius. Ignored on dry-run.
+	Confirm string `json:"confirm,omitempty"`
 }
 
 // InvalidateCardsResponse is returned by POST /api/v1/admin/cards/invalidate.
@@ -165,7 +171,7 @@ func (h *Handlers) HandleInvalidateCards(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.respondExecute(ctx, w, r, countReq, reason)
+	h.respondExecute(ctx, w, r, countReq, reason, req.Confirm)
 }
 
 // respondDryRun handles the read-only path: count only, no writes, 200 OK.
@@ -191,10 +197,25 @@ func (h *Handlers) respondExecute(
 	r *http.Request,
 	countReq dbadmincardinvalidations.CountRequest,
 	reason string,
+	confirm string,
 ) {
 	adminID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		httputil.RespondError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	// kyrr: require the admin to echo the affected-session count from the dry-run
+	// preview before the destructive DELETE. Re-count here so the confirmation binds
+	// to the CURRENT blast radius — a stale preview (sessions entered/left the window
+	// since the dry run) won't match and is rejected.
+	count, err := h.cardInvalidationsStore.CountAffected(ctx, countReq)
+	if err != nil {
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to count affected cards")
+		return
+	}
+	if !verifyConfirmation(strconv.Itoa(count.AffectedSessions), confirm) {
+		respondConfirmationMismatch(w)
 		return
 	}
 
