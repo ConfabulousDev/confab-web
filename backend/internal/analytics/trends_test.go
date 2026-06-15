@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 	"github.com/shopspring/decimal"
 )
@@ -2215,4 +2216,124 @@ func TestGetTrends_TopSessionsLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+func trendsContainsStr(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// TestGetTrends_FilterOptions_ExcludesNonListable (0407) asserts the Trends
+// repo + owner dropdowns apply the same listability gate as session-list: a
+// repo/owner whose only sessions are non-listable (no synced lines, or no
+// summary/first_user_message) is absent, while a listable one is present.
+func TestGetTrends_FilterOptions_ExcludesNonListable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	listable := testutil.CreateTestUser(t, env, "listable@trends.test", "Listable")
+	noLines := testutil.CreateTestUser(t, env, "nolines@trends.test", "NoLines")
+	noSummary := testutil.CreateTestUser(t, env, "nosummary@trends.test", "NoSummary")
+
+	withShareAll(env, func() {
+		testutil.CreateTestSessionFull(t, env, listable.ID, "tr-listable", testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/listable-repo.git",
+			Summary: "real",
+		})
+		testutil.CreateTestSessionFull(t, env, noLines.ID, "tr-nolines", testutil.TestSessionFullOpts{
+			RepoURL:   "https://github.com/org/nolines-repo.git",
+			Summary:   "has summary, no lines",
+			SyncLines: -1,
+		})
+		testutil.CreateTestSessionFull(t, env, noSummary.ID, "tr-nosummary", testutil.TestSessionFullOpts{
+			RepoURL: "https://github.com/org/nosummary-repo.git",
+		})
+
+		store := analytics.NewStore(env.DB.Conn())
+		resp, err := store.GetTrends(context.Background(), listable.ID, trendsReqAllTime(env))
+		if err != nil {
+			t.Fatalf("GetTrends: %v", err)
+		}
+		opts := resp.FilterOptions
+
+		if !trendsContainsStr(opts.Repos, "org/listable-repo") {
+			t.Errorf("listable repo missing from trends options: %v", opts.Repos)
+		}
+		if !trendsContainsStr(opts.Owners, "listable@trends.test") {
+			t.Errorf("listable owner missing from trends options: %v", opts.Owners)
+		}
+		if trendsContainsStr(opts.Repos, "org/nolines-repo") {
+			t.Errorf("no-lines repo should be absent from trends options: %v", opts.Repos)
+		}
+		if trendsContainsStr(opts.Repos, "org/nosummary-repo") {
+			t.Errorf("no-summary repo should be absent from trends options: %v", opts.Repos)
+		}
+		if trendsContainsStr(opts.Owners, "nolines@trends.test") {
+			t.Errorf("no-lines owner should be absent from trends options: %v", opts.Owners)
+		}
+		if trendsContainsStr(opts.Owners, "nosummary@trends.test") {
+			t.Errorf("no-summary owner should be absent from trends options: %v", opts.Owners)
+		}
+	})
+}
+
+// TestGetTrends_ModelFilterOptions_ExcludesNonListable (0407) asserts the
+// Trends model dropdown applies the listability gate: a model whose only
+// session is non-listable is absent, while a model on a listable session
+// remains present.
+func TestGetTrends_ModelFilterOptions_ExcludesNonListable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	user := testutil.CreateTestUser(t, env, "modelgate@trends.test", "Model Gate")
+
+	withShareAll(env, func() {
+		// Listable session carrying opus-4-5.
+		listableID := testutil.CreateTestSessionFull(t, env, user.ID, "mg-listable", testutil.TestSessionFullOpts{
+			Summary: "real",
+		})
+		testutil.SeedTokensV2Card(t, env, listableID, analytics.TokensV2Data{
+			TotalCostUSD: "1.00", TotalInput: 1000, TotalOutput: 500,
+			ByProvider: map[string]analytics.TokensV2Provider{
+				models.ProviderClaudeCode: {CostUSD: "1.00", Models: map[string]analytics.TokensV2Model{
+					"opus-4-5": {Input: 1000, Output: 500, CostUSD: "1.00"},
+				}},
+			},
+		})
+
+		// Non-listable session (no summary, no sync lines) carrying gpt-5 only.
+		nonListableID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "mg-nonlistable", models.ProviderCodex)
+		testutil.SeedTokensV2Card(t, env, nonListableID, analytics.TokensV2Data{
+			TotalCostUSD: "2.00", TotalInput: 2000, TotalOutput: 800,
+			ByProvider: map[string]analytics.TokensV2Provider{
+				models.ProviderCodex: {CostUSD: "2.00", Models: map[string]analytics.TokensV2Model{
+					"gpt-5": {Input: 2000, Output: 800, CostUSD: "2.00"},
+				}},
+			},
+		})
+
+		store := analytics.NewStore(env.DB.Conn())
+		resp, err := store.GetTrends(context.Background(), user.ID, trendsReqAllTime(env))
+		if err != nil {
+			t.Fatalf("GetTrends: %v", err)
+		}
+		got := resp.FilterOptions.Models
+		if !trendsContainsStr(got, "opus-4-5") {
+			t.Errorf("listable model opus-4-5 missing from model options: %v", got)
+		}
+		if trendsContainsStr(got, "gpt-5") {
+			t.Errorf("non-listable-only model gpt-5 should be absent from model options: %v", got)
+		}
+	})
 }

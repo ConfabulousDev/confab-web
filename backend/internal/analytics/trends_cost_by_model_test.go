@@ -38,6 +38,12 @@ func costByModelFixture(t *testing.T) (*analytics.Store, int64, analytics.Trends
 	unknownID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "cbm-unknown", models.ProviderClaudeCode)
 	_ = testutil.CreateTestSessionWithProvider(t, env, user.ID, "cbm-no-v2", models.ProviderCodex)
 
+	// 0407: the model dropdown only surfaces listable sessions; make every
+	// v2-carrying fixture session listable so it remains a dropdown source.
+	for _, id := range []string{claudeID, codexID, opencodeID, unknownID} {
+		testutil.MakeSessionListable(t, env, id)
+	}
+
 	testutil.SeedTokensV2Card(t, env, claudeID, analytics.TokensV2Data{
 		TotalCostUSD: "1.50", TotalInput: 1200, TotalOutput: 600,
 		ByProvider: map[string]analytics.TokensV2Provider{
@@ -294,6 +300,7 @@ func TestGetTrends_CostByModel_ExcludesSynthetic(t *testing.T) {
 	env.CleanDB(t)
 	user := testutil.CreateTestUser(t, env, "trends-synthetic@test.com", "Trends Synthetic User")
 	sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "cbm-synthetic", models.ProviderClaudeCode)
+	testutil.MakeSessionListable(t, env, sessionID)
 	testutil.SeedTokensV2Card(t, env, sessionID, analytics.TokensV2Data{
 		TotalCostUSD: "1.00", TotalInput: 1000, TotalOutput: 500,
 		ByProvider: map[string]analytics.TokensV2Provider{

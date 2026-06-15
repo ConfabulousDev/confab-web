@@ -73,3 +73,23 @@ func RepoRootExpr(alias string) string {
 func RepoMatchExpr(alias, paramPlaceholder string) string {
 	return RepoRootExpr(alias) + " = ANY(" + paramPlaceholder + ")"
 }
+
+// ListableSessionPredicate is the single source of truth for whether a session
+// is "listable" — i.e. eligible to appear in the paginated session list. A
+// session qualifies only when it has synced lines (> 0) AND a summary or a
+// first_user_message. 0407: both the list query and the filter-option queries
+// (session-list + Trends) apply this same fragment so an offered filter option
+// can never orphan to an empty list.
+//
+// The EXISTS(... last_synced_line > 0) form is equivalent to the list query's
+// SUM(last_synced_line) > 0 (line counts are non-negative, so any positive line
+// implies a positive sum) and needs no aggregate join in the option queries.
+//
+// alias is the SQL alias of the sessions table in the surrounding query (e.g.
+// "s"). The fragment is a pure string with no user input, so no escaping is
+// needed.
+func ListableSessionPredicate(alias string) string {
+	return "EXISTS (SELECT 1 FROM sync_files sf WHERE sf.session_id = " + alias +
+		".id AND sf.last_synced_line > 0)" +
+		" AND (" + alias + ".summary IS NOT NULL OR " + alias + ".first_user_message IS NOT NULL)"
+}

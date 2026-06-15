@@ -200,12 +200,15 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.Sessio
 		FROM
 			(SELECT array_agg(DISTINCT ` + db.RepoRootExpr("s") + ` ORDER BY ` + db.RepoRootExpr("s") + `) as repos
 			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE s.git_info->>'repo_url' IS NOT NULL) r,
+			 WHERE s.git_info->>'repo_url' IS NOT NULL
+			   AND ` + db.ListableSessionPredicate("s") + `) r,
 			(SELECT array_agg(DISTINCT s.git_info->>'branch' ORDER BY s.git_info->>'branch') as branches
 			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE s.git_info->>'branch' IS NOT NULL) b,
-			(SELECT array_agg(DISTINCT LOWER(owner_email) ORDER BY LOWER(owner_email)) as owners
-			 FROM visible) o
+			 WHERE s.git_info->>'branch' IS NOT NULL
+			   AND ` + db.ListableSessionPredicate("s") + `) b,
+			(SELECT array_agg(DISTINCT LOWER(v.owner_email) ORDER BY LOWER(v.owner_email)) as owners
+			 FROM visible v JOIN sessions s ON v.id = s.id
+			 WHERE ` + db.ListableSessionPredicate("s") + `) o
 	`
 
 	var repos, branches, owners []string
@@ -246,8 +249,10 @@ func decodeCursor(cursor string) (time.Time, string, error) {
 // CF-495: owner filter now applies uniformly to d.owner_email (post-dedup
 // from db.VisibleSessionsCTE), so the historical owned/shared split is gone.
 func buildPushdownFilters(pb *paramBuilder, params db.SessionListParams) (commonFilters, ownerFilter, searchJoin string) {
-	commonFilters = "\n\t\t\t\tAND COALESCE(sf_stats.total_lines, 0) > 0" +
-		"\n\t\t\t\tAND (s.summary IS NOT NULL OR s.first_user_message IS NOT NULL)"
+	// 0407: the listability gate is the shared db.ListableSessionPredicate so
+	// the list and the filter-option dropdowns can never drift. The sf_stats
+	// join is still used for the SELECT columns (file_count / total_lines).
+	commonFilters = "\n\t\t\t\tAND " + db.ListableSessionPredicate("s")
 
 	if len(params.Repos) > 0 {
 		p := pb.addArray(params.Repos)

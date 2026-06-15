@@ -583,3 +583,17 @@ func SeedTokensV2Card(t *testing.T, env *TestEnvironment, sessionID string, data
 		t.Fatalf("seed tokens_v2 card: %v", err)
 	}
 }
+
+// MakeSessionListable backfills the "listability" signal (a summary + synced
+// lines) onto an already-created session so it passes the filter-option /
+// list-visibility gate (0407: db.ListableSessionPredicate). Use it for
+// sessions created via the bare CreateTestSessionWithProvider helper that need
+// to surface in filter dropdowns.
+func MakeSessionListable(t *testing.T, env *TestEnvironment, sessionID string) {
+	t.Helper()
+	if _, err := env.DB.Exec(env.Ctx,
+		`UPDATE sessions SET summary = COALESCE(summary, 'listable') WHERE id = $1`, sessionID); err != nil {
+		t.Fatalf("make session listable (summary): %v", err)
+	}
+	CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
+}
