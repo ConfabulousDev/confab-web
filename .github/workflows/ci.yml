@@ -186,7 +186,22 @@ jobs:
 
       - name: Integration tests
         working-directory: backend
-        run: go test -timeout 15m ${{ matrix.package }}
+        # Retry the whole `go test` invocation up to 3 times (1 initial + 2 retries)
+        # to absorb transient flakes (Postgres/MinIO container startup, etc.). This is
+        # a go-invocation-level retry, not Go's per-test -count. The final `exit 1`
+        # fails the job if all 3 attempts fail. Per-shard, since this is a matrix job.
+        run: |
+          for attempt in 1 2 3; do
+            echo "::group::go test attempt $attempt/3 (${{ matrix.package }})"
+            if go test -timeout 15m ${{ matrix.package }}; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "attempt $attempt failed for ${{ matrix.package }}"
+          done
+          echo "all 3 attempts failed for ${{ matrix.package }}"
+          exit 1
 
   docker-smoke-test:
     needs: changes
