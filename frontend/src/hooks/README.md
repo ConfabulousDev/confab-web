@@ -17,8 +17,9 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useLoadSession.ts` | Single session loading with typed error categories |
 | `useAnalyticsPolling.ts` | Session analytics polling with conditional 304 support |
 | `useSmartPolling.ts` | Generic smart polling with visibility/activity awareness |
-| `useTrends.ts` | Trends data fetching with filter parameters |
-| `useOrgAnalytics.ts` | Organization analytics data fetching |
+| `useApiData.ts` | Generic data-fetching state machine (loading/error/data + manual `refetch`, single fetch on mount). Backs `useTrends`/`useOrgAnalytics` (73q9) |
+| `useTrends.ts` | Trends data fetching with filter parameters (thin `useApiData` wrapper) |
+| `useOrgAnalytics.ts` | Organization analytics data fetching (thin `useApiData` wrapper) |
 | `useTranscriptSearch.ts` | Generic transcript search with debounced query and match navigation (parameterized over item type via an injected text extractor). Consumed by the Claude, Codex, and OpenCode transcript panes |
 | `useShareDialog.ts` | Share dialog form state and API interactions |
 | `useAppConfig.ts` | App configuration context accessor |
@@ -45,8 +46,9 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useLoadSession` | `({ fetchSession, deps }) => UseLoadSessionResult` | Loads a single session with typed error states (`not_found`, `expired`, `forbidden`, `auth_required`, `general`). |
 | `useAnalyticsPolling` | `(sessionId, enabled?) => UseAnalyticsPollingReturn` | Polls session analytics. Sends `as_of_line` for 304 Not Modified support. |
 | `useSmartPolling` | `(fetchFn, options?) => UseSmartPollingReturn<T>` | Generic polling: suspended (tab hidden), passive (idle, 60s), active (30s). Supports merge functions and interval overrides. |
-| `useTrends` | `(initialParams?) => UseTrendsReturn` | Fetches aggregated trends data. Single fetch on mount with manual refetch. `TrendsParams.providers` (CF-424) serializes to singular `?provider=`; `TrendsParams.owners` (CF-495) serializes to singular `?owner=`. |
-| `useOrgAnalytics` | `(initialParams) => UseOrgAnalyticsReturn` | Fetches org-level analytics. Single fetch on mount with manual refetch. |
+| `useApiData` | `(fetchFn, initialParams, errorMessage) => UseApiDataReturn<T, P>` | Generic loading/error/data + `refetch`. Single fetch on mount with `initialParams`; no auto-refetch when `initialParams` changes (refresh is always explicit via `refetch`, which with no args re-uses the last params). `fetchFn` is read via a ref so a fresh closure each render doesn't destabilize `refetch`. |
+| `useTrends` | `(initialParams?) => UseApiDataReturn<TrendsResponse, TrendsParams>` | `useApiData` wrapper for aggregated trends. `TrendsParams.providers` (CF-424) serializes to singular `?provider=`; `TrendsParams.owners` (CF-495) serializes to singular `?owner=`. |
+| `useOrgAnalytics` | `(initialParams) => UseApiDataReturn<OrgAnalyticsResponse, OrgAnalyticsParams>` | `useApiData` wrapper for org-level analytics. |
 
 ### UI State
 

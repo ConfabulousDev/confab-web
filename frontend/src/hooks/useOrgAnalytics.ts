@@ -1,37 +1,14 @@
-import { useState, useCallback, useEffect } from 'react';
 import { orgAnalyticsAPI, type OrgAnalyticsParams } from '@/services/api';
 import type { OrgAnalyticsResponse } from '@/schemas/api';
+import { useApiData, type UseApiDataReturn } from './useApiData';
 
-interface UseOrgAnalyticsReturn {
-  data: OrgAnalyticsResponse | null;
-  loading: boolean;
-  error: Error | null;
-  refetch: (params: OrgAnalyticsParams) => Promise<void>;
-}
-
-export function useOrgAnalytics(initialParams: OrgAnalyticsParams): UseOrgAnalyticsReturn {
-  const [data, setData] = useState<OrgAnalyticsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchData = useCallback(async (params: OrgAnalyticsParams) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await orgAnalyticsAPI.get(params);
-      setData(response);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch org analytics'));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Initial fetch
-  useEffect(() => {
-    fetchData(initialParams);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only fetch once on mount
-
-  return { data, loading, error, refetch: fetchData };
+/**
+ * Hook for fetching organization-level analytics with filter parameters.
+ *
+ * @param initialParams - Initial filter parameters
+ */
+export function useOrgAnalytics(
+  initialParams: OrgAnalyticsParams,
+): UseApiDataReturn<OrgAnalyticsResponse, OrgAnalyticsParams> {
+  return useApiData(orgAnalyticsAPI.get, initialParams, 'Failed to fetch org analytics');
 }
