@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
+	"github.com/go-chi/chi/v5"
 )
 
 // CreateAPIKeyRequest is the request body for creating an API key
@@ -74,7 +75,7 @@ func HandleCreateAPIKey(database *db.DB) http.HandlerFunc {
 		keyID, createdAt, err := authStore.CreateAPIKeyWithReturn(ctx, userID, keyHash, req.Name)
 		if err != nil {
 			if errors.Is(err, db.ErrAPIKeyLimitExceeded) {
-				respondError(w, http.StatusConflict, "API key limit reached. Please delete some existing keys before creating new ones.")
+				respondError(w, http.StatusConflict, fmt.Sprintf("API key limit reached. You have reached the maximum of %d API keys. Please delete some existing keys before creating new ones.", db.MaxAPIKeysPerUser))
 				return
 			}
 			if errors.Is(err, db.ErrAPIKeyNameExists) {

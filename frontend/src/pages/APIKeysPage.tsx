@@ -15,14 +15,12 @@ import Alert from '@/components/Alert';
 import { KeyIcon, ActiveIcon, AlertCircleIcon, ClockIcon } from '@/components/icons';
 import styles from './APIKeysPage.module.css';
 
-const MAX_API_KEYS = 500;
-
 function getCreateErrorContent(error: Error): React.ReactNode {
   if (error instanceof APIError && error.message.includes('limit')) {
     return (
       <>
         <strong>API Key Limit Reached</strong>
-        <p>You have reached the maximum of {MAX_API_KEYS} API keys. Please delete some unused keys below before creating new ones.</p>
+        <p>{error.message}</p>
       </>
     );
   }
