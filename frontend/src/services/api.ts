@@ -232,6 +232,16 @@ class APIClient {
       body = requestBody;
     }
 
+    // The backend's validateContentType middleware rejects every POST/PUT/PATCH
+    // without a Content-Type (415). Body-less action endpoints (e.g. grant-admin,
+    // activate, regenerate-all) would otherwise fail, so default the header for
+    // all mutating methods.
+    const method = (fetchOptions.method ?? 'GET').toUpperCase();
+    const isMutating = method === 'POST' || method === 'PUT' || method === 'PATCH';
+    if (isMutating && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
     const config: RequestInit = {
       ...fetchOptions,
       headers,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { APIError, NetworkError, AuthenticationError, analyticsAPI, trendsAPI } from './api';
+import { APIError, NetworkError, AuthenticationError, adminAPI, analyticsAPI, trendsAPI } from './api';
 
 describe('APIError', () => {
   it('should create APIError with correct properties', () => {
@@ -228,6 +228,58 @@ describe('analyticsAPI.regenerateSmartRecap', () => {
     const result = await analyticsAPI.regenerateSmartRecap('session-123');
     expect(result.computed_at).toBe('2024-01-01T00:00:00Z');
     expect(result.computed_lines).toBe(100);
+  });
+});
+
+describe('adminAPI body-less mutations set Content-Type', () => {
+  let fetchSpy: ReturnType<typeof setupFetchSpy>;
+
+  beforeEach(() => {
+    fetchSpy = setupFetchSpy();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Read the Content-Type header off a fetch RequestInit, regardless of how it was set. */
+  function contentTypeOf(init: RequestInit | undefined): string | null {
+    return new Headers(init?.headers).get('Content-Type');
+  }
+
+  // Regression: the backend validateContentType middleware returns 415
+  // "Content-Type header required" for any POST/PUT/PATCH without a Content-Type.
+  // grant-admin (and the other admin action endpoints) carry no body, so the
+  // header must still be defaulted or the request fails before reaching the handler.
+  it('grantAdmin sends application/json even with no body', async () => {
+    fetchSpy.mockResolvedValue(fakeResponse({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: () => Promise.resolve({ id: 7, is_admin: true }),
+    }));
+
+    await adminAPI.grantAdmin(7);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const call = fetchSpy.mock.calls[0];
+    expect(call?.[0]).toBe('/api/v1/admin/users/7/grant-admin');
+    expect(call?.[1]?.method).toBe('POST');
+    expect(contentTypeOf(call?.[1])).toBe('application/json');
+  });
+
+  it('revokeAdmin sends application/json even with no body', async () => {
+    fetchSpy.mockResolvedValue(fakeResponse({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: () => Promise.resolve({ id: 7, is_admin: false }),
+    }));
+
+    await adminAPI.revokeAdmin(7);
+
+    const call = fetchSpy.mock.calls[0];
+    expect(contentTypeOf(call?.[1])).toBe('application/json');
   });
 });
 
