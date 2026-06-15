@@ -24,6 +24,7 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 - **`NewResendService(apiKey, fromAddress, fromName, frontendURL) *ResendService`** -- Creates a production email service.
 - **`NewRateLimitedService(service Service, limitPerHour int) *RateLimitedService`** -- Wraps a service with rate limiting.
 - **`(*RateLimitedService).SendShareInvitation(ctx, userID, params) error`** -- Checks rate limit, records the attempt, then sends. Returns `ErrRateLimitExceeded` if over limit.
+- **`(*RateLimitedService).CheckRateLimit(userID, count) error`** -- Fail-fast batch pre-check: reports whether sending `count` emails would fit the per-hour limit **without recording** them, so a multi-recipient share can be rejected up front (returning `ErrRateLimitExceeded`) before any individual email is sent. Because it only checks (no record), calling it before the per-send loop does not double-count.
 - **`NewMockService() *MockService`** -- Creates a mock that records `SentEmails` for assertions.
 
 ## How to Extend

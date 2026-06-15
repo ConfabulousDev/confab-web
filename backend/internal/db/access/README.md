@@ -8,7 +8,7 @@ Session access control and share management (create, list, revoke shares; check 
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
 | `access.go` | `GetSessionAccessType` (determines how a user can access a session) and `GetSessionDetailWithAccess` (returns session detail with PII redaction for non-owners) |
-| `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `RevokeShare`, and the private `loadShareRecipients` helper |
+| `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `RevokeShare`, `CountUserSharesSince` (daily-quota counter), and the private `loadShareRecipients` helper |
 
 ## Key API
 
@@ -18,6 +18,7 @@ Session access control and share management (create, list, revoke shares; check 
 - **`CreateSystemShare(ctx, sessionID, expiresAt)`** -- Creates a system-wide share (admin operation, no ownership check). Accessible to any authenticated user.
 - **`ListShares(ctx, sessionID, userID)` / `ListAllUserShares(ctx, userID)`** -- Lists shares for a session or across all of a user's sessions, including recipient emails.
 - **`RevokeShare(ctx, shareID, userID)`** -- Deletes a share, verified through session ownership. Returns `ErrUnauthorized` for both not-found and wrong-owner cases (security by obscurity).
+- **`CountUserSharesSince(ctx, userID, since)`** -- Counts shares the user has created since an instant, joining `session_shares` → `sessions` on the owning `user_id` (the table has no owner column). Backs the per-user daily share-creation quota (CF-429 / H2) enforced in the `POST /sessions/{id}/share` handler.
 
 ## How to Extend
 

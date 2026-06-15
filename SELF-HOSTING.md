@@ -256,6 +256,7 @@ Configure how your team interacts with sessions and sharing (all in `.env`).
 |----------|-------------|
 | `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | Set to `true` to make every session visible to all authenticated users. Useful for small teams that want full transparency. |
 | `ENABLE_SHARE_CREATION` | Set to `true` to allow users to create external share links. |
+| `SHARE_DAILY_QUOTA` | Per-user cap on shares created in a rolling 24h window (default: `100`). The share-creation endpoint returns 429 once a user exceeds it. Set to `0` to disable the cap. |
 | `ENABLE_ORG_ANALYTICS` | Set to `true` to expose org-wide per-user analytics (`/admin/...`) to every authenticated user — same visibility model as `SHARE_ALL_SESSIONS_TO_AUTHENTICATED`. See [Organization Analytics in backend/API.md](backend/API.md#organization-analytics) for the privacy implications. |
 | `MAX_USERS` | Maximum registered users (default: `50`). Set to `0` to block new registrations. |
 | `SUPER_ADMIN_EMAILS` | Comma-separated emails with access to the admin panel at `/admin/users`. |
