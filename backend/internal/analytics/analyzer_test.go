@@ -390,6 +390,72 @@ func TestToolsAnalyzer(t *testing.T) {
 	}
 }
 
+func TestToolsAnalyzer_ContextReplayDedup(t *testing.T) {
+	// msg-001 (containing tool_use toolu_1/toolu_2) is replayed verbatim during
+	// context management. Tool counts must dedup by tool_use.id so the replay is
+	// not double-counted (a3y3). WITHOUT dedup TotalCalls would be 5.
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		makeToolUseBlock("toolu_2", "Write", map[string]interface{}{}),
+	}) + "\n" +
+		// Context replay of msg-001 with the same tool_use ids.
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+			makeToolUseBlock("toolu_2", "Write", map[string]interface{}{}),
+		}) + "\n" +
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:02:01Z", "claude-sonnet-4", "msg-002", 100, 50, []map[string]interface{}{
+			makeToolUseBlock("toolu_3", "Bash", map[string]interface{}{}),
+		}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+	result, err := (&ToolsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	// Distinct tool_use ids: toolu_1, toolu_2, toolu_3 → 3.
+	if result.TotalCalls != 3 {
+		t.Errorf("TotalCalls = %d, want 3 (replayed tool_use ids deduped)", result.TotalCalls)
+	}
+	if result.ToolStats["Read"] == nil || result.ToolStats["Read"].Success != 1 {
+		t.Errorf("ToolStats[Read] = %+v, want Success 1", result.ToolStats["Read"])
+	}
+	if result.ToolStats["Write"] == nil || result.ToolStats["Write"].Success != 1 {
+		t.Errorf("ToolStats[Write] = %+v, want Success 1", result.ToolStats["Write"])
+	}
+	if result.ToolStats["Bash"] == nil || result.ToolStats["Bash"].Success != 1 {
+		t.Errorf("ToolStats[Bash] = %+v, want Success 1", result.ToolStats["Bash"])
+	}
+}
+
+func TestToolsAnalyzer_CountsToolUseWithoutID(t *testing.T) {
+	// tool_use blocks without an id cannot be deduped; they must still be counted
+	// (dedup is skipped when the id is empty) so we never under-count (a3y3).
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeToolUseBlock("", "Read", map[string]interface{}{}),
+		makeToolUseBlock("", "Read", map[string]interface{}{}),
+	}) + "\n"
+
+	fc, err := NewFileCollection([]byte(jsonl))
+	if err != nil {
+		t.Fatalf("NewFileCollection failed: %v", err)
+	}
+	result, err := (&ToolsAnalyzer{}).Analyze(fc)
+	if err != nil {
+		t.Fatalf("Analyze failed: %v", err)
+	}
+
+	if result.TotalCalls != 2 {
+		t.Errorf("TotalCalls = %d, want 2 (id-less tool_use blocks not deduped)", result.TotalCalls)
+	}
+	if result.ToolStats["Read"] == nil || result.ToolStats["Read"].Success != 2 {
+		t.Errorf("ToolStats[Read] = %+v, want Success 2", result.ToolStats["Read"])
+	}
+}
+
 func TestToolsAnalyzer_AgentToolCalls(t *testing.T) {
 	// JSONL with a main tool call (Read) and a Task tool that spawned an agent with 25 tool calls
 	// NOTE: toolUseResult is at the top level of the user message, not inside content blocks

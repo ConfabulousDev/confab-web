@@ -18,6 +18,11 @@ type ToolsResult struct {
 type ToolsAnalyzer struct {
 	result   ToolsResult
 	mainFile *TranscriptFile
+	// seenToolUseIDs deduplicates tool_use blocks by id across the whole analysis
+	// pass (main + agent files). Context replay re-logs assistant messages, so the
+	// same tool_use.id can appear multiple times; counting it once mirrors the
+	// message.id dedup the token/session/conversation cards already do (a3y3).
+	seenToolUseIDs map[string]bool
 }
 
 // ProcessFile accumulates tool metrics from a single file.
@@ -25,6 +30,7 @@ func (a *ToolsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 	if isMain {
 		a.mainFile = file
 		a.result.ToolStats = make(map[string]*ToolStats)
+		a.seenToolUseIDs = make(map[string]bool)
 	}
 
 	toolIDToName := file.BuildToolUseIDToNameMap()
@@ -32,6 +38,14 @@ func (a *ToolsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 	for _, line := range file.Lines {
 		if line.IsAssistantMessage() {
 			for _, tool := range line.GetToolUses() {
+				// Skip a tool_use block already counted by id (context replay).
+				// id-less blocks can't be deduped, so always count them.
+				if tool.ID != "" {
+					if a.seenToolUseIDs[tool.ID] {
+						continue
+					}
+					a.seenToolUseIDs[tool.ID] = true
+				}
 				a.result.TotalCalls++
 				if tool.Name != "" {
 					if a.result.ToolStats[tool.Name] == nil {
