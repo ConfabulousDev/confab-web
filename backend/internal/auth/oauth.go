@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
@@ -496,8 +497,17 @@ func TrySessionAuth(r *http.Request, database *db.DB) *sessionAuthResult {
 		return nil
 	}
 
-	// Check if user is inactive
+	// Check if user is inactive. This is the security-relevant case: a session
+	// cookie that resolves to a deactivated account. Log it decisively (the
+	// other nil returns above are ordinary anonymous/expired traffic and stay
+	// silent to avoid spamming on every unauthenticated request).
 	if session.UserStatus == models.UserStatusInactive {
+		logger.Ctx(r.Context()).Warn("Session auth rejected: user inactive",
+			"reason", "user_inactive",
+			"user_id", session.UserID,
+			"client_ip", clientip.FromRequest(r).Primary,
+			"method", r.Method,
+			"path", r.URL.Path)
 		return nil
 	}
 
@@ -523,12 +533,23 @@ func RequireSession(database *db.DB, config *OAuthConfig) func(http.Handler) htt
 				authResult = AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey)
 			}
 			if authResult == nil {
+				logger.Ctx(r.Context()).Warn("Session auth rejected",
+					"reason", "no_valid_session",
+					"client_ip", clientip.FromRequest(r).Primary,
+					"method", r.Method,
+					"path", r.URL.Path)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Check email domain restriction
 			if !validation.IsAllowedEmailDomain(authResult.userEmail, config.AllowedEmailDomains) {
+				logger.Ctx(r.Context()).Warn("Session auth rejected: email domain not permitted",
+					"reason", "email_domain_not_permitted",
+					"user_id", authResult.userID,
+					"client_ip", clientip.FromRequest(r).Primary,
+					"method", r.Method,
+					"path", r.URL.Path)
 				http.Error(w, "Email domain not permitted", http.StatusForbidden)
 				return
 			}

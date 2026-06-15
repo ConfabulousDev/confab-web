@@ -4,8 +4,10 @@ import (
 	"net/http"
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
+	"github.com/ConfabulousDev/confab-web/internal/clientip"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 )
 
 // Middleware returns an HTTP middleware that requires super admin authentication.
@@ -32,9 +34,23 @@ func Middleware(database *db.DB) func(http.Handler) http.Handler {
 			// the users.is_admin column, so admins can be managed at runtime
 			// without an env edit + restart (5k4v).
 			if !IsSuperAdmin(user.Email) && !user.IsAdmin {
+				logger.Ctx(r.Context()).Warn("Admin access denied",
+					"reason", "not_admin",
+					"user_id", userID,
+					"email", user.Email,
+					"client_ip", clientip.FromRequest(r).Primary,
+					"method", r.Method,
+					"path", r.URL.Path)
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
+
+			logger.Ctx(r.Context()).Info("Admin access granted",
+				"user_id", userID,
+				"email", user.Email,
+				"client_ip", clientip.FromRequest(r).Primary,
+				"method", r.Method,
+				"path", r.URL.Path)
 
 			next.ServeHTTP(w, r)
 		})
