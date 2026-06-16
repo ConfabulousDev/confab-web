@@ -5,6 +5,7 @@ import EditedFileSnippet from './EditedFileSnippet';
 import QueuedCommand from './QueuedCommand';
 import ToolDelta from './ToolDelta';
 import AwaySummary from './AwaySummary';
+import InformationalBanner from './InformationalBanner';
 import type { SystemMessage } from '@/types';
 
 describe('HookSuccessOutput', () => {
@@ -201,6 +202,59 @@ describe('AwaySummary', () => {
 
   it('renders nothing for whitespace-only content', () => {
     const { container } = render(<AwaySummary message={makeSystemMessage('   \n  ')} />);
+    expect(container.firstChild).toBeNull();
+  });
+});
+
+describe('InformationalBanner', () => {
+  function makeInformational(content: string | undefined, level?: string): SystemMessage {
+    return {
+      type: 'system',
+      uuid: 'sys-info-1',
+      timestamp: '2026-06-15T00:00:00.000Z',
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/home/user',
+      sessionId: 'session-1',
+      version: '2.1.143',
+      subtype: 'informational',
+      content,
+      ...(level !== undefined ? { level } : {}),
+    };
+  }
+
+  it('renders the banner content as markdown', () => {
+    const { container } = render(
+      <InformationalBanner message={makeInformational('Auto mode lets **Claude** handle prompts.', 'warning')} />,
+    );
+    expect(container.querySelector('strong')).toBeInTheDocument();
+    expect(screen.getByText(/Auto mode lets/)).toBeInTheDocument();
+  });
+
+  it('applies warning callout styling when level is "warning"', () => {
+    const { container } = render(
+      <InformationalBanner message={makeInformational('Heads up.', 'warning')} />,
+    );
+    // The callout root carries a level-keyed class so warning chrome can apply.
+    const root = container.firstElementChild;
+    expect(root).not.toBeNull();
+    expect(root?.className).toMatch(/warning/i);
+  });
+
+  it('falls back gracefully (still renders) when level is missing', () => {
+    const { container } = render(<InformationalBanner message={makeInformational('No level here.')} />);
+    expect(screen.getByText(/No level here/)).toBeInTheDocument();
+    expect(container.firstChild).not.toBeNull();
+  });
+
+  it('renders nothing for empty content', () => {
+    const { container } = render(<InformationalBanner message={makeInformational('', 'warning')} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders nothing for whitespace-only content', () => {
+    const { container } = render(<InformationalBanner message={makeInformational('   \n  ', 'warning')} />);
     expect(container.firstChild).toBeNull();
   });
 });

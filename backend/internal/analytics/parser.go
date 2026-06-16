@@ -24,6 +24,12 @@ type TranscriptLine struct {
 	IsMeta          bool   `json:"isMeta,omitempty"`          // True for skill expansion messages
 	SourceToolUseID string `json:"sourceToolUseID,omitempty"` // Links to the Skill tool_use that triggered this
 
+	// PermissionMode is the inline per-row permission mode stamped on user/
+	// assistant rows (Claude Code >= 2.1.143). Five-valued: default |
+	// acceptEdits | bypassPermissions | plan | auto ("auto" being the
+	// risk-evaluating mode added in 2.1.143). Empty when absent on older lines.
+	PermissionMode string `json:"permissionMode,omitempty"`
+
 	// For system messages
 	Subtype           string           `json:"subtype,omitempty"`           // e.g., "compact_boundary"
 	CompactMetadata   *CompactMetadata `json:"compactMetadata,omitempty"`   // Compaction info

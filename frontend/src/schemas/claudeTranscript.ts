@@ -186,12 +186,20 @@ const TodoItemSchema = z.object({
   activeForm: z.string(),
 });
 
+// Inline per-row permission mode (Claude Code >= 2.1.143). Five known values:
+// 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'auto' ('auto' is
+// the risk-evaluating mode added in 2.1.143). Modeled as an optional string —
+// NOT z.enum — so a future upstream mode keeps validating (read-both-forms
+// convention). Documented in schemas/README.md.
+const PermissionModeSchema = z.string().optional();
+
 const UserMessageSchema = BaseMessageSchema.extend({
   type: z.literal('user'),
   thinkingMetadata: ThinkingMetadataSchema.optional(),
   slug: z.string().optional(), // Session slug for display
   todos: z.array(TodoItemSchema).nullable().optional(), // Todo list state
   isMeta: z.boolean().optional(), // Skill expansion messages have isMeta: true
+  permissionMode: PermissionModeSchema,
   sourceToolUseID: z.string().optional(), // Links skill expansion to the Skill tool_use
   message: z.object({
     role: z.literal('user'),
@@ -204,6 +212,7 @@ const AssistantMessageSchema = BaseMessageSchema.extend({
   type: z.literal('assistant'),
   requestId: z.string().optional(), // Optional for synthetic error messages
   agentId: z.string().optional(),
+  permissionMode: PermissionModeSchema,
   message: z.object({
     model: z.string(),
     id: z.string(),

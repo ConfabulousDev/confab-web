@@ -7,10 +7,10 @@ import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/claude/ContentBlock';
 import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
 import { computeKeyFingerprint } from '@/utils/reportUnknown';
-import { AttachmentContent, AwaySummary } from '@/components/transcript/claude/attachments';
+import { AttachmentContent, AwaySummary, InformationalBanner } from '@/components/transcript/claude/attachments';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed, cacheWriteTotal } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
-import { getClaudeRoleLabel, isUnknownClaudeMessage } from '@/components/session/claudeCategories';
+import { getClaudeRoleLabel, isUnknownClaudeMessage, isAwaySummaryMessage, isInformationalMessage } from '@/components/session/claudeCategories';
 import styles from './ClaudeTimelineMessage.module.css';
 
 interface ClaudeTimelineMessageProps {
@@ -36,7 +36,7 @@ interface ClaudeTimelineMessageProps {
 function getStyleClass(message: TranscriptLine): string {
   // `away_summary` system rows reuse the summary card chrome (per CF-346
   // decision #9) — distinguishing role label lives in getClaudeRoleLabel.
-  if (isSystemMessage(message) && message.subtype === 'away_summary') return 'summary';
+  if (isAwaySummaryMessage(message)) return 'summary';
   // Map hyphenated types to camelCase CSS class names
   switch (message.type) {
     case 'file-history-snapshot':
@@ -206,7 +206,9 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
   // the precise predicate (not roleLabel === 'Unknown', which also matches
   // known-but-unlabeled types like `pr-link`).
   const isUnknownMessage = isUnknownClaudeMessage(message);
-  const isAwaySummary = isSystemMessage(message) && message.subtype === 'away_summary';
+  // `away_summary` and `informational` system rows render dedicated views
+  // (AwaySummary / InformationalBanner) instead of plain content blocks — see
+  // the content dispatch in the JSX below, which calls the shared type guards.
   // Attachment rows have no obvious text representation, so skip the
   // getContentBlocks work entirely — the dedicated AttachmentContent
   // component renders the body instead. Away-summary rows fall through to
@@ -408,8 +410,10 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
           <FileSnapshotContent message={message} />
         ) : isAttachmentMessage(message) ? (
           <AttachmentContent message={message} />
-        ) : isAwaySummary ? (
+        ) : isAwaySummaryMessage(message) ? (
           <AwaySummary message={message} />
+        ) : isInformationalMessage(message) ? (
+          <InformationalBanner message={message} />
         ) : (
           contentBlocks.map((block, i) => (
             <ContentBlockComponent
