@@ -8,7 +8,7 @@ Session access control and share management (create, list, revoke shares; check 
 |------|------|
 | `store.go` | `Store` struct definition and OpenTelemetry tracer |
 | `access.go` | `GetSessionAccessType` (determines how a user can access a session) and `GetSessionDetailWithAccess` (returns session detail with PII redaction for non-owners) |
-| `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `ListSystemShares`, `RevokeShare`, `CountUserSharesSince` (daily-quota counter), and the private `loadShareRecipients` helper |
+| `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `ListSystemShares`, `RevokeShare`, `CountUserSharesSince` (daily-quota counter), `DeleteExpiredShares` (periodic housekeeping), and the private `loadShareRecipients` helper |
 
 ## Key API
 
@@ -19,6 +19,7 @@ Session access control and share management (create, list, revoke shares; check 
 - **`ListShares(ctx, sessionID, userID)` / `ListAllUserShares(ctx, userID)` / `ListSystemShares(ctx)`** -- Lists shares for a session, across all of a user's sessions, or all system-wide shares (admin). Each filters out expired shares (`expires_at <= NOW()`) so owners/admins never see ghost rows for shares that no longer grant access; the owner lists also include recipient emails (CF-433 / H3).
 - **`RevokeShare(ctx, shareID, userID)`** -- Deletes a share, verified through session ownership. Returns `ErrUnauthorized` for both not-found and wrong-owner cases (security by obscurity).
 - **`CountUserSharesSince(ctx, userID, since)`** -- Counts shares the user has created since an instant, joining `session_shares` → `sessions` on the owning `user_id` (the table has no owner column). Backs the per-user daily share-creation quota (CF-429 / H2) enforced in the `POST /sessions/{id}/share` handler.
+- **`DeleteExpiredShares(ctx, olderThan)`** -- Hard-deletes shares whose `expires_at` is older than `now - olderThan`, returning the count removed. Periodic housekeeping (reclaims storage), **not** a security control — the list/access queries already hide every expired share. A single `DELETE` on `session_shares` suffices: the join tables cascade via `ON DELETE CASCADE`. NULL `expires_at` (never-expiring) rows are excluded. Called from the background worker each cycle, gated by `WORKER_SHARE_RETENTION` (default 30 days / `720h`); see `v9mc` (deferred from 0as2 / CF-433 H3 D1).
 
 ## How to Extend
 

@@ -422,6 +422,41 @@ func (s *Store) RevokeShare(ctx context.Context, shareID int64, userID int64) er
 	return nil
 }
 
+// DeleteExpiredShares hard-deletes shares whose expires_at is older than the
+// given retention window (cutoff = now - olderThan), returning the number of
+// parent rows removed. This is periodic housekeeping, not a security control:
+// the list endpoints already hide every expired share (0as2's
+// `expires_at > NOW()` read filter), so this only reclaims storage by physically
+// removing rows that have been expired for longer than the grace period.
+//
+// A single DELETE on session_shares is sufficient — the type-specific join
+// tables (session_share_public, session_share_recipients, session_share_system)
+// all reference session_shares(id) ON DELETE CASCADE, so their rows go with the
+// parent. Shares with a NULL expires_at never expire and are never deleted.
+func (s *Store) DeleteExpiredShares(ctx context.Context, olderThan time.Duration) (int64, error) {
+	// expires_at is a bare TIMESTAMP (no zone); compare against a UTC cutoff so
+	// the worker's local timezone can't skew the window.
+	cutoff := time.Now().UTC().Add(-olderThan)
+
+	ctx, span := tracer.Start(ctx, "db.delete_expired_shares",
+		trace.WithAttributes(attribute.String("share.cutoff", cutoff.String())))
+	defer span.End()
+
+	result, err := s.conn().ExecContext(ctx,
+		`DELETE FROM session_shares
+		 WHERE expires_at IS NOT NULL AND expires_at < $1`,
+		cutoff)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("failed to delete expired shares: %w", err)
+	}
+
+	deleted, _ := result.RowsAffected()
+	span.SetAttributes(attribute.Int64("share.deleted", deleted))
+	return deleted, nil
+}
+
 // CountUserSharesSince returns how many shares the user has created since the
 // given instant, used to enforce the per-user daily share-creation quota
 // (CF-429 / H2). session_shares has no owner column — ownership is the owning

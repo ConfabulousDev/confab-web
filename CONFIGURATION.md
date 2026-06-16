@@ -181,6 +181,7 @@ Precomputes analytics and smart recaps in the background.
 | `WORKER_MAX_SESSIONS` | `20` | No | Maximum sessions to process per cycle |
 | `WORKER_MAX_SEARCH_INDEX_SESSIONS` | `200` | No | Maximum sessions to (re)build the search index for per cycle (search indexing is cheap, so this is higher than `WORKER_MAX_SESSIONS`) |
 | `WORKER_DRY_RUN` | `false` | No | Log what would be done without actually processing |
+| `WORKER_SHARE_RETENTION` | `720h` | No | Each cycle, physically delete shares that have been expired longer than this. Use Go duration units (h/m/s only — `720h` = 30 days; `30d` is **not** accepted). Skipped in dry-run. |
 
 ### Staleness Thresholds (Advanced)
 
