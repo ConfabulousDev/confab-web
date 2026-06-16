@@ -1,4 +1,4 @@
-import type { TranscriptLine, UserMessage, AssistantMessage, AttachmentMessage } from '@/types';
+import type { TranscriptLine, UserMessage, AssistantMessage, AttachmentMessage, SystemMessage } from '@/types';
 import {
   isToolResultMessage,
   isToolResultBlock,
@@ -158,9 +158,24 @@ function categorizeAttachmentMessage(message: AttachmentMessage): ClaudeAttachme
 /**
  * `system` rows where `subtype === 'away_summary'` are surfaced under their own
  * chip; this helper centralizes the test so counters and the filter agree.
+ * Exported as a type guard so the timeline renderer dispatches off the same
+ * predicate and gets the `SystemMessage` narrowing the AwaySummary view needs.
  */
-function isAwaySummaryMessage(message: TranscriptLine): boolean {
+export function isAwaySummaryMessage(message: TranscriptLine): message is SystemMessage {
   return isSystemMessage(message) && message.subtype === 'away_summary';
+}
+
+/**
+ * `system` rows where `subtype === 'informational'` are Claude Code's
+ * onboarding banners (CC >= 2.1.143), e.g. the "auto mode" notice. They render
+ * as a styled callout (InformationalBanner) and carry their own role label, but
+ * stay bucketed under the `system` filter chip — no separate chip at MVP.
+ * Exported as a type guard so the timeline renderer dispatches off the same
+ * predicate and gets the `SystemMessage` narrowing the InformationalBanner view
+ * needs.
+ */
+export function isInformationalMessage(message: TranscriptLine): message is SystemMessage {
+  return isSystemMessage(message) && message.subtype === 'informational';
 }
 
 /**
@@ -241,6 +256,7 @@ export function getClaudeRoleLabel(message: TranscriptLine): string {
   }
   if (isAttachmentMessage(message)) return 'Attachment';
   if (isAwaySummaryMessage(message)) return 'Resume Summary';
+  if (isInformationalMessage(message)) return 'Notice';
   switch (message.type) {
     case 'assistant':
       return 'Assistant';

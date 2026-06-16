@@ -8,6 +8,7 @@ import {
   validateParsedTranscriptLine,
   isUnknownBlock,
   isUnknownMessage,
+  isUserMessage,
   isAssistantMessage,
   isAttachmentMessage,
   isHookSuccessAttachment,
@@ -567,5 +568,46 @@ describe('AttachmentMessageSchema', () => {
     // Compile-time check that AttachmentMessage is exported and shaped correctly
     const sample: AttachmentMessage | undefined = undefined;
     void sample;
+  });
+});
+
+describe('permissionMode (CC 2.1.143 auto mode)', () => {
+  // The inline `permissionMode` field rides on user/assistant rows. It's five-
+  // valued (default | acceptEdits | bypassPermissions | plan | auto) but modeled
+  // permissively as an optional string so a future upstream mode keeps parsing.
+  const KNOWN_MODES = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'auto'];
+
+  it.each(KNOWN_MODES)('accepts permissionMode=%s on a user message', (mode) => {
+    const raw = JSON.stringify({ ...makeUserMessage('go'), permissionMode: mode });
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isUserMessage(result.data)) {
+      expect(result.data.permissionMode).toBe(mode);
+    }
+  });
+
+  it('accepts permissionMode=auto on an assistant message', () => {
+    const raw = JSON.stringify({
+      ...makeAssistantRaw([{ type: 'text', text: 'ok' }]),
+      permissionMode: 'auto',
+    });
+    const result = parseTranscriptLineWithError(raw, 0);
+    expect(result.success).toBe(true);
+    if (result.success && isAssistantMessage(result.data)) {
+      expect(result.data.permissionMode).toBe('auto');
+    }
+  });
+
+  it('accepts a future/unknown mode value (string, not enum)', () => {
+    const raw = JSON.stringify({ ...makeUserMessage('go'), permissionMode: 'someFutureMode' });
+    expect(parseTranscriptLineWithError(raw, 0).success).toBe(true);
+  });
+
+  it('stays optional — absent permissionMode still validates', () => {
+    const result = parseTranscriptLineWithError(JSON.stringify(makeUserMessage('go')), 0);
+    expect(result.success).toBe(true);
+    if (result.success && isUserMessage(result.data)) {
+      expect(result.data.permissionMode).toBeUndefined();
+    }
   });
 });

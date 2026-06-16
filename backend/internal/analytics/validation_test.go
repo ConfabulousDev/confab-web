@@ -368,6 +368,30 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 			wantErrors: 0,
 		},
 		{
+			// CC 2.1.143 onboarding banner for "auto" permission mode: a
+			// system row with the new `subtype:"informational"` and
+			// `level:"warning"`. validateSystemMessage requires only that
+			// subtype be a string, so this validates cleanly — pinned here so
+			// the forward-compat behavior can't silently regress.
+			name: "valid informational system message (auto-mode banner)",
+			input: map[string]interface{}{
+				"type":        "system",
+				"uuid":        "test-uuid",
+				"timestamp":   "2025-01-01T00:00:00Z",
+				"parentUuid":  nil,
+				"isSidechain": false,
+				"userType":    "external",
+				"cwd":         "/home/user",
+				"sessionId":   "session-123",
+				"version":     "2.1.143",
+				"subtype":     "informational",
+				"content":     "Auto mode lets Claude handle permission prompts automatically — ...",
+				"level":       "warning",
+				"isMeta":      false,
+			},
+			wantErrors: 0,
+		},
+		{
 			name: "missing subtype",
 			input: map[string]interface{}{
 				"type":        "system",

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseClaudeJSONL, fetchNewClaudeTranscriptMessages, fetchParsedClaudeTranscript, reportClaudeTranscriptErrors, _resetReportedClaudeSessions } from './claudeTranscriptService';
 import type { TranscriptValidationError } from '@/schemas/claudeTranscript';
-import { isUserMessage } from '@/types';
+import { isUserMessage, isSystemMessage } from '@/types';
 import * as api from './api';
 
 // Mock the api module
@@ -282,6 +282,62 @@ ${createSystemMessage(2)}`;
     expect(tur.stdout).toBe('ok');
     expect(tur.interrupted).toBe(false);
     expect(tur.persistedOutputPath).toBeUndefined();
+  });
+
+  it('parses an auto permission-mode transcript (CC 2.1.143 banner + inline mode)', () => {
+    // Real shapes captured from a 2.1.143 session: a `permission-mode` envelope
+    // (dropped via SKIPPED_MESSAGE_TYPES), the once-per-entry informational
+    // onboarding banner, and a user row stamped with inline permissionMode:"auto".
+    const envelope = JSON.stringify({
+      type: 'permission-mode',
+      permissionMode: 'auto',
+      sessionId: 'session-auto',
+    });
+    const banner = JSON.stringify({
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/Users/jackie/dev/confab-web',
+      sessionId: 'session-auto',
+      version: '2.1.143',
+      type: 'system',
+      subtype: 'informational',
+      content:
+        'Auto mode lets Claude handle permission prompts automatically — Claude evaluates each tool call for risk before running it.',
+      level: 'warning',
+      isMeta: false,
+      uuid: 'banner-1',
+      timestamp: '2026-06-15T00:00:00.000Z',
+    });
+    const userRow = JSON.stringify({
+      parentUuid: 'banner-1',
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/Users/jackie/dev/confab-web',
+      sessionId: 'session-auto',
+      version: '2.1.143',
+      type: 'user',
+      message: { role: 'user', content: 'ship it' },
+      permissionMode: 'auto',
+      uuid: 'user-1',
+      timestamp: '2026-06-15T00:00:01.000Z',
+    });
+
+    const result = parseClaudeJSONL(`${envelope}\n${banner}\n${userRow}`);
+
+    // The envelope is skipped; the banner and user row parse cleanly.
+    expect(result.errorCount).toBe(0);
+    expect(result.successCount).toBe(2);
+
+    const bannerMsg = result.messages.find((m) => m.type === 'system');
+    expect(bannerMsg).toBeDefined();
+    if (!bannerMsg || !isSystemMessage(bannerMsg)) throw new Error('expected the informational banner');
+    expect(bannerMsg.subtype).toBe('informational');
+    expect(bannerMsg.level).toBe('warning');
+
+    const user = result.messages.find((m) => m.type === 'user');
+    if (!user || !isUserMessage(user)) throw new Error('expected the auto-mode user row');
+    expect(user.permissionMode).toBe('auto');
   });
 });
 

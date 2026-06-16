@@ -1,10 +1,14 @@
 # Transcript Attachment Components
 
-Renders Claude Code `attachment.*` JSONL rows and the `system.away_summary`
-resume-context blurb in the transcript view (CF-346). Each component is a leaf
-renderer; dispatch by subtype happens in `AttachmentContent.tsx`. The outer
-`ClaudeTimelineMessage` card chrome (role label, timestamp, copy button) wraps these
-components in the same way it wraps `FileSnapshotContent`.
+Renders Claude Code `attachment.*` JSONL rows plus two custom-bodied `system`
+subtypes — the `away_summary` resume-context blurb (CF-346) and the
+`informational` onboarding banner (CF-419) — in the transcript view. Each
+component is a leaf renderer; attachment dispatch by subtype happens in
+`AttachmentContent.tsx`, while the two `system` subtypes are dispatched directly
+in `ClaudeTimelineMessage` via the shared `isAwaySummaryMessage` /
+`isInformationalMessage` type guards. The outer `ClaudeTimelineMessage` card
+chrome (role label, timestamp, copy button) wraps these components in the same
+way it wraps `FileSnapshotContent`.
 
 ## Files
 
@@ -28,6 +32,13 @@ components in the same way it wraps `FileSnapshotContent`.
   Returns `null` for empty/whitespace content. Reuses the `.summary` purple
   card style (the distinguishing `Resume Summary` role label is in
   `ClaudeTimelineMessage` via `getClaudeRoleLabel`).
+- `InformationalBanner.tsx` — Markdown renderer for `system.informational`
+  onboarding banners (CC ≥ 2.1.143, e.g. the "auto mode" notice). Returns `null`
+  for empty/whitespace content. Renders a severity-styled callout keyed off the
+  row's `level` field ('info' | 'warning' | 'error'), degrading to neutral
+  'info' chrome when `level` is missing/unknown. Carries a `Notice` role label
+  (via `getClaudeRoleLabel`) and stays bucketed under the `system` filter chip —
+  no separate chip at MVP.
 - `index.ts` — Barrel exports.
 - `_chrome.module.css` — Shared `.header` and `.badge` rules consumed via CSS
   Modules `composes:` from the per-card `*.module.css` files.
@@ -41,7 +52,7 @@ session UUIDs) and a shared smoke-test file:
   language inference, markdown vs verbatim rendering, etc.
 - `HookOutput.stories.tsx`, `EditedFileSnippet.stories.tsx`,
   `QueuedCommand.stories.tsx`, `ToolDelta.stories.tsx`,
-  `AwaySummary.stories.tsx`
+  `AwaySummary.stories.tsx`, `InformationalBanner.stories.tsx`
 
 ## Adding a new attachment subtype
 

@@ -275,6 +275,45 @@ func TestParseLine_CompactBoundary(t *testing.T) {
 	}
 }
 
+// TestParseLine_PermissionMode: Claude Code 2.1.143 stamps an inline
+// `permissionMode` on user/assistant rows ("auto" is the new Shift+Tab value,
+// alongside default/acceptEdits/bypassPermissions/plan). It's a top-level field
+// so json.Unmarshal populates it once TranscriptLine carries the tag.
+func TestParseLine_PermissionMode(t *testing.T) {
+	t.Run("auto on user message", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":"go"},"permissionMode":"auto","uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.PermissionMode != "auto" {
+			t.Errorf("PermissionMode = %q, want auto", line.PermissionMode)
+		}
+	})
+
+	t.Run("acceptEdits on assistant message", func(t *testing.T) {
+		jsonl := `{"type":"assistant","message":{"model":"claude-sonnet-4","usage":{"input_tokens":1,"output_tokens":1}},"permissionMode":"acceptEdits","uuid":"a1","timestamp":"2025-01-01T00:00:01Z"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.PermissionMode != "acceptEdits" {
+			t.Errorf("PermissionMode = %q, want acceptEdits", line.PermissionMode)
+		}
+	})
+
+	t.Run("absent leaves empty string", func(t *testing.T) {
+		jsonl := `{"type":"user","message":{"role":"user","content":"hi"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}`
+		line, err := ParseLine([]byte(jsonl))
+		if err != nil {
+			t.Fatalf("ParseLine failed: %v", err)
+		}
+		if line.PermissionMode != "" {
+			t.Errorf("PermissionMode = %q, want empty when absent", line.PermissionMode)
+		}
+	})
+}
+
 func TestParseLine_StringContent(t *testing.T) {
 	// User messages have string content, not array
 	jsonl := `{"type":"user","message":{"role":"user","content":"hello world"},"uuid":"u1","timestamp":"2025-01-01T00:00:00Z"}`

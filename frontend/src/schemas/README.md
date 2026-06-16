@@ -54,7 +54,8 @@ All types are inferred from Zod schemas via `z.infer<>`:
 **Message types** (discriminated union on `type`):
 - `UserMessage` -- User prompts and tool results. Its `toolUseResult` sibling validates against `ToolUseResultSchema`: a union of `string`, the typed `BashToolResultSchema` (CC ≥ 2.1.143 Bash fields — `stdout`/`stderr`/`exitCode`/`interrupted`/`isImage`/`noOutputExpected`/`returnCodeInterpretation`/`persistedOutputPath`/`persistedOutputSize`, all optional, `.passthrough()`), `unknown[]`, and an open `z.record` catch-all (last). The typed Bash variant is exported as `BashToolResult`.
 - `AssistantMessage` -- Claude responses with token usage
-- `SystemMessage` -- System events (compact_boundary, api_error, turn_duration, away_summary, etc.)
+- Both `UserMessage` and `AssistantMessage` carry an optional inline `permissionMode` (CC ≥ 2.1.143). It is five-valued — `default | acceptEdits | bypassPermissions | plan | auto` (`auto` is the risk-evaluating mode added in 2.1.143) — but modeled as `z.string().optional()`, not `z.enum`, so a future upstream mode keeps validating.
+- `SystemMessage` -- System events (compact_boundary, api_error, turn_duration, away_summary, `informational`, etc.). The `informational` subtype (CC ≥ 2.1.143) is the once-per-entry onboarding banner — e.g. the "auto mode" notice — carrying an optional `level` ('info' | 'warning' | 'error'); the frontend renders it via `InformationalBanner`.
 - `SummaryMessage`, `PRLinkMessage`, `QueueOperationMessage`, `FileHistorySnapshot`
 - `AttachmentMessage` -- Side-channel rows whose inner `attachment` field is discriminated on its own `type` (hook_success, hook_blocking_error, edited_text_file, queued_command, deferred_tools_delta, mcp_instructions_delta, plus a catch-all branch for noisy/unknown subtypes)
 - Unknown message -- Forward-compatibility catch-all
