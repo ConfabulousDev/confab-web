@@ -56,6 +56,11 @@
 
 .bashContent {
   padding: var(--spacing-sm);
+  /* The inline `max-height` (default 400px) caps the box; without an overflow
+     rule the text paints outside it and over the exit-code footer. `auto`
+     makes long output scroll within the frame and activates the custom
+     scrollbar styles below. Y-only: `.bashContent pre` wraps via pre-wrap. */
+  overflow-y: auto;
 }
 
 .bashContent pre {

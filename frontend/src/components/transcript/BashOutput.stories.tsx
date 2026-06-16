@@ -82,3 +82,59 @@ export const ImageOutput: Story = {
     isImage: true,
   },
 };
+
+// Output taller than the 400px frame. With `overflow-y: auto` on `.bashContent`
+// the body scrolls inside the frame and the "Exit code: 1" footer stays visible
+// below the scroll region instead of being painted over by the overflowing text.
+const AVAILABLE_FIELDS = [
+  'additions',
+  'assignees',
+  'author',
+  'autoMergeRequest',
+  'baseRefName',
+  'body',
+  'changedFiles',
+  'closed',
+  'closedAt',
+  'comments',
+  'commits',
+  'createdAt',
+  'deletions',
+  'files',
+  'headRefName',
+  'headRepository',
+  'headRepositoryOwner',
+  'id',
+  'isCrossRepository',
+  'isDraft',
+  'labels',
+  'latestReviews',
+  'maintainerCanModify',
+  'mergeCommit',
+  'mergeStateStatus',
+  'mergeable',
+  'mergedAt',
+  'mergedBy',
+  'milestone',
+  'number',
+  'potentialMergeCommit',
+  'projectCards',
+  'projectItems',
+  'reactionGroups',
+  'reviewDecision',
+  'reviewRequests',
+  'reviews',
+  'state',
+  'statusCheckRollup',
+  'title',
+  'updatedAt',
+  'url',
+];
+
+export const LongOutput: Story = {
+  args: {
+    command: 'gh pr view 123 --json bogusField',
+    output: `Unknown JSON field: "bogusField"\nAvailable fields:\n${AVAILABLE_FIELDS.map((f) => `  ${f}`).join('\n')}`,
+    exitCode: 1,
+  },
+};
