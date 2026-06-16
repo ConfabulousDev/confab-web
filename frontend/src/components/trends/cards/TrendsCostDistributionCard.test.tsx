@@ -192,6 +192,16 @@ describe('TrendsCostDistributionCard', () => {
     expect(tickText).toContain('$5.0K');
   });
 
+  it('reserves enough Y-axis width for the widest cost label so the $ is not clipped', () => {
+    // Regression guard for c60t: a sub-$1K band-max renders as a full $XXX.XX
+    // label (up to 7 chars, e.g. $564.51). At the old 40px axis width recharts
+    // clipped the left edge and dropped the leading $. The axis must reserve
+    // enough room (≥56px) for the widest formatted tick.
+    render(<TrendsCostDistributionCard data={makeData()} />);
+    const yAxis = screen.getByTestId('recharts-yaxis');
+    expect(Number(yAxis.getAttribute('data-axis-width'))).toBeGreaterThanOrEqual(56);
+  });
+
   it('shows the ⓘ unit caveat only when a model filter is active', () => {
     const { rerender } = render(<TrendsCostDistributionCard data={makeData()} />);
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
