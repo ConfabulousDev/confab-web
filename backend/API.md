@@ -1383,6 +1383,33 @@ Returns the canonical list of invalidatable card table names — the single sour
 
 ---
 
+### List Unpriced Models
+```
+GET /api/v1/admin/unpriced-models
+```
+
+Returns model families seen in stored session data whose family is absent from the active pricing table (`pricing.json`). These cost out at $0 until priced and emit a backend `unknown model for pricing` warning; this surface makes a newly-released unpriced model visible without grepping logs. Bounded-cardinality: keyed by normalized family (e.g. `opus-9`, `gpt-9`), not the raw dated model id, and grouped by canonical provider. The `last_seen` value is the most recent analytics recompute time across the matching sessions — a proxy for "last seen", not a true ingestion time. Rows are ordered by session count descending.
+
+**Response:**
+```json
+{
+  "models": [
+    {
+      "provider": "claude-code",
+      "family": "opus-9",
+      "session_count": 42,
+      "last_seen": "2026-06-16T12:00:00Z"
+    }
+  ]
+}
+```
+
+An empty `models` array means every model family in stored session data is priced.
+
+**Auth:** super-admin only.
+
+---
+
 ## Public API Endpoints (No Auth)
 
 ### Auth Config

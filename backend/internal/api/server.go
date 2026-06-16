@@ -452,6 +452,11 @@ func (s *Server) SetupRoutes() http.Handler {
 				// vd31: serve the canonical card table names so the admin UI's
 				// checkboxes can't drift from analytics.AllCardTableNames.
 				r.Get("/cards/types", withMaxBody(MaxBodyXS, adminHandlers.HandleGetCardTypes))
+
+				// axk2: model families seen in session data but absent from the
+				// active pricing table — surfaces a newly-released unpriced model
+				// without grepping the "unknown model for pricing" WARN logs.
+				r.Get("/unpriced-models", withMaxBody(MaxBodyXS, adminHandlers.HandleUnpricedModels))
 			})
 		})
 

@@ -883,6 +883,23 @@ export const CardInvalidationsListResponseSchema = z.object({
 });
 export type CardInvalidationsListResponse = z.infer<typeof CardInvalidationsListResponseSchema>;
 
+// Unpriced models (axk2): GET /admin/unpriced-models. Model families seen in
+// stored session data whose family is absent from the active pricing table.
+// `last_seen` is the most recent tokens_v2 recompute time across the matching
+// sessions — a proxy for "last seen", not a true ingestion time.
+export const UnpricedModelRowSchema = z.object({
+  provider: z.string(),
+  family: z.string(),
+  session_count: z.number(),
+  last_seen: z.string(),
+});
+export type UnpricedModelRow = z.infer<typeof UnpricedModelRowSchema>;
+
+export const UnpricedModelsResponseSchema = z.object({
+  models: z.array(UnpricedModelRowSchema),
+});
+export type UnpricedModelsResponse = z.infer<typeof UnpricedModelsResponseSchema>;
+
 // ============================================================================
 // Validation Functions
 // ============================================================================

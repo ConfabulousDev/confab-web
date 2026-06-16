@@ -15,6 +15,8 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `confirmation_internal_test.go` | Unit tests for `verifyConfirmation` (trim, case-fold, empty-expected guard) |
 | `card_invalidations.go` | JSON API handlers for date-range card invalidation (`/admin/cards/invalidate`, `/admin/cards/invalidations`, `/admin/cards/types`). Execute (`dry_run: false`) requires a `confirm` echo of the affected-session count; the handler re-counts and rejects on mismatch before deleting (kyrr). |
 | `card_invalidations_test.go` | Integration tests for the card invalidation handlers |
+| `unpriced_models.go` | `HandleUnpricedModels` (`GET /admin/unpriced-models`) — thin read-only handler over `analytics.Store.UnpricedModels`. Lists model families seen in stored session data but absent from the active pricing table (provider, family, distinct-session count, last-seen proxy), so a newly-released unpriced model is visible without grepping the `unknown model for pricing` WARN logs (axk2). |
+| `unpriced_models_test.go` | Integration tests for the unpriced-models handler (auth 401/403, gap content, empty-when-all-priced) |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v). Logs every access decision: `log.Warn("Admin access denied", reason=not_admin, …)` on the 403 and `log.Info("Admin access granted", …)` on the pass, each with `user_id`, `email`, `client_ip`, `method`, `path` (xr71). |
 
@@ -26,6 +28,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 - **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares. `SystemShareJSON.Provider` is the canonical session provider (`"claude-code"` / `"codex"`), normalized at the DB boundary so the admin UI can render a brand chip without re-normalizing (CF-370).
 - **`SmartRecapPromptResponse`**, **`SetSmartRecapPromptRequest`**, **`SetSmartRecapPromptResponse`**, **`DeleteSmartRecapPromptResponse`** -- JSON request/response types for smart recap prompt settings.
 - **`InvalidateCardsRequest`**, **`InvalidateCardsResponse`**, **`CardInvalidationRow`**, **`CardInvalidationsListResponse`** -- JSON request/response types for card invalidations (CF-343).
+- **`UnpricedModelsResponse`**, **`UnpricedModelJSON`** -- JSON response types for the unpriced-models surface (axk2). `LastSeen` is RFC3339; it is the most recent analytics recompute time, a proxy for "last seen" rather than a true ingestion time.
 
 ## Key API
 
@@ -55,6 +58,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleInvalidateCards` | `POST /api/v1/admin/cards/invalidate` | Dry-run or execute DELETE of `session_card_*` rows for sessions in a date window. Writes audit rows so the smart-recap quota is bypassed on recompute. Defaults to `dry_run: true`. On execute, `confirm` must echo the affected-session count; the handler re-counts and rejects on mismatch before deleting (kyrr). |
 | `HandleListCardInvalidations` | `GET /api/v1/admin/cards/invalidations` | Returns up to 500 recent audit rows; `?correlation_id=` filters to one run |
 | `HandleGetCardTypes` | `GET /api/v1/admin/cards/types` | Serves `analytics.AllCardTableNames` — the source of truth for the invalidation UI's card-type checkboxes, so the frontend list can't drift (vd31). The same list backs the inbound `card_types` validation |
+| `HandleUnpricedModels` | `GET /api/v1/admin/unpriced-models` | Lists model families seen in stored session data but missing from the active pricing table (provider, family, distinct-session count, last-seen recompute-time proxy), via `analytics.Store.UnpricedModels`. Read-only; surfaces a newly-released unpriced model without grepping the `unknown model for pricing` WARN logs (axk2) |
 
 ## How to Extend
 
