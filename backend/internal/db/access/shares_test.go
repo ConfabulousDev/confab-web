@@ -460,6 +460,128 @@ func TestListSystemShares_ExcludesExpired(t *testing.T) {
 }
 
 // =============================================================================
+// DeleteExpiredShares Tests (v9mc — periodic physical cleanup)
+// =============================================================================
+
+// TestDeleteExpiredShares_DeletesOnlyBeyondRetention verifies that
+// DeleteExpiredShares hard-deletes only shares whose expires_at is older than
+// the retention window, leaving within-retention, live (future), and
+// never-expiring (null) shares untouched. It also confirms the join-table rows
+// for every share type (public, recipient, system) cascade away with the
+// deleted parent row, and that the returned count matches the parent rows
+// removed.
+func TestDeleteExpiredShares_DeletesOnlyBeyondRetention(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	testutil.CreateTestUser(t, env, "recipient@example.com", "Recipient")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "delete-expired-shares")
+
+	const retention = 30 * 24 * time.Hour
+	now := time.Now().UTC()
+	beyond := now.Add(-retention - 24*time.Hour) // expired well beyond retention -> delete
+	within := now.Add(-24 * time.Hour)           // expired but within grace -> keep
+	future := now.Add(24 * time.Hour)            // live -> keep
+
+	// Beyond-retention shares, one of each type (all should be deleted).
+	delPublic := testutil.CreateTestShare(t, env, sessionID, true, &beyond, nil)
+	delRecipient := testutil.CreateTestShare(t, env, sessionID, false, &beyond, []string{"recipient@example.com"})
+	delSystem := testutil.CreateTestSystemShare(t, env, sessionID, &beyond)
+
+	// Within-retention and live shares (all should survive).
+	keepWithin := testutil.CreateTestShare(t, env, sessionID, true, &within, nil)
+	keepFuture := testutil.CreateTestShare(t, env, sessionID, true, &future, nil)
+	keepNull := testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	ctx := context.Background()
+	deleted, err := store.DeleteExpiredShares(ctx, retention)
+	if err != nil {
+		t.Fatalf("DeleteExpiredShares failed: %v", err)
+	}
+	if deleted != 3 {
+		t.Fatalf("expected 3 shares deleted, got %d", deleted)
+	}
+
+	// Beyond-retention parent rows are gone.
+	for _, id := range []int64{delPublic, delRecipient, delSystem} {
+		if shareRowExists(t, env, id) {
+			t.Errorf("expected share %d to be deleted, but it still exists", id)
+		}
+	}
+	// Their join-table rows cascaded away.
+	if joinRowExists(t, env, "session_share_public", delPublic) {
+		t.Errorf("session_share_public row for %d should have cascaded", delPublic)
+	}
+	if joinRowExists(t, env, "session_share_recipients", delRecipient) {
+		t.Errorf("session_share_recipients row for %d should have cascaded", delRecipient)
+	}
+	if joinRowExists(t, env, "session_share_system", delSystem) {
+		t.Errorf("session_share_system row for %d should have cascaded", delSystem)
+	}
+
+	// Within-retention and live shares survive.
+	for _, id := range []int64{keepWithin, keepFuture, keepNull} {
+		if !shareRowExists(t, env, id) {
+			t.Errorf("expected share %d to survive, but it was deleted", id)
+		}
+	}
+}
+
+// TestDeleteExpiredShares_NoExpiredRows verifies that DeleteExpiredShares is a
+// no-op (returns 0, no error) when nothing is beyond the retention window.
+func TestDeleteExpiredShares_NoExpiredRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &access.Store{DB: env.DB}
+
+	owner := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+	sessionID := testutil.CreateTestSession(t, env, owner.ID, "delete-expired-noop")
+
+	future := time.Now().UTC().Add(24 * time.Hour)
+	testutil.CreateTestShare(t, env, sessionID, true, &future, nil)
+	testutil.CreateTestShare(t, env, sessionID, true, nil, nil)
+
+	deleted, err := store.DeleteExpiredShares(context.Background(), 30*24*time.Hour)
+	if err != nil {
+		t.Fatalf("DeleteExpiredShares failed: %v", err)
+	}
+	if deleted != 0 {
+		t.Fatalf("expected 0 shares deleted, got %d", deleted)
+	}
+}
+
+func shareRowExists(t *testing.T, env *testutil.TestEnvironment, id int64) bool {
+	t.Helper()
+	var exists bool
+	if err := env.DB.QueryRow(env.Ctx,
+		"SELECT EXISTS(SELECT 1 FROM session_shares WHERE id = $1)", id).Scan(&exists); err != nil {
+		t.Fatalf("failed to check session_shares row %d: %v", id, err)
+	}
+	return exists
+}
+
+func joinRowExists(t *testing.T, env *testutil.TestEnvironment, table string, shareID int64) bool {
+	t.Helper()
+	var exists bool
+	// table is a fixed literal from this test, not user input.
+	query := "SELECT EXISTS(SELECT 1 FROM " + table + " WHERE share_id = $1)"
+	if err := env.DB.QueryRow(env.Ctx, query, shareID).Scan(&exists); err != nil {
+		t.Fatalf("failed to check %s row %d: %v", table, shareID, err)
+	}
+	return exists
+}
+
+// =============================================================================
 // Provider canonicalization on share reads (CF-370)
 // =============================================================================
 

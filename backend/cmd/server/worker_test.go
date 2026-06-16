@@ -126,6 +126,45 @@ func TestLoadWorkerConfig_EnablesDryRunForTrueAnd1(t *testing.T) {
 	}
 }
 
+func TestLoadWorkerConfig_DefaultsShareRetentionTo30Days(t *testing.T) {
+	clearServerEnv(t)
+	t.Setenv("WORKER_MAX_SESSIONS", "50")
+
+	cfg := loadWorkerConfig()
+
+	if cfg.ShareRetention != 30*24*time.Hour {
+		t.Errorf("ShareRetention: want 720h (30d), got %s", cfg.ShareRetention)
+	}
+}
+
+func TestLoadWorkerConfig_ParsesCustomShareRetention(t *testing.T) {
+	clearServerEnv(t)
+	t.Setenv("WORKER_MAX_SESSIONS", "50")
+	t.Setenv("WORKER_SHARE_RETENTION", "1h")
+
+	cfg := loadWorkerConfig()
+
+	if cfg.ShareRetention != time.Hour {
+		t.Errorf("ShareRetention: want 1h, got %s", cfg.ShareRetention)
+	}
+}
+
+func TestLoadWorkerConfig_KeepsDefaultShareRetentionWhenGarbageOrNonpositive(t *testing.T) {
+	// time.ParseDuration rejects "30d"; non-positive values are ignored too.
+	cases := []string{"not-a-duration", "30d", "0s", "-1h"}
+	for _, v := range cases {
+		t.Run(v, func(t *testing.T) {
+			clearServerEnv(t)
+			t.Setenv("WORKER_MAX_SESSIONS", "50")
+			t.Setenv("WORKER_SHARE_RETENTION", v)
+			cfg := loadWorkerConfig()
+			if cfg.ShareRetention != 30*24*time.Hour {
+				t.Errorf("ShareRetention for %q: want 720h default, got %s", v, cfg.ShareRetention)
+			}
+		})
+	}
+}
+
 func TestLoadWorkerConfig_FatalsWhenMaxSessionsMissing(t *testing.T) {
 	clearServerEnv(t)
 

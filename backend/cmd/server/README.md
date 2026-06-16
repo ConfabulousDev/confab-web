@@ -96,6 +96,7 @@ that still uses the public template defaults, `loadConfig` refuses to start when
 | `WORKER_MAX_SEARCH_INDEX_SESSIONS` | `200` | Max sessions to scan per cycle for search index. |
 | `WORKER_POLL_INTERVAL` | `30m` | Cycle interval. Garbage/zero/negative values keep the default. |
 | `WORKER_DRY_RUN` | (off) | `"true"` or `"1"` logs intended work without doing it. Case-sensitive. |
+| `WORKER_SHARE_RETENTION` | `720h` (30d) | Each cycle, hard-delete shares expired longer than this. Go duration units only (`h`/`m`/`s` — not `30d`). Garbage/zero/negative keep the default. Skipped in dry-run. |
 | `DATABASE_URL`, S3 vars | (required) | Same as server. |
 
 ### Smart recap (LLM-backed)

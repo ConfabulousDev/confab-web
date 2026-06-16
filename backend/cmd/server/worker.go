@@ -10,6 +10,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/db/access"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -24,9 +25,10 @@ var workerTracer = otel.Tracer("confab/worker")
 // WorkerConfig holds configuration for the analytics precompute worker.
 type WorkerConfig struct {
 	PollInterval           time.Duration
-	MaxSessions            int  // Maximum sessions to query per cycle (regular cards + smart recap)
-	MaxSearchIndexSessions int  // Maximum search index sessions per cycle (defaults to MaxSessions if 0)
-	DryRun                 bool // If true, log what would be done without actually precomputing
+	MaxSessions            int           // Maximum sessions to query per cycle (regular cards + smart recap)
+	MaxSearchIndexSessions int           // Maximum search index sessions per cycle (defaults to MaxSessions if 0)
+	DryRun                 bool          // If true, log what would be done without actually precomputing
+	ShareRetention         time.Duration // Expired shares older than this are physically deleted each cycle
 }
 
 // precomputerAPI is the narrow surface Worker calls on the precomputer.
@@ -69,6 +71,7 @@ func runWorker() {
 		"max_sessions", workerConfig.MaxSessions,
 		"max_search_index_sessions", workerConfig.MaxSearchIndexSessions,
 		"dry_run", workerConfig.DryRun,
+		"share_retention", workerConfig.ShareRetention,
 	)
 
 	if workerConfig.DryRun {
@@ -169,6 +172,24 @@ func (w *Worker) runOnce(ctx context.Context) {
 	// timeout) so newly computed cards cost out at the freshest prices without a
 	// backend redeploy. Always returns a valid table (embedded floor at worst).
 	analytics.SetActivePricing(w.pricingSource.Effective(ctx))
+
+	// Housekeeping: physically delete shares that have been expired longer than
+	// the retention window. Runs every tick (before the stale-session buckets,
+	// which can early-return), but is skipped in dry-run. Best-effort — a failure
+	// here must not abort the precompute cycle. Skipped when retention <= 0.
+	if !w.config.DryRun && w.config.ShareRetention > 0 {
+		deleted, err := (&access.Store{DB: w.db}).DeleteExpiredShares(ctx, w.config.ShareRetention)
+		if err != nil {
+			logger.Error("failed to delete expired shares", "error", err)
+			span.RecordError(err)
+		} else if deleted > 0 {
+			logger.Info("deleted expired shares",
+				"count", deleted,
+				"retention", w.config.ShareRetention,
+			)
+			span.SetAttributes(attribute.Int64("shares.deleted", deleted))
+		}
+	}
 
 	// Bucket 1: Find sessions with stale regular cards
 	regularSessions, err := w.precomputer.FindStaleSessions(ctx, w.config.MaxSessions)
@@ -360,12 +381,22 @@ func (w *Worker) processSessions(
 // loadWorkerConfig loads worker configuration from environment variables.
 func loadWorkerConfig() WorkerConfig {
 	config := WorkerConfig{
-		PollInterval: 30 * time.Minute,
+		PollInterval:   30 * time.Minute,
+		ShareRetention: 30 * 24 * time.Hour,
 	}
 
 	if interval := os.Getenv("WORKER_POLL_INTERVAL"); interval != "" {
 		if parsed, err := time.ParseDuration(interval); err == nil && parsed > 0 {
 			config.PollInterval = parsed
+		}
+	}
+
+	// WORKER_SHARE_RETENTION: optional, defaults to 30 days. time.ParseDuration
+	// only accepts h/m/s units (not "30d"), so express overrides in hours
+	// (e.g. "720h" = 30 days).
+	if retention := os.Getenv("WORKER_SHARE_RETENTION"); retention != "" {
+		if parsed, err := time.ParseDuration(retention); err == nil && parsed > 0 {
+			config.ShareRetention = parsed
 		}
 	}
 
