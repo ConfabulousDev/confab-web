@@ -239,7 +239,12 @@ export function TrendsCostDistributionCard({ data, modelFilterActive }: TrendsCo
                 axisLine={false}
                 tickLine={false}
                 tickFormatter={yTickFormatter}
-                width={40}
+                // Wide enough for the widest full cost label ($XXX.XX, 7 chars
+                // at fontSize 10): formatCostCompact only abbreviates at ≥$1K,
+                // so sub-$1K band-maxes render in full. 40px clipped the leading
+                // $ in cost mode (c60t); count-mode labels are shorter and just
+                // get a little extra left padding.
+                width={56}
                 tickCount={4}
               />
               <Tooltip

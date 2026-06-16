@@ -73,6 +73,7 @@ vi.mock('recharts', async () => {
   type AxisProps = {
     tickFormatter?: (value: unknown) => unknown;
     tick?: unknown;
+    width?: number;
     'data-testid'?: string;
   };
 
@@ -81,7 +82,7 @@ vi.mock('recharts', async () => {
   // the thousands so $/count abbreviation (e.g. '$5.0K') is observable in tests.
   const AXIS_SAMPLE_TICKS = [0, 5, 5000];
 
-  const Axis = ({ tickFormatter, 'data-testid': testId }: AxisProps) => {
+  const Axis = ({ tickFormatter, width, 'data-testid': testId }: AxisProps) => {
     // Render the formatted sample ticks into the DOM so a card's inline
     // tickFormatter is both exercised and assertable (the real recharts axis is
     // mocked away). Each formatted tick is its own <text> element.
@@ -90,7 +91,14 @@ vi.mock('recharts', async () => {
       try { label = tickFormatter ? tickFormatter(v) : v; } catch { /* swallow */ }
       return React.createElement('text', { key: i }, String(label));
     });
-    return React.createElement('g', { 'data-testid': testId }, ...ticks);
+    // Surface the reserved axis width (jsdom can't lay out a real axis, so a
+    // card's `width` prop is otherwise unobservable). Lets tests assert the axis
+    // reserves enough horizontal room for its widest formatted tick.
+    return React.createElement(
+      'g',
+      { 'data-testid': testId, 'data-axis-width': width },
+      ...ticks,
+    );
   };
 
   type TooltipProps = { content?: React.ReactElement<Record<string, unknown>> };

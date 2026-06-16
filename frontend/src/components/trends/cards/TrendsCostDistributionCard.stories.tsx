@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
 import { TrendsCostDistributionCard } from './TrendsCostDistributionCard';
 import type { TrendsCostDistributionBucket } from '@/schemas/api';
 
@@ -109,6 +110,26 @@ export const WideRange: Story = {
       total_session_count: 80,
       timed_out: false,
     },
+  },
+};
+
+// Cost ("Total $") mode with a band-max in the hundreds ($564.51), so the
+// Y-axis renders a full $XXX.XX label. play() clicks the Total $ toggle so the
+// snapshot captures the previously-clipped labels — the c60t regression guard
+// for the widened axis (the leading $ must be visible, not cut off).
+export const CostMode: Story = {
+  args: {
+    data: {
+      buckets: buckets([18, 22, 9, 4], ['1.20', '14.80', '120.00', '564.51']),
+      stats: { p50: '0.40', p90: '6.20', p99: '210.00', avg: '12.30' },
+      covered_session_count: 53,
+      total_session_count: 60,
+      timed_out: false,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Total $' }));
   },
 };
 
