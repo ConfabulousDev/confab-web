@@ -10,6 +10,7 @@ const AdminUsersPage = lazy(() => import('./AdminUsersPage'));
 const AdminSystemSharesPage = lazy(() => import('./AdminSystemSharesPage'));
 const AdminSettingsPage = lazy(() => import('./AdminSettingsPage'));
 const AdminCardInvalidationsPage = lazy(() => import('./AdminCardInvalidationsPage'));
+const AdminUnpricedModelsPage = lazy(() => import('./AdminUnpricedModelsPage'));
 
 const UsersIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -45,6 +46,13 @@ const CardsIcon = (
   </svg>
 );
 
+const UnpricedIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="12" y1="1" x2="12" y2="23" />
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+  </svg>
+);
+
 function AdminPage() {
   useDocumentTitle('Admin');
   const location = useLocation();
@@ -58,6 +66,8 @@ function AdminPage() {
     currentTab = 'smart-recap';
   } else if (location.pathname.includes('/admin/cards')) {
     currentTab = 'cards';
+  } else if (location.pathname.includes('/admin/unpriced-models')) {
+    currentTab = 'unpriced-models';
   }
 
   return (
@@ -95,6 +105,13 @@ function AdminPage() {
           onClick={() => navigate('/admin/cards')}
           collapsed={false}
         />
+        <SidebarItem
+          icon={UnpricedIcon}
+          label="Unpriced Models"
+          active={currentTab === 'unpriced-models'}
+          onClick={() => navigate('/admin/unpriced-models')}
+          collapsed={false}
+        />
       </PageSidebar>
 
       <div className={styles.mainContent}>
@@ -108,6 +125,7 @@ function AdminPage() {
               <Route path="system-shares" element={<AdminSystemSharesPage />} />
               <Route path="smart-recap" element={<AdminSettingsPage />} />
               <Route path="cards" element={<AdminCardInvalidationsPage />} />
+              <Route path="unpriced-models" element={<AdminUnpricedModelsPage />} />
             </Routes>
           </Suspense>
         </div>

@@ -32,6 +32,7 @@ import {
   InvalidateCardsResponseSchema,
   CardInvalidationsListResponseSchema,
   CardTypesResponseSchema,
+  UnpricedModelsResponseSchema,
   validateResponse,
   type SessionDetail,
   type SessionShare,
@@ -62,6 +63,7 @@ import {
   type CardTypesResponse,
   type InvalidateCardsResponse,
   type CardInvalidationsListResponse,
+  type UnpricedModelsResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -778,4 +780,9 @@ export const adminAPI = {
     const query = params?.correlationId ? `?correlation_id=${encodeURIComponent(params.correlationId)}` : '';
     return api.getValidated(`/admin/cards/invalidations${query}`, CardInvalidationsListResponseSchema);
   },
+
+  // axk2: model families seen in session data but missing from the active pricing
+  // table — surfaces a newly-released unpriced model without grepping WARN logs.
+  getUnpricedModels: (): Promise<UnpricedModelsResponse> =>
+    api.getValidated('/admin/unpriced-models', UnpricedModelsResponseSchema),
 };
