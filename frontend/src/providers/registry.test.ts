@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PROVIDER_VALUES } from '@/utils/providers';
-import { getAdapter } from './registry';
+import { getAdapter, isTokensMeasurable } from './registry';
 
 describe('provider registry', () => {
   it.each(PROVIDER_VALUES)('returns adapter whose id matches "%s"', (id) => {
@@ -31,5 +31,22 @@ describe('provider registry', () => {
 
   it('throws on empty string', () => {
     expect(() => getAdapter('')).toThrowError();
+  });
+
+  describe('isTokensMeasurable (st5f)', () => {
+    it('returns false for cursor', () => {
+      expect(isTokensMeasurable('cursor')).toBe(false);
+    });
+
+    it.each(['claude-code', 'codex', 'opencode'] as const)(
+      'returns true for measurable provider "%s"',
+      (id) => {
+        expect(isTokensMeasurable(id)).toBe(true);
+      },
+    );
+
+    it('returns true for unknown provider ids (defaults measurable)', () => {
+      expect(isTokensMeasurable('gemini')).toBe(true);
+    });
   });
 });

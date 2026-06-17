@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSessionsFetch, useAuth, useDocumentTitle, useSuccessMessage, useSessionFilters } from '@/hooks';
 import { formatDuration } from '@/utils';
 import { CostAmount } from '@/components/CostAmount';
+import { isTokensMeasurable } from '@/providers/registry';
 import { getRepoWebURL } from '@/utils/git';
 import { RelativeTime } from '@/components/RelativeTime';
 import PageHeader from '@/components/PageHeader';
@@ -22,6 +23,14 @@ import styles from './SessionsPage.module.css';
 // Derive display title from session fields with fallback chain
 function getSessionTitle(session: { custom_title?: string | null; suggested_session_title?: string | null; summary?: string | null; first_user_message?: string | null }): string | null {
   return session.custom_title || session.suggested_session_title || session.summary || session.first_user_message || null;
+}
+
+function renderEstimatedCost(cost: string | null | undefined, provider: string) {
+  const unmeasured = !isTokensMeasurable(provider);
+  if (unmeasured && (!cost || parseFloat(cost) === 0)) {
+    return '—';
+  }
+  return cost ? <CostAmount usd={parseFloat(cost)} /> : '-';
 }
 
 function SessionsPage() {
@@ -198,9 +207,7 @@ function SessionsPage() {
                             </div>
                           </td>
                           <td className={styles.costCell}>
-                            {session.estimated_cost_usd
-                              ? <CostAmount usd={parseFloat(session.estimated_cost_usd)} />
-                              : '-'}
+                            {renderEstimatedCost(session.estimated_cost_usd, session.provider)}
                           </td>
                           <td className={styles.timestamp}>
                             <span className={styles.activityContent}>

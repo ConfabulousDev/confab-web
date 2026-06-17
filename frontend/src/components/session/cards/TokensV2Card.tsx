@@ -5,6 +5,7 @@ import { CostAmount } from '@/components/CostAmount';
 import { formatTokenCount } from '@/utils/tokenStats';
 import { formatModelKey } from '@/utils/formatting';
 import { providerLabel } from '@/utils/providers';
+import { getAdapter, isTokensMeasurable } from '@/providers/registry';
 import { cx } from '@/utils/utils';
 import {
   TokenIcon,
@@ -41,6 +42,19 @@ export type TokensV2CardData = {
 
 const ZERO_COST_TOOLTIP =
   'Cost unavailable — session may use models not yet in the pricing table';
+
+interface TokensV2CardProps extends CardProps<TokensV2CardData> {
+  provider: string;
+}
+
+/**
+ * Registry-friendly wrapper. SessionSummaryPanel injects `provider` at runtime.
+ */
+export function TokensV2CardForRegistry(
+  props: Omit<TokensV2CardProps, 'provider'> & { provider?: string },
+) {
+  return <TokensV2Card {...props} provider={props.provider ?? 'claude-code'} />;
+}
 
 /**
  * d3rp: a per-model section that collapses to a headline (model label + cost) and
@@ -93,14 +107,26 @@ function ModelSection({ modelKey, model, defaultExpanded }: ModelSectionProps) {
   );
 }
 
-export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardData>) {
+export function TokensV2Card({ data, loading, error, provider }: TokensV2CardProps) {
   const guard = useCardState(data, loading, error, { title: 'Tokens', icon: TokenIcon });
   if (guard) return guard;
 
   if (!data) return null;
 
+  const adapter = getAdapter(provider);
+  const measurable = isTokensMeasurable(provider);
   const totalCost = parseFloat(data.total_cost_usd);
-  const isZeroCost = totalCost === 0;
+  const isZeroCost = measurable && totalCost === 0;
+  const totalCostTitle = isZeroCost
+    ? ZERO_COST_TOOLTIP
+    : measurable
+      ? undefined
+      : adapter.tokensCostTooltip;
+  const unavailableValue = (
+    <span className={styles.unavailableMetric} title={adapter.tokensCostTooltip}>
+      Not available
+    </span>
+  );
   const providerEntries = Object.entries(data.by_provider);
   // Single-provider sessions (Claude/Codex always; OpenCode single-vendor) drop
   // the redundant provider wrapper + per-provider cost row and render the model
@@ -123,15 +149,30 @@ export function TokensV2Card({ data, loading, error }: CardProps<TokensV2CardDat
     <CardWrapper title="Tokens" icon={TokenIcon}>
       {/* Elevated grand-total headline (mirrors Trends TotalCostRow). The $0
           amber-warning tooltip rides on the headline row. */}
-      <div className={styles.totalCostRow} title={isZeroCost ? ZERO_COST_TOOLTIP : undefined}>
+      <div className={styles.totalCostRow} title={totalCostTitle}>
         <span className={styles.totalCostLabel}>Estimated cost</span>
-        <CostAmount usd={totalCost} className={styles.totalCostValue} />
+        {measurable ? (
+          <CostAmount usd={totalCost} className={styles.totalCostValue} />
+        ) : (
+          unavailableValue
+        )}
       </div>
       {/* Card-level summary stack (mirrors Trends TokensStatRows). */}
-      <StatRow label="Total Tokens" value={formatTokenCount(data.total_input + data.total_output)} />
+      <StatRow
+        label="Total Tokens"
+        value={
+          measurable
+            ? formatTokenCount(data.total_input + data.total_output)
+            : unavailableValue
+        }
+      />
       <StatRow
         label="Input / Output"
-        value={`${formatTokenCount(data.total_input)} / ${formatTokenCount(data.total_output)}`}
+        value={
+          measurable
+            ? `${formatTokenCount(data.total_input)} / ${formatTokenCount(data.total_output)}`
+            : unavailableValue
+        }
       />
       {singleProvider ? (
         // Single provider: drop the wrapper, render model sections under the totals.

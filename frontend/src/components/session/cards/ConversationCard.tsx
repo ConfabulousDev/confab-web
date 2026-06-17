@@ -11,7 +11,10 @@ import type { ConversationCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import { providerLabel } from '@/utils/providers';
 import { formatTokenSpeed } from '@/utils/tokenStats';
+import { getAdapter, isTokensMeasurable } from '@/providers/registry';
 import styles from '../SessionSummaryPanel.module.css';
+
+const TOKEN_SPEED_TOOLTIP = 'Output tokens generated per second (output ÷ assistant time)';
 
 /**
  * Format duration for conversation timing display.
@@ -76,7 +79,9 @@ export function ConversationCard({ data, loading, error, provider, tokenSpeed }:
 
   if (!data) return null;
 
+  const adapter = getAdapter(provider);
   const agent = providerLabel(provider);
+  const measurable = isTokensMeasurable(provider);
   const tooltips = {
     userPrompts: 'Number of user prompts in the conversation',
     avgAssistantTime: `Average time ${agent} spent responding per prompt`,
@@ -84,7 +89,10 @@ export function ConversationCard({ data, loading, error, provider, tokenSpeed }:
     totalAssistantTime: `Total time ${agent} spent working across all prompts`,
     totalUserTime: 'Total time user spent between prompts',
     assistantUtilization: `Percentage of session time ${agent} was actively working`,
-    tokenSpeed: 'Output tokens generated per second (output ÷ assistant time)',
+    tokenSpeed:
+      !measurable && tokenSpeed == null
+        ? (adapter.tokenSpeedUnavailableTooltip ?? TOKEN_SPEED_TOOLTIP)
+        : TOKEN_SPEED_TOOLTIP,
   };
 
   return (

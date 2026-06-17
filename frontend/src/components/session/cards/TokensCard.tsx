@@ -11,7 +11,7 @@ import {
   DiamondFilledIcon,
   ZapIcon,
 } from '@/components/icons';
-import { getAdapter } from '@/providers/registry';
+import { getAdapter, isTokensMeasurable } from '@/providers/registry';
 import type { TokensCardData } from '@/schemas/api';
 import type { CardProps } from './types';
 import styles from '../SessionSummaryPanel.module.css';
@@ -24,6 +24,9 @@ const TOOLTIPS = {
   cacheCreated: 'Tokens written to cache for future use',
   cacheRead: 'Tokens served from cache (reduced cost)',
 };
+
+const ZERO_COST_TOOLTIP =
+  'Cost unavailable — session may use models not yet in the pricing table';
 
 interface TokensCardProps extends CardProps<TokensCardData> {
   /** Session provider id (e.g. "claude-code" | "codex"). Resolves
@@ -51,22 +54,26 @@ export function TokensCard({ data, loading, error, provider }: TokensCardProps) 
   if (!data) return null;
 
   const adapter = getAdapter(provider);
+  const measurable = isTokensMeasurable(provider);
   const cost = parseFloat(data.estimated_usd);
-  const isZeroCost = cost === 0;
+  const isZeroCost = measurable && cost === 0;
   const hasFastMode = data.fast_turns != null;
   // CF-436: Hide the "Cache created" row when the value is 0. OpenAI doesn't
   // bill cache writes (always 0 for Codex), and Claude sessions without
   // prompt caching shouldn't show a confusing "0 tokens" row either.
   const showCacheCreated = data.cache_creation > 0;
-  const costTooltip = isZeroCost
-    ? 'Cost unavailable — session may use models not yet in the pricing table'
-    : adapter.tokensCostTooltip;
+  const costTooltip = isZeroCost ? ZERO_COST_TOOLTIP : adapter.tokensCostTooltip;
+  const unavailableValue = (
+    <span className={styles.unavailableMetric} title={adapter.tokensCostTooltip}>
+      Not available
+    </span>
+  );
 
   return (
     <CardWrapper title="Tokens" icon={TokenIcon}>
       <StatRow
         label="Estimated cost"
-        value={<CostAmount usd={cost} />}
+        value={measurable ? <CostAmount usd={cost} /> : unavailableValue}
         icon={DollarIcon}
         tooltip={costTooltip}
       />
@@ -81,13 +88,13 @@ export function TokensCard({ data, loading, error, provider }: TokensCardProps) 
       )}
       <StatRow
         label="Input"
-        value={formatTokenCount(data.input)}
+        value={measurable ? formatTokenCount(data.input) : unavailableValue}
         icon={ArrowRightIcon}
         tooltip={TOOLTIPS.input}
       />
       <StatRow
         label="Output"
-        value={formatTokenCount(data.output)}
+        value={measurable ? formatTokenCount(data.output) : unavailableValue}
         icon={ArrowLeftIcon}
         tooltip={TOOLTIPS.output}
       />
@@ -101,7 +108,7 @@ export function TokensCard({ data, loading, error, provider }: TokensCardProps) 
       )}
       <StatRow
         label="Cache read"
-        value={formatTokenCount(data.cache_read)}
+        value={measurable ? formatTokenCount(data.cache_read) : unavailableValue}
         icon={DiamondFilledIcon}
         tooltip={TOOLTIPS.cacheRead}
       />

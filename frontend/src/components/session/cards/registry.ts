@@ -1,5 +1,5 @@
 import { TokensCardForRegistry } from './TokensCard';
-import { TokensV2Card } from './TokensV2Card';
+import { TokensV2CardForRegistry } from './TokensV2Card';
 import { SessionCardForRegistry } from './SessionCard';
 import { CodeActivityCardForRegistry } from './CodeActivityCard';
 import { ToolsCard } from './ToolsCard';
@@ -53,7 +53,7 @@ export const cardRegistry: CardDefinition[] = [
   {
     key: 'tokens_v2',
     title: 'Tokens',
-    component: TokensV2Card,
+    component: TokensV2CardForRegistry,
     order: 1.5,
     size: 'standard',
     shouldRender: (data: unknown) => data != null,

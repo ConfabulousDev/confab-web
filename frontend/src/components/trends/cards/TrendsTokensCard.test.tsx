@@ -388,8 +388,33 @@ describe('TrendsTokensCard multi-provider sections', () => {
       'claude-code': entry({ total_input_tokens: 5_000_000, total_cost_usd: '125.00' }),
       codex: entry(),
     });
-    render(<TrendsTokensCard data={data} />);
+    render(<TrendsTokensCard data={data} providersPresent={['claude-code', 'codex']} />);
     expect(screen.getByText('Codex')).toBeInTheDocument();
+    const codexSection = screen.getByText('Codex').closest('section')!;
+    expect(within(codexSection).getByText('$0.00')).toBeInTheDocument();
+  });
+
+  describe('unmeasured provider tokens (st5f)', () => {
+    it('shows Not available for cursor per-provider section instead of $0.00', () => {
+      const data = makeData({
+        'claude-code': entry({ total_input_tokens: 5_000_000, total_cost_usd: '125.00' }),
+        cursor: entry(),
+      });
+      render(<TrendsTokensCard data={data} providersPresent={['claude-code', 'cursor']} />);
+      const cursorSection = screen.getByText('Cursor').closest('section')!;
+      expect(within(cursorSection).queryByText('$0.00')).not.toBeInTheDocument();
+      expect(within(cursorSection).getAllByText('Not available').length).toBeGreaterThan(0);
+    });
+
+    it('shows card caveat when providers_present includes an unmeasured provider', () => {
+      const data = makeData({
+        'claude-code': entry({ total_input_tokens: 5_000_000, total_cost_usd: '125.00' }),
+        cursor: entry(),
+      });
+      render(<TrendsTokensCard data={data} providersPresent={['claude-code', 'cursor']} />);
+      const caveat = screen.getByRole('note');
+      expect(caveat).toHaveAttribute('title', expect.stringMatching(/Cursor/i));
+    });
   });
 
   it('keeps the daily-cost chart below the per-provider sections in multi-provider mode', () => {
