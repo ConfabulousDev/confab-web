@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -11,6 +13,36 @@ import (
 // noBounds is the zero-signal session window: no created_at/first_seen and no
 // last_message_at/last_sync_at. Compute must leave DurationMs nil for it.
 var noBounds = CursorSessionBounds{}
+
+// mainOnly wraps a single main-thread message slice in the [main, ...subagents]
+// rollout-slice convention ComputeFromCursorRollout consumes — the common case
+// in the structure tests, which exercise the main thread alone.
+func mainOnly(messages []*CursorMessage) [][]*CursorMessage {
+	return [][]*CursorMessage{messages}
+}
+
+// loadCursorSubagentMessages parses the committed subagent fixture
+// (testdata/cursor/subagent.jsonl) — a sanitized Cursor subagent transcript
+// with the identical envelope as the main thread plus the subagent-only
+// UpdateCurrentStep tool. It fails the test on any unexpected parse error.
+func loadCursorSubagentMessages(t *testing.T) []*CursorMessage {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "cursor", "subagent.jsonl"))
+	if err != nil {
+		t.Fatalf("read cursor subagent fixture: %v", err)
+	}
+	messages, lineErrors := parseCursorJSONL(context.Background(), raw, "subagent.jsonl")
+	if len(messages) == 0 {
+		t.Fatal("expected subagent fixture to parse into >0 messages")
+	}
+	for _, le := range lineErrors {
+		if le.MessageType == "turn_ended" {
+			continue
+		}
+		t.Errorf("unexpected parse error on subagent fixture line %d: %v", le.Line, le.Errors)
+	}
+	return messages
+}
 
 // loadCursorFixtureMessages parses the committed fy5q fixture
 // (testdata/cursor/main.jsonl) into the typed Cursor message slice the compute
@@ -67,7 +99,7 @@ func TestParseCursorJSONLSeparatesConversationFromMarkers(t *testing.T) {
 // purely from message structure (no timestamps in Cursor JSONL).
 func TestComputeFromCursorRolloutSession(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	if result.UserMessages != 3 {
 		t.Errorf("UserMessages = %d, want 3", result.UserMessages)
@@ -85,7 +117,7 @@ func TestComputeFromCursorRolloutSession(t *testing.T) {
 // once under its Cursor-specific name.
 func TestComputeFromCursorRolloutTools(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	wantTools := map[string]int{
 		"Read": 1, "Grep": 1, "Glob": 1, "SemanticSearch": 1, "Task": 1,
@@ -116,7 +148,7 @@ func TestComputeFromCursorRolloutTools(t *testing.T) {
 // SemanticSearch are searches while WebSearch is NOT.
 func TestComputeFromCursorRolloutCodeActivity(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	if result.FilesRead != 1 {
 		t.Errorf("FilesRead = %d, want 1 (Read only)", result.FilesRead)
@@ -135,7 +167,7 @@ func TestComputeFromCursorRolloutCodeActivity(t *testing.T) {
 // the subagent_type field of the Task input (main-thread-only agents card).
 func TestComputeFromCursorRolloutAgents(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	if result.TotalAgentInvocations != 1 {
 		t.Errorf("TotalAgentInvocations = %d, want 1", result.TotalAgentInvocations)
@@ -151,7 +183,7 @@ func TestComputeFromCursorRolloutAgents(t *testing.T) {
 // written with an empty by_provider tree and zero cost (no invented dollars).
 func TestComputeFromCursorRolloutAlwaysWritesEmptyTokensV2(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	if result.TokensV2 == nil {
 		t.Fatal("TokensV2 must always be written (empty tree), got nil")
@@ -196,7 +228,7 @@ func TestComputeFromCursorRolloutDurationFromBounds(t *testing.T) {
 	t0 := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 	t1 := t0.Add(90 * time.Minute)
 
-	result := ComputeFromCursorRollout(context.Background(), messages, CursorSessionBounds{
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), CursorSessionBounds{
 		FirstSeen:     ptrTime(t0),
 		LastMessageAt: ptrTime(t1),
 	})
@@ -223,7 +255,7 @@ func TestComputeFromCursorRolloutDurationFromBounds(t *testing.T) {
 // which Go-side []string{} vs nil both satisfy — only the wire shape differs).
 func TestComputeFromCursorRolloutSessionModelsUsedNotNull(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	cards := result.ToCards("test-session", int64(len(messages)))
 	response := cards.ToResponse()
@@ -259,7 +291,7 @@ func TestComputeFromCursorRolloutModelPopulatesModelsUsed(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
 	bounds := CursorSessionBounds{Model: "composer-2.5"}
 
-	result := ComputeFromCursorRollout(context.Background(), messages, bounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), bounds)
 
 	if got := result.ModelsUsed; len(got) != 1 || got[0] != "composer-2.5" {
 		t.Errorf("ModelsUsed = %v, want [composer-2.5]", got)
@@ -272,7 +304,7 @@ func TestComputeFromCursorRolloutModelPopulatesModelsUsed(t *testing.T) {
 func TestComputeFromCursorRolloutNoModelLeavesModelsEmpty(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
 
-	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), noBounds)
 
 	if result.ModelsUsed == nil {
 		t.Fatal("ModelsUsed = nil, want non-nil empty slice (must marshal as [], not null)")
@@ -289,7 +321,7 @@ func TestComputeFromCursorRolloutEmptyModelLeavesModelsEmpty(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
 	bounds := CursorSessionBounds{Model: ""}
 
-	result := ComputeFromCursorRollout(context.Background(), messages, bounds)
+	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), bounds)
 
 	if len(result.ModelsUsed) != 0 {
 		t.Errorf("ModelsUsed = %v, want [] for an empty model", result.ModelsUsed)
@@ -352,10 +384,173 @@ func TestComputeFromCursorRolloutDurationDegrades(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := ComputeFromCursorRollout(context.Background(), messages, tc.bounds)
+			result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), tc.bounds)
 			if result.DurationMs != nil {
 				t.Errorf("DurationMs = %d, want nil (%s must degrade, not invent a non-positive span)", *result.DurationMs, tc.name)
 			}
 		})
+	}
+}
+
+// =============================================================================
+// Subagent rollouts (wc9t) — analytics aggregation across [main, ...subagents]
+// =============================================================================
+
+// TestComputeFromCursorRolloutMergesSubagentTools is the wc9t core contract:
+// tool stats merge across main + subagent rollouts. The subagent fixture adds
+// Glob×2, Read×2, Grep×1 on top of the main fixture's tools; the merged
+// ToolStats must equal the sum. (UpdateCurrentStep is NOT a tool — see the
+// dedicated test below.)
+func TestComputeFromCursorRolloutMergesSubagentTools(t *testing.T) {
+	main := loadCursorFixtureMessages(t)
+	sub := loadCursorSubagentMessages(t)
+
+	mainOnlyResult := ComputeFromCursorRollout(context.Background(), mainOnly(main), noBounds)
+	merged := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{main, sub}, noBounds)
+
+	// The subagent contributes Glob×2, Read×2, Grep×1.
+	wantDelta := map[string]int{"Glob": 2, "Read": 2, "Grep": 1}
+	for name, delta := range wantDelta {
+		gotMain := toolCount(mainOnlyResult, name)
+		gotMerged := toolCount(merged, name)
+		if gotMerged != gotMain+delta {
+			t.Errorf("tool %q merged count = %d, want %d (main %d + subagent %d)", name, gotMerged, gotMain+delta, gotMain, delta)
+		}
+	}
+
+	// TotalToolCalls must grow by exactly the subagent's real tool count (5),
+	// never by the two UpdateCurrentStep markers.
+	if merged.TotalToolCalls != mainOnlyResult.TotalToolCalls+5 {
+		t.Errorf("TotalToolCalls = %d, want %d (main %d + 5 subagent tools)", merged.TotalToolCalls, mainOnlyResult.TotalToolCalls+5, mainOnlyResult.TotalToolCalls)
+	}
+}
+
+// TestComputeFromCursorRolloutIgnoresUpdateCurrentStep is decision D2: the
+// subagent-only UpdateCurrentStep progress marker is neither counted as a tool
+// nor surfaced in ToolStats. The subagent fixture has two of them.
+func TestComputeFromCursorRolloutIgnoresUpdateCurrentStep(t *testing.T) {
+	sub := loadCursorSubagentMessages(t)
+	result := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{sub}, noBounds)
+
+	if stats := result.ToolStats["UpdateCurrentStep"]; stats != nil {
+		t.Errorf("UpdateCurrentStep must not appear in ToolStats, got %+v", stats)
+	}
+	// The subagent has 5 real tools (Glob×2, Read×2, Grep×1); the two
+	// UpdateCurrentStep markers must not inflate the count.
+	if result.TotalToolCalls != 5 {
+		t.Errorf("TotalToolCalls = %d, want 5 (UpdateCurrentStep excluded)", result.TotalToolCalls)
+	}
+}
+
+// TestComputeFromCursorRolloutMergesSubagentCodeActivity verifies file/search
+// activity merges across rollouts. The subagent reads two files (Read×2) and
+// runs three searches (Glob×2 + Grep×1).
+func TestComputeFromCursorRolloutMergesSubagentCodeActivity(t *testing.T) {
+	main := loadCursorFixtureMessages(t)
+	sub := loadCursorSubagentMessages(t)
+
+	mainOnlyResult := ComputeFromCursorRollout(context.Background(), mainOnly(main), noBounds)
+	merged := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{main, sub}, noBounds)
+
+	if merged.FilesRead != mainOnlyResult.FilesRead+2 {
+		t.Errorf("FilesRead = %d, want %d (main + 2 subagent reads)", merged.FilesRead, mainOnlyResult.FilesRead+2)
+	}
+	if merged.SearchCount != mainOnlyResult.SearchCount+3 {
+		t.Errorf("SearchCount = %d, want %d (main + Glob×2 + Grep×1)", merged.SearchCount, mainOnlyResult.SearchCount+3)
+	}
+}
+
+// TestComputeFromCursorRolloutConversationMainOnly locks the asymmetric merge:
+// the conversation card (turn counts) reflects the MAIN thread only — subagent
+// turns do not widen the user-perceived conversation (D3 / OpenCode parity).
+func TestComputeFromCursorRolloutConversationMainOnly(t *testing.T) {
+	main := loadCursorFixtureMessages(t)
+	sub := loadCursorSubagentMessages(t)
+
+	mainOnlyResult := ComputeFromCursorRollout(context.Background(), mainOnly(main), noBounds)
+	merged := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{main, sub}, noBounds)
+
+	if merged.UserTurns != mainOnlyResult.UserTurns {
+		t.Errorf("UserTurns = %d, want %d (main-only; subagents must not widen the conversation)", merged.UserTurns, mainOnlyResult.UserTurns)
+	}
+	if merged.AssistantTurns != mainOnlyResult.AssistantTurns {
+		t.Errorf("AssistantTurns = %d, want %d (main-only)", merged.AssistantTurns, mainOnlyResult.AssistantTurns)
+	}
+	// The session card's message counts ARE main-only too (the session window
+	// and turn structure mirror the main thread; subagents nest within it).
+	if merged.UserMessages != mainOnlyResult.UserMessages {
+		t.Errorf("UserMessages = %d, want %d (main-only session counts)", merged.UserMessages, mainOnlyResult.UserMessages)
+	}
+}
+
+// TestComputeFromCursorRolloutBoundsMainOnly verifies DurationMs is derived from
+// the main-thread session window only; subagents do not affect it (D3).
+func TestComputeFromCursorRolloutBoundsMainOnly(t *testing.T) {
+	main := loadCursorFixtureMessages(t)
+	sub := loadCursorSubagentMessages(t)
+	t0 := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(30 * time.Minute)
+	bounds := CursorSessionBounds{FirstSeen: ptrTime(t0), LastMessageAt: ptrTime(t1)}
+
+	merged := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{main, sub}, bounds)
+
+	if merged.DurationMs == nil {
+		t.Fatal("DurationMs = nil, want the main-thread window span")
+	}
+	if *merged.DurationMs != int64(30*60*1000) {
+		t.Errorf("DurationMs = %d, want %d (main-thread window only)", *merged.DurationMs, int64(30*60*1000))
+	}
+}
+
+// TestComputeFromCursorRolloutMergesSubagentAgents verifies Task-derived agent
+// invocations merge across rollouts. The main fixture has one Task (explore);
+// the subagent fixture has none, so the merged total stays the main's.
+func TestComputeFromCursorRolloutMergesSubagentAgents(t *testing.T) {
+	main := loadCursorFixtureMessages(t)
+	sub := loadCursorSubagentMessages(t)
+
+	merged := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{main, sub}, noBounds)
+	if merged.TotalAgentInvocations != 1 {
+		t.Errorf("TotalAgentInvocations = %d, want 1 (main's Task; subagent has none)", merged.TotalAgentInvocations)
+	}
+}
+
+// TestComputeFromCursorRolloutEmptyMain guards the empty-main path: no main
+// thread means an empty result.
+func TestComputeFromCursorRolloutEmptyMain(t *testing.T) {
+	result := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{nil}, noBounds)
+	if result == nil {
+		t.Fatal("must return a non-nil result")
+	}
+	if result.TotalToolCalls != 0 {
+		t.Errorf("TotalToolCalls = %d, want 0 for an empty main rollout", result.TotalToolCalls)
+	}
+}
+
+// toolCount returns the total (success + error) calls recorded for a tool name,
+// or 0 when the tool is absent.
+func toolCount(r *ComputeResult, name string) int {
+	if r == nil {
+		return 0
+	}
+	stats := r.ToolStats[name]
+	if stats == nil {
+		return 0
+	}
+	return stats.Success + stats.Errors
+}
+
+// TestExtractCursorSearchTextIncludesSubagents is decision D1: subagent text
+// feeds the global search index (recall), so a phrase that appears ONLY in the
+// subagent transcript must be present in the extracted search text.
+func TestExtractCursorSearchTextIncludesSubagents(t *testing.T) {
+	main := loadCursorFixtureMessages(t)
+	sub := loadCursorSubagentMessages(t)
+
+	text := extractCursorSearchText([][]*CursorMessage{main, sub})
+
+	const subagentOnlyPhrase = "router.go dispatch does not guard against an empty id"
+	if !strings.Contains(text, subagentOnlyPhrase) {
+		t.Errorf("search text missing subagent-only phrase %q", subagentOnlyPhrase)
 	}
 }

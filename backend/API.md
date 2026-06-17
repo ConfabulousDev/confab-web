@@ -270,8 +270,12 @@ live under a **sanitized project path**
 (`~/.cursor/projects/<path>/agent-transcripts/<session-id>/`). The CLI must
 correlate the two **by session-id**.
 
-Cursor sessions accept only the main transcript file in v1; subagent files
-(`subagents/<id>.jsonl`, uploaded as `file_type=agent`) are not yet processed.
+Cursor sessions accept the main transcript (`file_type=transcript`) and subagent
+transcript files (`subagents/<id>.jsonl`, uploaded as `file_type=agent`). The
+backend parses subagent files with the same line envelope as the main thread and
+aggregates their tool/code/agent activity and search text into the parent
+session; the conversation card, session counts, duration, and `models_used` stay
+main-thread only. Subagent files do not advance the session's `last_message_at`.
 
 ---
 

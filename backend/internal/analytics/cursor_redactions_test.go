@@ -41,7 +41,7 @@ func TestCleanCursorAssistantText(t *testing.T) {
 // still does.
 func TestExtractCursorSearchTextStripsRedacted(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	text := extractCursorSearchText(messages)
+	text := extractCursorSearchText(mainOnly(messages))
 
 	if strings.Contains(text, "[REDACTED]") {
 		t.Errorf("search text must not contain the bare [REDACTED] placeholder:\n%s", text)

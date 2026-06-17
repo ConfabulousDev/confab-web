@@ -5313,4 +5313,80 @@ func TestSyncCursor_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 		testutil.RequireStatus(t, resp, http.StatusBadRequest)
 	})
+
+	// wc9t: cursor sessions accept `file_type=agent` for subagent transcript
+	// files (agent-transcripts/<root>/subagents/<uuid>.jsonl), uploaded under the
+	// root's hosted session. The subagent uses the identical line envelope as the
+	// main thread. The upload must succeed, record file_type='agent', and — like
+	// the codex subagent path — NOT advance the root session's last_message_at
+	// (Cursor has no per-line timestamps anyway; the extraction gate keys on
+	// file_type=='transcript').
+	t.Run("accepts file_type=agent for cursor session (subagent transcript)", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cursor-agent@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-agent",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-agent.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		// Subagent file under the same session, uploaded as file_type=agent.
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "subagents/9c4d4938-subagent.jsonl",
+			FileType:  "agent",
+			FirstLine: 1,
+			Lines: []string{
+				`{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nAudit callers.\n</user_query>"}]}}`,
+				`{"role":"assistant","message":{"content":[{"type":"text","text":"Done."},{"type":"tool_use","name":"UpdateCurrentStep","input":{"current_step":"Summarizing","final_summary":"done","completed_subtitle":"done"}},{"type":"tool_use","name":"Grep","input":{"pattern":"handleSession","path":"internal"}}]}}`,
+				`{"type":"turn_ended","status":"success"}`,
+			},
+		})
+		if err != nil {
+			t.Fatalf("agent chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		// sync_files row records file_type='agent'.
+		var storedFileType string
+		var lastSyncedLine int
+		if err := env.DB.QueryRow(env.Ctx,
+			`SELECT file_type, last_synced_line FROM sync_files
+			 WHERE session_id = $1 AND file_name = $2`,
+			sessionID, "subagents/9c4d4938-subagent.jsonl").
+			Scan(&storedFileType, &lastSyncedLine); err != nil {
+			t.Fatalf("query sync_files: %v", err)
+		}
+		if storedFileType != "agent" {
+			t.Errorf("sync_files.file_type = %q, want %q", storedFileType, "agent")
+		}
+		if lastSyncedLine != 3 {
+			t.Errorf("sync_files.last_synced_line = %d, want 3", lastSyncedLine)
+		}
+
+		// Subagent activity must NOT advance the root session's last_message_at.
+		var lastMessageAt *time.Time
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT last_message_at FROM sessions WHERE id = $1", sessionID).
+			Scan(&lastMessageAt); err != nil {
+			t.Fatalf("query last_message_at: %v", err)
+		}
+		if lastMessageAt != nil {
+			t.Errorf("last_message_at = %v, want NULL (cursor subagent agent-file upload must not advance root activity)", lastMessageAt)
+		}
+	})
 }
