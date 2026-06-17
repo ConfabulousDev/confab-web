@@ -153,8 +153,13 @@ func (s *Store) getSyncFilesForSession(ctx context.Context, sessionID string) (s
 	return sessionID, files, nil
 }
 
-// UpdateSyncFileState updates the high-water mark for a file's sync state
-func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
+// UpdateSyncFileState upserts the sync-file row (advancing its high-water mark)
+// and refreshes session metadata.
+// createdAt is the optional session start anchor (Cursor meta.json createdAtMs):
+// when earlier than the current first_seen it LOWERS first_seen to refine the
+// interpolation start; first_seen is never raised. Pass nil to leave it
+// untouched (every non-Cursor provider).
+func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt, createdAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
 	ctx, span := tracer.Start(ctx, "db.update_sync_file_state",
 		trace.WithAttributes(
 			attribute.String("session.id", sessionID),
@@ -194,6 +199,14 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 	if lastMessageAt != nil {
 		sessionQuery += fmt.Sprintf(", last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < $%d THEN $%d ELSE last_message_at END", argIdx, argIdx)
 		args = append(args, lastMessageAt)
+		argIdx++
+	}
+	if createdAt != nil {
+		// first_seen is the start anchor; only lower it (a later created_at must
+		// not push the start forward). first_seen is NOT NULL, so the CASE only
+		// compares.
+		sessionQuery += fmt.Sprintf(", first_seen = CASE WHEN $%d < first_seen THEN $%d ELSE first_seen END", argIdx, argIdx)
+		args = append(args, createdAt)
 		argIdx++
 	}
 	if summary != nil {
@@ -270,4 +283,3 @@ func (s *Store) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileNam
 	}
 	return nil
 }
-

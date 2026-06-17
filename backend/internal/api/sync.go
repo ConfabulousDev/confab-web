@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbcodex "github.com/ConfabulousDev/confab-web/internal/db/codex"
 	dbevents "github.com/ConfabulousDev/confab-web/internal/db/events"
@@ -21,6 +20,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
+	"github.com/go-chi/chi/v5"
 )
 
 // ============================================================================
@@ -64,7 +64,7 @@ type SyncInitRequest struct {
 
 // SyncInitResponse is the response for POST /api/v1/sync/init
 type SyncInitResponse struct {
-	SessionID string                       `json:"session_id"`
+	SessionID string `json:"session_id"`
 	// Provider echoes the resolved provider for this session, so clients
 	// can verify which agent identity the backend recorded. One of the
 	// canonical providers in models.CanonicalProviders.
@@ -95,6 +95,18 @@ type SyncChunkMetadata struct {
 	// last_message_at stays NULL until a later chunk carries one. Ignored for
 	// providers that already extract per-line timestamps.
 	LatestMessageAt *time.Time `json:"latest_message_at,omitempty"`
+
+	// CreatedAt carries the session's creation time, the start anchor for
+	// estimating a Cursor session's duration (5w7r). Cursor JSONL lines have no
+	// per-line timestamp, so duration is the span between this start and
+	// last_message_at. The Cursor CLI sets it from the same meta.json's
+	// createdAtMs (ms → RFC3339). When present and earlier than the session's
+	// current first_seen (the init-time fallback start anchor), it LOWERS
+	// first_seen to refine the start; a later value never raises first_seen, and
+	// far-future values are clamped/dropped (same guard as LatestMessageAt).
+	// Omit when meta.json is absent — first_seen stays the start anchor.
+	// Ignored for providers that already extract per-line timestamps.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 
 	// Model names the model that produced this Cursor session, sourced by the
 	// CLI from ~/.cursor/.../state.vscdb (composerData.modelConfig.modelName,
@@ -521,6 +533,7 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	// Only process metadata for transcript files, not agent/todo files
 	var gitInfo json.RawMessage
 	var summary, firstUserMessage *string
+	var createdAt *time.Time
 	if req.Metadata != nil && req.FileType == "transcript" {
 		gitInfo = req.Metadata.GitInfo
 		summary = req.Metadata.Summary
@@ -537,9 +550,14 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 				latestTimestamp = clamped
 			}
 		}
+
+		// created_at is the session's start anchor (Cursor meta.json createdAtMs).
+		// UpdateSyncFileState lowers first_seen to it when it is earlier; clamp
+		// far-future values first (same sort-order-abuse guard as above).
+		createdAt = clampFutureTimestamp(req.Metadata.CreatedAt)
 	}
 
-	if err := sessionStore.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
+	if err := sessionStore.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, createdAt, summary, firstUserMessage, gitInfo); err != nil {
 		log.Error("Failed to update sync state",
 			"error", err,
 			"session_id", req.SessionID,

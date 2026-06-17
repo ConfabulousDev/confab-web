@@ -33,7 +33,7 @@ func TestUpdateSyncFileState_BasicUpsert(t *testing.T) {
 	ctx := context.Background()
 
 	// Create new sync file state
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (create) failed: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestUpdateSyncFileState_BasicUpsert(t *testing.T) {
 	}
 
 	// Update existing sync file state
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (update) failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 	ctx := context.Background()
 
 	// First chunk upload - chunk_count should be 1
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (1) failed: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 	}
 
 	// Second chunk upload - chunk_count should be 2
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (2) failed: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestUpdateSyncFileState_ChunkCountIncrement(t *testing.T) {
 	}
 
 	// Third chunk upload - chunk_count should be 3
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 300, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 300, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (3) failed: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	// Set initial last_message_at (from NULL)
 	initialTime := time.Now().Add(-time.Hour).UTC()
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &initialTime, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &initialTime, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (initial) failed: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	// Try to set older time - should NOT update
 	olderTime := time.Now().Add(-2 * time.Hour).UTC()
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, &olderTime, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, &olderTime, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (older) failed: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestUpdateSyncFileState_LastMessageAt(t *testing.T) {
 
 	// Set newer time - SHOULD update
 	newerTime := time.Now().UTC()
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, &newerTime, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, &newerTime, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (newer) failed: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	// Set initial summary
 	summary1 := "First summary"
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, &summary1, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, &summary1, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (summary1) failed: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	// Update summary (last write wins)
 	summary2 := "Updated summary"
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, &summary2, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, nil, &summary2, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (summary2) failed: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestUpdateSyncFileState_Summary(t *testing.T) {
 
 	// Clear summary with empty string
 	emptyStr := ""
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, &emptyStr, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 200, nil, nil, &emptyStr, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (empty summary) failed: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestUpdateSyncFileState_FirstUserMessage(t *testing.T) {
 
 	// Set initial first_user_message
 	msg1 := "First user message"
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, &msg1, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, &msg1, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (msg1) failed: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestUpdateSyncFileState_FirstUserMessage(t *testing.T) {
 
 	// Try to update first_user_message (first write wins - should NOT update)
 	msg2 := "Second user message"
-	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, nil, &msg2, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 150, nil, nil, nil, &msg2, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (msg2) failed: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestUpdateSyncFileState_GitInfo(t *testing.T) {
 
 	// Set git_info
 	gitInfo := json.RawMessage(`{"repo_url": "https://github.com/example/repo", "branch": "main"}`)
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, gitInfo)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil, gitInfo)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (gitinfo) failed: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestUpdateSyncFileState_CombinedParameters(t *testing.T) {
 	firstMsg := "Combined first message"
 	gitInfo := json.RawMessage(`{"repo_url": "https://github.com/combined/repo", "branch": "develop"}`)
 
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &msgTime, &summary, &firstMsg, gitInfo)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, &msgTime, nil, &summary, &firstMsg, gitInfo)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (combined) failed: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestUpdateSyncFileState_NoOptionalParameters(t *testing.T) {
 	ctx := context.Background()
 
 	// Update with no optional parameters
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState (no opts) failed: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestUpdateSyncFileChunkCount(t *testing.T) {
 	ctx := context.Background()
 
 	// Create initial sync file state
-	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err := store.UpdateSyncFileState(ctx, sessionID, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState failed: %v", err)
 	}
@@ -593,11 +593,11 @@ func TestFindOrCreateSyncSession_FindExisting(t *testing.T) {
 	}
 
 	// Add some sync files
-	err = store.UpdateSyncFileState(ctx, sessionID1, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID1, "transcript.jsonl", "transcript", 100, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState failed: %v", err)
 	}
-	err = store.UpdateSyncFileState(ctx, sessionID1, "todo.jsonl", "todo", 50, nil, nil, nil, nil)
+	err = store.UpdateSyncFileState(ctx, sessionID1, "todo.jsonl", "todo", 50, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSyncFileState failed: %v", err)
 	}

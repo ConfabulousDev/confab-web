@@ -165,7 +165,7 @@ The full set of tool `name` values observed across a complete local scan
 | Key | Notes |
 |-----|-------|
 | `schemaVersion` | Observed `1`. |
-| `createdAtMs` | Session creation, epoch ms. |
+| `createdAtMs` | Session creation, epoch ms. **Source for `created_at`** (duration start anchor; refines `first_seen`). |
 | `updatedAtMs` | Last update, epoch ms. **Source for `latest_message_at`.** Present in every observed file. |
 | `hasConversation` | Boolean. |
 | `title` | **Optional** — absent in some sessions. The CLI must not assume it exists. |
@@ -176,11 +176,35 @@ There are **no** token, usage, cost, or model fields in `meta.json`.
 
 These are the most-asked questions; the answers are definitive as of Jun 2026.
 
-### No inline timestamps
+### No inline timestamps — duration is estimated from session bounds
 
-JSONL lines carry no per-line timestamp. The only time signal is
-`meta.json.updatedAtMs` (session-level, last-update only). The CLI passes it as
-`metadata.latest_message_at`; per-message timing is not recoverable.
+JSONL lines carry no per-line timestamp. The only time signals are session-level:
+`meta.json.createdAtMs` (creation) and `updatedAtMs` (last update). The CLI passes
+them as `metadata.created_at` and `metadata.latest_message_at`.
+
+**Estimation contract (5w7r):** exact per-message times are not recoverable from
+synced data, but the session **window** is, so timing degrades to an estimate
+rather than nothing:
+
+- **Start anchor** = `created_at` ?? `first_seen`. `created_at` is folded into
+  `first_seen` at ingest — an earlier `created_at` lowers `first_seen` (never
+  raises it); when `meta.json` is absent, `first_seen` (session init time) stands
+  in. Far-future values are clamped/dropped (sort-order-abuse guard).
+- **End anchor** = `last_message_at` (from `updatedAtMs`) ?? `last_sync_at`.
+- **Session duration** (`DurationMs`) = end − start, computed in
+  `analytics.ComputeFromCursorRollout` via `CursorSessionBounds`. It stays nil
+  when an anchor is missing or the window is non-positive — no invented or
+  negative spans.
+- **Per-row display timestamps** are interpolated **frontend-side** (ce79) from
+  these same bounds over conversation-row index; the stored JSONL is **never**
+  rewritten with estimates.
+
+**Accuracy caveats:** the duration is a wall-clock window, not a sum of active
+turns — it includes idle gaps and is only as tight as `createdAtMs`/`updatedAtMs`
+allow. Per-message estimates are linear (uniform spacing), so they will not match
+real keystroke timing. Assistant-vs-user turn timing and utilization are left
+**nil** (the window gives no honest basis to split them). Exact bubble-level
+timestamps from `state.vscdb` are a separate CLI follow-up.
 
 ### No tokens or cost anywhere Confab syncs
 
@@ -215,7 +239,7 @@ can enrich the model name but never the cost.
 |--------|-------------|--------|
 | Line envelope | top-level `type`, `uuid`, `timestamp` per line | `{role, message:{content:[…]}}`; no top-level `type`/`uuid`/`timestamp` |
 | Parser struct | `TranscriptLine` (`internal/analytics/parser.go`) keys on top-level `type` | new Cursor adapter required (4r41) |
-| Per-message timestamp | yes | **no** (session-level `updatedAtMs` only) |
+| Per-message timestamp | yes | **no** — estimated from session bounds (`createdAtMs`/`updatedAtMs`); see [No inline timestamps](#no-inline-timestamps--duration-is-estimated-from-session-bounds) |
 | Tokens / usage | inline `usage` per assistant message | **none** in synced data |
 | Model | inline per message | **not** in JSONL (best-effort sync metadata) |
 | Tool outputs | `toolUseResult` on user rows | **none** — inputs only |
