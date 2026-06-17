@@ -206,7 +206,11 @@ describe('SessionSummaryPanel', () => {
       expect(screen.queryByText('No analytics available')).not.toBeInTheDocument();
     });
 
-    it('shows an info callout explaining unavailable token metrics for Cursor', () => {
+    // 2qwe: the unavailable-metrics notice keeps the st5f copy + Learn-more link,
+    // but is no longer a prominent bordered info banner above the whole grid.
+    // It must render as a subtle muted note positioned right after the Smart
+    // Recap card (order 0), ahead of the Tokens card (order 1).
+    it('explains unavailable token metrics for Cursor (keeps the st5f copy + Learn more)', () => {
       render(
         <SessionSummaryPanel
           sessionId="cursor-1"
@@ -216,7 +220,43 @@ describe('SessionSummaryPanel', () => {
         />
       );
       expect(screen.getByText(/token and cost data are not recorded/i)).toBeInTheDocument();
+      const learnMore = screen.getByRole('link', { name: /learn more/i });
+      expect(learnMore).toHaveAttribute('href', expect.stringContaining('/providers/cursor/#tokens-and-cost'));
       expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+    });
+
+    it('renders the unavailable-metrics note as a subtle line, not an info Alert banner', () => {
+      render(
+        <SessionSummaryPanel
+          sessionId="cursor-1"
+          isOwner={false}
+          provider="cursor"
+          initialAnalytics={buildCursorAnalyticsFixture()}
+        />
+      );
+      const note = screen.getByText(/token and cost data are not recorded/i);
+      // The mocked Alert renders a data-testid="alert" element; the note must not
+      // live inside one (it is a plain muted <p>, not a bordered info callout).
+      expect(note.closest('[data-testid="alert"]')).toBeNull();
+      expect(screen.queryByTestId('alert')).not.toBeInTheDocument();
+    });
+
+    it('positions the unavailable-metrics note after Smart Recap and before the Tokens card', () => {
+      render(
+        <SessionSummaryPanel
+          sessionId="cursor-1"
+          isOwner={false}
+          provider="cursor"
+          initialAnalytics={buildCursorAnalyticsFixture()}
+        />
+      );
+      const note = screen.getByText(/token and cost data are not recorded/i);
+      // The Tokens card (registry order 1) renders right after Smart Recap +
+      // the note; the note must precede it in DOM order, proving it sits in the
+      // recap region rather than below the whole grid.
+      const tokensTitle = screen.getByText('Tokens');
+      const position = note.compareDocumentPosition(tokensTitle);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 

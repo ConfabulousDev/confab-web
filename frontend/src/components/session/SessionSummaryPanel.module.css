@@ -540,6 +540,11 @@
   font-size: var(--font-sm);
 }
 
-.unmeasuredTokensCallout {
-  margin-bottom: var(--spacing-md);
+/* 2qwe: subtle muted note (not a bordered info callout) shown right after the
+   Smart Recap card on providers without measurable tokens (Cursor). Matches the
+   .unavailableMetric tone — no border or background. */
+.unmeasuredTokensNote {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
 }

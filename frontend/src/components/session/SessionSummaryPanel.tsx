@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Fragment } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
 import { analyticsAPI, APIError, APIValidationError } from '@/services/api';
@@ -241,8 +241,8 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
         );
       }
 
-      return (
-        <div key={cardDef.key} className={`${spanClass} ${sizeClass}`.trim()}>
+      const cardWrapper = (
+        <div className={`${spanClass} ${sizeClass}`.trim()}>
           <CardComponent
             data={cardData}
             loading={loading}
@@ -251,6 +251,32 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
           />
         </div>
       );
+
+      // 2qwe: for providers without measurable tokens (Cursor), the recap leads
+      // and a subtle muted note explaining the missing token/cost/timing metrics
+      // follows directly beneath it — rather than a prominent info banner above
+      // the whole grid. Inject the note in its own full-width grid row right
+      // after the Smart Recap card (registry order 0).
+      if (cardDef.key === 'smart_recap' && !isTokensMeasurable(provider)) {
+        return (
+          <Fragment key={cardDef.key}>
+            {cardWrapper}
+            <div className={styles.spanFull}>
+              <p className={styles.unmeasuredTokensNote}>
+                Token and cost data are not recorded in Cursor&apos;s local agent transcript, so
+                Confab cannot compute per-session usage from synced files. Turn timing and token
+                speed are unavailable for the same reason.{' '}
+                <a href={`${DOCS_URL}/providers/cursor/#tokens-and-cost`} target="_blank" rel="noopener noreferrer">
+                  Learn more
+                </a>
+                . Real Cursor usage from Cursor&apos;s Dashboard API is planned for a future release.
+              </p>
+            </div>
+          </Fragment>
+        );
+      }
+
+      return <Fragment key={cardDef.key}>{cardWrapper}</Fragment>;
     };
 
     return (
@@ -311,18 +337,6 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
       {regenerateError && (
         <Alert variant="error" onClose={() => setRegenerateError(null)}>
           {regenerateError}
-        </Alert>
-      )}
-
-      {!isTokensMeasurable(provider) && analytics && (
-        <Alert variant="info" className={styles.unmeasuredTokensCallout}>
-          Token and cost data are not recorded in Cursor&apos;s local agent transcript, so
-          Confab cannot compute per-session usage from synced files. Turn timing and token
-          speed are unavailable for the same reason.{' '}
-          <a href={`${DOCS_URL}/providers/cursor/#tokens-and-cost`} target="_blank" rel="noopener noreferrer">
-            Learn more
-          </a>
-          . Real Cursor usage from Cursor&apos;s Dashboard API is planned for a future release.
         </Alert>
       )}
 

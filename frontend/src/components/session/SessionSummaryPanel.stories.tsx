@@ -616,8 +616,9 @@ export const CodexSession: Story = {
  * ComputeFromCursorRollout produces and the analytics endpoint serves: zero
  * tokens / "0" cost (Cursor JSONL has no usage data), no tokens_v2 card
  * (empty by_provider is omitted from the wire), null durations (no timestamps),
- * Cursor's own tool names, and no smart_recap. Shows the unmeasured-token
- * info callout and "Not available" placeholders instead of misleading $0.00.
+ * Cursor's own tool names, and no smart_recap. Shows a subtle muted note (2qwe)
+ * right after the Smart Recap card explaining the unmeasured token/cost/timing
+ * metrics, plus "Not available" placeholders instead of misleading $0.00.
  * See cursorAnalyticsFixture.ts for the full per-field rationale.
  */
 export const CursorSession: Story = {
