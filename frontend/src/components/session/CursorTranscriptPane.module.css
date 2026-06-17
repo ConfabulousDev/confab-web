@@ -73,14 +73,6 @@
   color: var(--color-text-secondary);
 }
 
-.text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  color: var(--color-text-primary);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
 .toolInput {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

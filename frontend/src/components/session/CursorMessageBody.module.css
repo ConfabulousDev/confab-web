@@ -1,0 +1,6 @@
+/* Markdown-rendered text for Cursor user-prompt + assistant narrative rows
+ * (pt81). Typography rules live in @/styles/markdown.module.css and are
+ * composed in, mirroring Codex's markdown body. */
+.markdown {
+  composes: markdown from '@/styles/markdown.module.css';
+}

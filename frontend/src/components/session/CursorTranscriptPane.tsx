@@ -19,6 +19,7 @@ import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import type { CursorRenderItem } from './cursorCategories';
 import CursorContextSections from './CursorContextSections';
+import CursorMessageBody from './CursorMessageBody';
 import { extractCursorItemText } from './extractCursorItemText';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './CursorTranscriptPane.module.css';
@@ -76,9 +77,11 @@ function Row({
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>User</span>
         </div>
-        <div className={styles.text}>
-          {renderTextWithHighlight(item.text, searchQuery, isCurrentSearchMatch)}
-        </div>
+        <CursorMessageBody
+          text={item.text}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
         <CursorContextSections sections={item.sections ?? []} />
       </div>
     );
@@ -89,9 +92,11 @@ function Row({
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>Assistant</span>
         </div>
-        <div className={styles.text}>
-          {renderTextWithHighlight(item.text, searchQuery, isCurrentSearchMatch)}
-        </div>
+        <CursorMessageBody
+          text={item.text}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
       </div>
     );
   }
