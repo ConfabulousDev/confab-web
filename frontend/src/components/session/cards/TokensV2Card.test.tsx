@@ -88,59 +88,59 @@ function makeData(overrides: Partial<TokensV2CardData> = {}): TokensV2CardData {
 
 describe('TokensV2Card', () => {
   it('renders total cost', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     expect(screen.getByText('$1.23')).toBeInTheDocument();
   });
 
   it('renders total tokens (input + output) in the summary stack', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     // total_input 150k + total_output 50k = 200k
     expect(screen.getByText('200.0k')).toBeInTheDocument();
   });
 
   it('renders a combined Input / Output summary row', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     expect(screen.getByText('Total Tokens')).toBeInTheDocument();
     expect(screen.getByText('Input / Output')).toBeInTheDocument();
     expect(screen.getByText('150.0k / 50.0k')).toBeInTheDocument();
   });
 
   it('renders provider names', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     expect(screen.getByText('anthropic')).toBeInTheDocument();
     expect(screen.getByText('openai')).toBeInTheDocument();
   });
 
   it('renders per-provider cost', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     expect(screen.getAllByText('$0.95').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('$0.28').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders formatted model names (not raw ids)', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     expect(screen.getByText('Sonnet 4')).toBeInTheDocument();
     expect(screen.getByText('GPT-4o')).toBeInTheDocument();
     expect(screen.queryByText('claude-sonnet-4-20250514')).not.toBeInTheDocument();
   });
 
   it('renders loading state', () => {
-    render(<TokensV2Card data={null} loading={true} />);
+    render(<TokensV2Card data={null} loading={true} provider="claude-code" />);
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
   it('renders error state', () => {
-    render(<TokensV2Card data={null} loading={false} error="compute failed" />);
+    render(<TokensV2Card data={null} loading={false} provider="claude-code" error="compute failed" />);
     expect(screen.getByText(/compute failed/)).toBeInTheDocument();
   });
 
   it('returns null when no data and not loading', () => {
-    const { container } = render(<TokensV2Card data={null} loading={false} />);
+    const { container } = render(<TokensV2Card data={null} loading={false} provider="claude-code" />);
     expect(container.firstChild).toBeNull();
   });
 
   it('multi-provider DOES render provider section headers', () => {
-    render(<TokensV2Card data={makeData()} loading={false} />);
+    render(<TokensV2Card data={makeData()} loading={false} provider="claude-code" />);
     // by_provider keys (vendor ids) pass through providerLabel unchanged.
     expect(screen.getByText('anthropic')).toBeInTheDocument();
     expect(screen.getByText('openai')).toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('TokensV2Card', () => {
         },
       },
     });
-    render(<TokensV2Card data={singleProvider} loading={false} />);
+    render(<TokensV2Card data={singleProvider} loading={false} provider="claude-code" />);
     // The provider label ("Claude Code") must NOT be rendered as a section header.
     expect(screen.queryByText('Claude Code')).not.toBeInTheDocument();
     // The model section still renders, with a formatted label.
@@ -185,7 +185,7 @@ describe('TokensV2Card', () => {
         },
       },
     });
-    render(<TokensV2Card data={withFast} loading={false} />);
+    render(<TokensV2Card data={withFast} loading={false} provider="claude-code" />);
     expect(screen.getByText('Opus 4.8')).toBeInTheDocument();
     expect(screen.getByText('Opus 4.8 · fast')).toBeInTheDocument();
   });
@@ -204,12 +204,12 @@ describe('TokensV2Card', () => {
         },
       },
     });
-    render(<TokensV2Card data={withUnknown} loading={false} />);
+    render(<TokensV2Card data={withUnknown} loading={false} provider="claude-code" />);
     expect(screen.getByText('Unknown')).toBeInTheDocument();
   });
 
   it('shows the unpriced ($0) warning tooltip on the cost row', () => {
-    render(<TokensV2Card data={makeData({ total_cost_usd: '0.00' })} loading={false} />);
+    render(<TokensV2Card data={makeData({ total_cost_usd: '0.00' })} loading={false} provider="claude-code" />);
     const costRow = screen.getByText('Estimated cost').closest('div');
     expect(costRow).toHaveAttribute('title', 'Cost unavailable — session may use models not yet in the pricing table');
   });
@@ -218,7 +218,7 @@ describe('TokensV2Card', () => {
 
   describe('collapsible model sections (d3rp)', () => {
     it('collapses each model section by default when there is more than one', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       // Per-model detail rows (labels that only ever appear inside a model
       // section) are hidden until expanded.
       expect(screen.queryByText('Cache read')).not.toBeInTheDocument();
@@ -227,7 +227,7 @@ describe('TokensV2Card', () => {
     });
 
     it('still shows each model headline (label + cost) when collapsed', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       expect(screen.getByText('Opus 4.8')).toBeInTheDocument();
       expect(screen.getByText('Opus 4.8 · fast')).toBeInTheDocument();
       // Cost stays visible in the headline even while collapsed.
@@ -236,13 +236,13 @@ describe('TokensV2Card', () => {
     });
 
     it('renders the model headline as a button with aria-expanded=false collapsed', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       const headline = screen.getByRole('button', { name: /· fast/ });
       expect(headline).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('aria-controls points at the (rendered-on-expand) detail region', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       const headline = screen.getByRole('button', { name: /· fast/ });
       const controls = headline.getAttribute('aria-controls');
       if (!controls) throw new Error('headline is missing aria-controls');
@@ -256,14 +256,14 @@ describe('TokensV2Card', () => {
     });
 
     it('expands a collapsed section on click to reveal its detail', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       expect(screen.queryByText('Reasoning')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /· fast/ }));
       expect(screen.getByText('Reasoning')).toBeInTheDocument();
     });
 
     it('collapses again on a second click (toggle)', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       const headline = screen.getByRole('button', { name: /· fast/ });
       fireEvent.click(headline);
       expect(screen.getByText('Reasoning')).toBeInTheDocument();
@@ -272,7 +272,7 @@ describe('TokensV2Card', () => {
     });
 
     it('toggles each section independently', () => {
-      render(<TokensV2Card data={makeTwoModel()} loading={false} />);
+      render(<TokensV2Card data={makeTwoModel()} loading={false} provider="claude-code" />);
       // Expand only the fast section; the base section stays collapsed, so the
       // base-only "Cache write" detail must NOT appear.
       fireEvent.click(screen.getByRole('button', { name: /· fast/ }));
@@ -281,7 +281,7 @@ describe('TokensV2Card', () => {
     });
 
     it('auto-expands when there is exactly one model section total', () => {
-      render(<TokensV2Card data={makeSingleModel()} loading={false} />);
+      render(<TokensV2Card data={makeSingleModel()} loading={false} provider="claude-code" />);
       // No click: detail is already visible.
       expect(screen.getByText('Cache read')).toBeInTheDocument();
       expect(screen.getByText('Reasoning')).toBeInTheDocument();

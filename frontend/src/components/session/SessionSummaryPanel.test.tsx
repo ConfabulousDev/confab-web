@@ -205,6 +205,19 @@ describe('SessionSummaryPanel', () => {
       expect(screen.queryByText('Failed to load analytics')).not.toBeInTheDocument();
       expect(screen.queryByText('No analytics available')).not.toBeInTheDocument();
     });
+
+    it('shows an info callout explaining unavailable token metrics for Cursor', () => {
+      render(
+        <SessionSummaryPanel
+          sessionId="cursor-1"
+          isOwner={false}
+          provider="cursor"
+          initialAnalytics={buildCursorAnalyticsFixture()}
+        />
+      );
+      expect(screen.getByText(/token and cost data are not recorded/i)).toBeInTheDocument();
+      expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+    });
   });
 
   describe('card grid layout classes', () => {

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { TokensCard } from './TokensCard';
 import { claudeAdapter } from '@/providers/claudeAdapter';
 import { codexAdapter } from '@/providers/codexAdapter';
+import { cursorAdapter } from '@/providers/cursorAdapter';
 
 const mockData = {
   input: 110000,
@@ -112,6 +113,30 @@ describe('TokensCard', () => {
       const fastRow = screen.getByText('Fast mode').closest('div');
       expect(fastRow).toHaveAttribute('title', claudeAdapter.tokensFastTooltip!);
       expect(claudeAdapter.tokensFastTooltip).toMatch(/Anthropic priority tier/);
+    });
+  });
+
+  describe('unmeasured provider tokens (st5f)', () => {
+    const cursorData = {
+      input: 0,
+      output: 0,
+      cache_creation: 0,
+      cache_read: 0,
+      estimated_usd: '0',
+    };
+
+    it('shows Not available for cursor instead of $0.00 with adapter tooltip', () => {
+      render(<TokensCard data={cursorData} loading={false} provider="cursor" />);
+      expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Not available').length).toBeGreaterThan(0);
+      const costRow = screen.getByText('Estimated cost').closest('div');
+      expect(costRow).toHaveAttribute('title', cursorAdapter.tokensCostTooltip);
+    });
+
+    it('still shows $0.00 with pricing-table tooltip for measurable zero-cost sessions', () => {
+      const zeroCostData = { ...mockData, estimated_usd: '0.00' };
+      render(<TokensCard data={zeroCostData} loading={false} provider="claude-code" />);
+      expect(screen.getByText('$0.00')).toBeInTheDocument();
     });
   });
 });

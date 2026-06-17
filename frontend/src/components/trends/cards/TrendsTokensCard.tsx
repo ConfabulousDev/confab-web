@@ -7,6 +7,7 @@ import {
   providerLabel,
   getProviderMetadataOrFallback,
 } from '@/utils/providers';
+import { getAdapter, isTokensMeasurable } from '@/providers/registry';
 import type {
   TrendsTokensCard as TrendsTokensCardData,
   TrendsTokensPerProvider,
@@ -38,10 +39,23 @@ interface TrendsTokensCardProps {
   // 2hh1: when a model filter is active, flag that it's session-level — these
   // totals still reflect full-session cost, not just the selected model.
   modelFilterActive?: boolean;
+  /** Provider ids present in the trends window (st5f unmeasured-cost caveat). */
+  providersPresent?: string[];
 }
 
 const MODEL_FILTER_CAVEAT =
   'A model filter is active. It narrows to sessions that used the selected model(s); these totals still reflect full-session cost, not just that model.';
+
+const UNMEASURED_TOKENS_CAVEAT =
+  "Some providers (e.g. Cursor) don't include token or cost data in synced transcripts; their sections show as unavailable rather than $0.";
+
+function UnavailableMetric({ tooltip }: { tooltip?: string }) {
+  return (
+    <span className={styles.unavailableMetric} title={tooltip}>
+      Not available
+    </span>
+  );
+}
 
 function formatChartDate(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00');
@@ -138,19 +152,36 @@ function CacheRow({
 }
 
 // Inner rows shared by single-provider mode and per-provider sections.
-function TokensStatRows({ data }: { data: TrendsTokensPerProvider }) {
+function TokensStatRows({
+  data,
+  unmeasured = false,
+  tooltip,
+}: {
+  data: TrendsTokensPerProvider;
+  unmeasured?: boolean;
+  tooltip?: string;
+}) {
   const totalTokens = data.total_input_tokens + data.total_output_tokens;
   return (
     <>
-      <StatRow label="Total Tokens" value={formatTokenCount(totalTokens)} />
+      <StatRow
+        label="Total Tokens"
+        value={unmeasured ? <UnavailableMetric tooltip={tooltip} /> : formatTokenCount(totalTokens)}
+      />
       <StatRow
         label="Input / Output"
-        value={`${formatTokenCount(data.total_input_tokens)} / ${formatTokenCount(data.total_output_tokens)}`}
+        value={
+          unmeasured
+            ? <UnavailableMetric tooltip={tooltip} />
+            : `${formatTokenCount(data.total_input_tokens)} / ${formatTokenCount(data.total_output_tokens)}`
+        }
       />
-      <CacheRow
-        cacheCreation={data.total_cache_creation_tokens}
-        cacheRead={data.total_cache_read_tokens}
-      />
+      {!unmeasured && (
+        <CacheRow
+          cacheCreation={data.total_cache_creation_tokens}
+          cacheRead={data.total_cache_read_tokens}
+        />
+      )}
     </>
   );
 }
@@ -162,20 +193,39 @@ interface TrendsTokensPerProviderListProps {
 function TrendsTokensPerProviderList({ entries }: TrendsTokensPerProviderListProps) {
   return (
     <div className={styles.providerSections}>
-      {entries.map(([providerId, e]) => (
-        <section key={providerId} className={styles.providerSection}>
-          <header className={styles.providerHeader}>{providerLabel(providerId)}</header>
-          <div className={styles.providerRows}>
-            <StatRow label="Cost" value={<CostAmount usd={parseFloat(e.total_cost_usd)} />} />
-            <TokensStatRows data={e} />
-          </div>
-        </section>
-      ))}
+      {entries.map(([providerId, e]) => {
+        const measurable = isTokensMeasurable(providerId);
+        const tooltip = measurable ? undefined : getAdapter(providerId).tokensCostTooltip;
+        return (
+          <section key={providerId} className={styles.providerSection}>
+            <header className={styles.providerHeader}>{providerLabel(providerId)}</header>
+            <div className={styles.providerRows}>
+              <StatRow
+                label="Cost"
+                value={
+                  measurable
+                    ? <CostAmount usd={parseFloat(e.total_cost_usd)} />
+                    : <UnavailableMetric tooltip={tooltip} />
+                }
+              />
+              <TokensStatRows
+                data={e}
+                unmeasured={!measurable}
+                tooltip={tooltip}
+              />
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
 
-export function TrendsTokensCard({ data, modelFilterActive = false }: TrendsTokensCardProps) {
+export function TrendsTokensCard({
+  data,
+  modelFilterActive = false,
+  providersPresent = [],
+}: TrendsTokensCardProps) {
   const perProviderEntries = useMemo(
     () =>
       data
@@ -215,20 +265,41 @@ export function TrendsTokensCard({ data, modelFilterActive = false }: TrendsToke
   // The fallback path always emits exactly one stack key, so length > 1
   // implies real per-provider stacking and the breakdown is meaningful.
   const tooltipShowBreakdown = stackProviderIds.length > 1;
+  const unmeasuredPresent = providersPresent.some((id) => !isTokensMeasurable(id));
+  const singleProviderId = perProviderEntries.length === 1 ? perProviderEntries[0]![0] : null;
+  const singleUnmeasured =
+    !multiProvider && singleProviderId != null && !isTokensMeasurable(singleProviderId);
+  const singleTooltip = singleUnmeasured ? getAdapter(singleProviderId!).tokensCostTooltip : undefined;
+  const cardCaveat = modelFilterActive
+    ? MODEL_FILTER_CAVEAT
+    : unmeasuredPresent
+      ? UNMEASURED_TOKENS_CAVEAT
+      : undefined;
 
   return (
     <TrendsCard
       title="Tokens & Cost"
       icon={TokenIcon}
-      caveat={modelFilterActive ? MODEL_FILTER_CAVEAT : undefined}
+      caveat={cardCaveat}
     >
       {/* h7xe: the grand-total headline renders identically in both modes, so
           it lives above the layout branch rather than inside each one. */}
-      <TotalCostRow usd={data.total_cost_usd} />
+      {singleUnmeasured ? (
+        <div className={styles.totalCostRow} data-testid="trends-total-cost">
+          <span className={styles.totalCostLabel}>Total Cost</span>
+          <UnavailableMetric tooltip={singleTooltip} />
+        </div>
+      ) : (
+        <TotalCostRow usd={data.total_cost_usd} />
+      )}
       {multiProvider ? (
         <TrendsTokensPerProviderList entries={perProviderEntries} />
       ) : (
-        <TokensStatRows data={data} />
+        <TokensStatRows
+          data={data}
+          unmeasured={singleUnmeasured}
+          tooltip={singleTooltip}
+        />
       )}
 
       {hasChartData && (

@@ -28,16 +28,29 @@ const REGISTRY: Record<ProviderId, OpaqueAdapter> = {
 };
 /* eslint-enable @typescript-eslint/consistent-type-assertions */
 
+function normalizeProviderId(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, '-');
+}
+
 function isProviderId(value: string): value is ProviderId {
   return PROVIDER_VALUES.some((id) => id === value);
 }
 
 export function getAdapter(provider: string): OpaqueAdapter {
-  const normalized = provider.toLowerCase().replace(/\s+/g, '-');
+  const normalized = normalizeProviderId(provider);
   if (!isProviderId(normalized)) {
     throw new Error(
       `[providers] no adapter registered for provider '${provider}' (normalized: '${normalized}')`,
     );
   }
   return REGISTRY[normalized];
+}
+
+/** True when synced transcripts include token/cost data (st5f). Unknown ids default true. */
+export function isTokensMeasurable(providerId: string): boolean {
+  const normalized = normalizeProviderId(providerId);
+  if (!isProviderId(normalized)) {
+    return true;
+  }
+  return getAdapter(normalized).tokensMeasurable !== false;
 }

@@ -5,14 +5,8 @@
 // opencodeAdapter. The transcript pane is the MVP (virtualized list + Cmd-F
 // search, no minimap/cost rail).
 //
-// Cursor-specific degradations (all from the wire format having no model / token
-// / cost / timestamp fields):
-//   - extractModel always returns undefined.
-//   - computeMeta has no per-line timestamp, so it always falls back to the
-//     session's firstSeen/lastSyncAt.
-//   - calculateMessageCost returns 0 (no usage on messages; backend serves
-//     empty tokens_v2 + no cursor pricing — cost UI stays hidden). Real Cursor
-//     cost tracking is a follow-up (kata 59m1).
+// Wire format has no model, token, cost, or per-line timestamp fields (st5f).
+// Session timing falls back to firstSeen/lastSyncAt; cost UI shows "Not available".
 
 import { useEffect } from 'react';
 import {
@@ -45,6 +39,7 @@ function cursorSessionMeta(fallback: SessionMetaFallback): SessionMetaResult {
 
 export const cursorAdapter: CursorAdapter = {
   id: 'cursor',
+  tokensMeasurable: false,
 
   async fetchInitial(sessionId, fileName, skipCache) {
     const parsed = await fetchParsedCursorTranscript(sessionId, fileName, skipCache);
@@ -89,11 +84,10 @@ export const cursorAdapter: CursorAdapter = {
   tokensCostTooltip:
     'Cursor transcripts do not include token or cost data, so per-session cost is not available.',
 
-  // Cursor JSONL has no per-message usage or cost, and the backend serves no
-  // cursor pricing — every message resolves to $0, so the cost UI stays hidden.
-  calculateMessageCost() {
-    return 0;
-  },
+  tokenSpeedUnavailableTooltip:
+    'Cursor transcripts do not include token counts or per-turn timing, so output token speed cannot be computed.',
+
+  calculateMessageCost: () => 0,
 
   useDeepLinkFilterReset(items, targetId, filters) {
     useEffect(() => {

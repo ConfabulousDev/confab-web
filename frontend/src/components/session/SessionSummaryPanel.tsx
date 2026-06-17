@@ -10,6 +10,8 @@ import type { SessionAnalytics, GitHubLink, AnalyticsCards } from '@/schemas/api
 import { getOrderedCards } from './cards';
 import GitHubLinksCard from './GitHubLinksCard';
 import { computeTokenSpeed } from '@/utils/tokenStats';
+import { isTokensMeasurable } from '@/providers/registry';
+import { DOCS_URL } from '@/utils/externalLinks';
 import styles from './SessionSummaryPanel.module.css';
 
 // Lookup maps for card grid layout classes
@@ -222,6 +224,7 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
       if (
         cardDef.key === 'conversation' ||
         cardDef.key === 'tokens' ||
+        cardDef.key === 'tokens_v2' ||
         cardDef.key === 'session' ||
         cardDef.key === 'code_activity'
       ) {
@@ -308,6 +311,18 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
       {regenerateError && (
         <Alert variant="error" onClose={() => setRegenerateError(null)}>
           {regenerateError}
+        </Alert>
+      )}
+
+      {!isTokensMeasurable(provider) && analytics && (
+        <Alert variant="info" className={styles.unmeasuredTokensCallout}>
+          Token and cost data are not recorded in Cursor&apos;s local agent transcript, so
+          Confab cannot compute per-session usage from synced files. Turn timing and token
+          speed are unavailable for the same reason.{' '}
+          <a href={`${DOCS_URL}/providers/cursor/#tokens-and-cost`} target="_blank" rel="noopener noreferrer">
+            Learn more
+          </a>
+          . Real Cursor usage from Cursor&apos;s Dashboard API is planned for a future release.
         </Alert>
       )}
 

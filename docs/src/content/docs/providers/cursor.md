@@ -34,7 +34,7 @@ There is no **Tokens** or **Cost** card for Cursor — see [Tokens and cost](#to
 - Cursor meters tokens server-side. The local agent transcript Confabulous ingests has no usable token counts — Cursor staff have confirmed the local `tokenCount` value is best-effort and unreliable.
 - Cursor billing is subscription and usage-pool based, so there is no per-message dollar figure to attribute to a session.
 
-Because there is no usable token data and no Cursor entry in the pricing table, the Tokens and Cost UI is hidden for Cursor sessions rather than showing zeros. Confabulous does not claim dollar-accurate cost tracking for Cursor.
+Instead of hiding the Tokens card or showing misleading zeros, Confabulous shows an info callout on the Session Summary tab and **"Not available"** placeholders (with tooltips) on token and cost rows. The session list cost column shows an em dash rather than `$0.00`. On Trends, when Cursor sessions are in the selected window, the Tokens & Cost card shows the same unavailable state for Cursor's section and an ⓘ caveat on the card title.
 
 Real Cursor cost analytics, sourced from Cursor's Dashboard / Admin API, are planned as future work — they are not part of this release.
 

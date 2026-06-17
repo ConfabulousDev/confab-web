@@ -318,3 +318,36 @@ export const MultiProviderSections: Story = {
     },
   },
 };
+
+/** st5f: mixed Claude + Cursor window — Cursor section shows unavailable, not $0.00. */
+export const MixedClaudeAndCursor: Story = {
+  args: {
+    providersPresent: ['claude-code', 'cursor'],
+    data: {
+      total_input_tokens: 5_000_000,
+      total_output_tokens: 2_000_000,
+      total_cache_creation_tokens: 100_000,
+      total_cache_read_tokens: 500_000,
+      total_cost_usd: '125.00',
+      daily_costs: [
+        { date: '2024-01-08', cost_usd: '125.00', per_provider: { 'claude-code': '125.00', cursor: '0' } },
+      ],
+      per_provider: {
+        'claude-code': {
+          total_input_tokens: 5_000_000,
+          total_output_tokens: 2_000_000,
+          total_cache_creation_tokens: 100_000,
+          total_cache_read_tokens: 500_000,
+          total_cost_usd: '125.00',
+        },
+        cursor: {
+          total_input_tokens: 0,
+          total_output_tokens: 0,
+          total_cache_creation_tokens: 0,
+          total_cache_read_tokens: 0,
+          total_cost_usd: '0',
+        },
+      },
+    },
+  },
+};

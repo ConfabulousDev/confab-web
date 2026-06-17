@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { ConversationCard } from './ConversationCard';
 import type { ConversationCardData } from '@/schemas/api';
+import { cursorAdapter } from '@/providers/cursorAdapter';
 
 function makeData(overrides: Partial<ConversationCardData> = {}): ConversationCardData {
   return {
@@ -135,6 +136,16 @@ describe('ConversationCard', () => {
       const tip = tooltipFor('Assistant utilization', getByText);
       expect(tip).toMatch(/Codex/);
       expect(tip).not.toMatch(/Claude/);
+    });
+  });
+
+  describe('unmeasured provider token speed (st5f)', () => {
+    it('uses cursor-specific tooltip when token speed is unavailable', () => {
+      const { getByText } = render(
+        <ConversationCard data={makeData()} loading={false} provider="cursor" tokenSpeed={null} />
+      );
+      const row = getByText('Token speed').closest('[title]');
+      expect(row?.getAttribute('title')).toBe(cursorAdapter.tokenSpeedUnavailableTooltip);
     });
   });
 });

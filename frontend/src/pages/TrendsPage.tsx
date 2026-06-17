@@ -162,7 +162,11 @@ function TrendsPage() {
                     : null
                 }
               />
-              <TrendsTokensCard data={data.cards.tokens} modelFilterActive={modelFilterActive} />
+              <TrendsTokensCard
+                data={data.cards.tokens}
+                modelFilterActive={modelFilterActive}
+                providersPresent={data.providers_present}
+              />
               <TrendsCostByModelCard data={data.cards.cost_by_model} />
               <TrendsCostDistributionCard
                 data={data.cards.cost_distribution}

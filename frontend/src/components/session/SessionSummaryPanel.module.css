@@ -533,3 +533,13 @@
   color: var(--color-text-secondary);
   font-size: var(--font-sm);
 }
+
+/* st5f: muted placeholder when a provider's transcript lacks token/cost data */
+.unavailableMetric {
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
+.unmeasuredTokensCallout {
+  margin-bottom: var(--spacing-md);
+}

@@ -140,11 +140,15 @@ export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   extendCostTooltip?(base: string[], usage: TokenUsage, message: TItem): string[];
 
   /**
-   * Per-session Tokens summary card tooltip for the "Estimated cost" row.
-   * Each provider supplies its own copy (5-minute prompt caching note for
-   * Claude, OpenAI-pricing note for Codex). CF-436.
+   * When false, synced transcripts lack token/cost fields (st5f). Omitted = true.
    */
+  readonly tokensMeasurable?: boolean;
+
+  /** Tokens card "Estimated cost" row tooltip (CF-436). Also used for unmeasured UX. */
   readonly tokensCostTooltip: string;
+
+  /** Conversation card "Token speed" tooltip when timing or output tokens are missing. */
+  readonly tokenSpeedUnavailableTooltip?: string;
 
   /**
    * Per-session Tokens summary card tooltip for the "Fast mode" row.
