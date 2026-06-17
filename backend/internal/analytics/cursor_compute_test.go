@@ -251,6 +251,51 @@ func TestComputeFromCursorRolloutSessionModelsUsedNotNull(t *testing.T) {
 	}
 }
 
+// TestComputeFromCursorRolloutModelPopulatesModelsUsed is the zsr6 contract:
+// when the per-session model recovered from the cursor_session_meta sidecar is
+// threaded into bounds, the session card's models_used must surface exactly that
+// single model. Cursor JSONL has no per-line model, so this is the only source.
+func TestComputeFromCursorRolloutModelPopulatesModelsUsed(t *testing.T) {
+	messages := loadCursorFixtureMessages(t)
+	bounds := CursorSessionBounds{Model: "composer-2.5"}
+
+	result := ComputeFromCursorRollout(context.Background(), messages, bounds)
+
+	if got := result.ModelsUsed; len(got) != 1 || got[0] != "composer-2.5" {
+		t.Errorf("ModelsUsed = %v, want [composer-2.5]", got)
+	}
+}
+
+// TestComputeFromCursorRolloutNoModelLeavesModelsEmpty is the absent-metadata
+// regression: with no sidecar model, models_used stays an empty (non-nil) slice
+// — never an invented model, never null (y0kc).
+func TestComputeFromCursorRolloutNoModelLeavesModelsEmpty(t *testing.T) {
+	messages := loadCursorFixtureMessages(t)
+
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+
+	if result.ModelsUsed == nil {
+		t.Fatal("ModelsUsed = nil, want non-nil empty slice (must marshal as [], not null)")
+	}
+	if len(result.ModelsUsed) != 0 {
+		t.Errorf("ModelsUsed = %v, want [] (no model in bounds → no invented model)", result.ModelsUsed)
+	}
+}
+
+// TestComputeFromCursorRolloutEmptyModelLeavesModelsEmpty guards the empty-string
+// edge: a blank model (should never reach here — the handler skips empty) still
+// yields [], never [""].
+func TestComputeFromCursorRolloutEmptyModelLeavesModelsEmpty(t *testing.T) {
+	messages := loadCursorFixtureMessages(t)
+	bounds := CursorSessionBounds{Model: ""}
+
+	result := ComputeFromCursorRollout(context.Background(), messages, bounds)
+
+	if len(result.ModelsUsed) != 0 {
+		t.Errorf("ModelsUsed = %v, want [] for an empty model", result.ModelsUsed)
+	}
+}
+
 // TestComputeCursorBoundsStartPrecedence verifies created_at is preferred over
 // first_seen as the start anchor, and last_message_at over last_sync_at as the
 // end anchor (start = created_at ?? first_seen; end = last_message_at ??

@@ -5112,4 +5112,205 @@ func TestSyncCursor_HTTP_Integration(t *testing.T) {
 			t.Errorf("first_user_message = %v, want %q stored verbatim for a non-cursor provider", firstUserMessage, wrapped)
 		}
 	})
+
+	// zsr6: a cursor chunk carrying metadata.model persists the model into the
+	// cursor_session_meta sidecar (the analytics step reads it back for
+	// models_used).
+	t.Run("chunk with metadata.model persists into cursor_session_meta", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-model",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-model.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		model := "composer-2.5"
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-model.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				Model: &model,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var stored string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT model FROM cursor_session_meta WHERE session_id = $1", sessionID).Scan(&stored); err != nil {
+			t.Fatalf("query cursor_session_meta.model: %v", err)
+		}
+		if stored != model {
+			t.Errorf("cursor_session_meta.model = %q, want %q", stored, model)
+		}
+	})
+
+	// zsr6 regression: a cursor chunk with no metadata.model writes no sidecar
+	// row (analytics then leaves models_used empty, never invents a model).
+	t.Run("chunk without metadata.model writes no cursor_session_meta row", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-no-model",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-no-model.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-no-model.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var count int
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT COUNT(*) FROM cursor_session_meta WHERE session_id = $1", sessionID).Scan(&count); err != nil {
+			t.Fatalf("count cursor_session_meta rows: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("cursor_session_meta row count = %d, want 0 (no model → no row)", count)
+		}
+	})
+
+	// zsr6: first-non-empty-wins — a second chunk with a different model must not
+	// clobber the first recovered model.
+	t.Run("second chunk model does not clobber the first", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-model-fww",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-model-fww.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		first := "composer-2.5"
+		firstResp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-model-fww.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata:  &api.SyncChunkMetadata{Model: &first},
+		})
+		if err != nil {
+			t.Fatalf("first chunk failed: %v", err)
+		}
+		firstResp.Body.Close()
+
+		second := "gpt-5"
+		secondResp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-model-fww.jsonl",
+			FileType:  "transcript",
+			FirstLine: 2,
+			Lines:     []string{`{"role":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}`},
+			Metadata:  &api.SyncChunkMetadata{Model: &second},
+		})
+		if err != nil {
+			t.Fatalf("second chunk failed: %v", err)
+		}
+		defer secondResp.Body.Close()
+		testutil.RequireStatus(t, secondResp, http.StatusOK)
+
+		var stored string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT model FROM cursor_session_meta WHERE session_id = $1", sessionID).Scan(&stored); err != nil {
+			t.Fatalf("query cursor_session_meta.model: %v", err)
+		}
+		if stored != first {
+			t.Errorf("cursor_session_meta.model = %q, want %q (first non-empty model wins)", stored, first)
+		}
+	})
+
+	// zsr6: an over-length model is rejected at the wire (400), no row written.
+	t.Run("over-length metadata.model is rejected", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-model-long",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-model-long.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		long := strings.Repeat("x", validation.MaxCursorModelLength+1)
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-model-long.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata:  &api.SyncChunkMetadata{Model: &long},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+	})
 }

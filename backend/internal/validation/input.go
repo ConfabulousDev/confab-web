@@ -224,6 +224,20 @@ const (
 	MaxCodexAgentPathLength     = 8192
 )
 
+// MaxCursorModelLength matches the cursor_session_meta.model column width in
+// migration 000055.
+const MaxCursorModelLength = 255
+
+// ValidateCursorModel enforces the length limit on the Cursor sync chunk's
+// metadata.model field (zsr6). An empty/absent model is valid — the handler
+// simply skips persistence — so only an over-length value is rejected here.
+func ValidateCursorModel(model string) error {
+	if len(model) > MaxCursorModelLength {
+		return errMaxLength("model", MaxCursorModelLength)
+	}
+	return nil
+}
+
 // ValidateCodexRolloutMetadata enforces the codex_rollout sub-block contract
 // from POST /api/v1/sync/chunk. The handler calls this only when the request
 // carries the block; the provider-mismatch check (codex sessions only) is

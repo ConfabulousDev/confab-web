@@ -14,6 +14,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbcodex "github.com/ConfabulousDev/confab-web/internal/db/codex"
+	dbcursor "github.com/ConfabulousDev/confab-web/internal/db/cursor"
 	dbevents "github.com/ConfabulousDev/confab-web/internal/db/events"
 	dbgithub "github.com/ConfabulousDev/confab-web/internal/db/github"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
@@ -113,10 +114,9 @@ type SyncChunkMetadata struct {
 	// CLI from ~/.cursor/.../state.vscdb (composerData.modelConfig.modelName,
 	// joined by composerId == session-uuid). Cursor JSONL carries no model
 	// field, so this is the only model signal. Best-effort: omit when the CLI
-	// cannot recover it. NOTE: surfacing this into analytics ModelsUsed requires
-	// a per-session model store that does not exist without a DB migration
-	// (out of scope for the file-based intake ticket); accepted on the wire and
-	// documented now, persisted by a follow-up.
+	// cannot recover it. On a cursor transcript chunk a non-empty value is
+	// persisted into the cursor_session_meta sidecar (zsr6), where the analytics
+	// step reads it back to populate the session card's ModelsUsed.
 	Model *string `json:"model,omitempty"`
 }
 
@@ -378,6 +378,14 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// zsr6: validate the Cursor metadata.model length (persisted into the
+		// cursor_session_meta sidecar below). Empty/absent is valid (skipped).
+		if req.Metadata.Model != nil {
+			if err := validation.ValidateCursorModel(*req.Metadata.Model); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
 		// CF-494: validate git_info shape (new remotes/tracking_remote fields).
 		if req.Metadata.GitInfo != nil && req.FileType == "transcript" {
 			if err := validation.ValidateGitInfo(req.Metadata.GitInfo); err != nil {
@@ -628,6 +636,26 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 				"session_id", req.SessionID,
 				"thread_uuid", cr.ThreadUUID)
 			respondError(w, http.StatusInternalServerError, "Failed to record codex rollout")
+			return
+		}
+	}
+
+	// Cursor session model sidecar (zsr6). Cursor JSONL carries no model field,
+	// so the CLI sends the model it recovered from state.vscdb as metadata.model.
+	// Persist it into cursor_session_meta so the analytics step can populate the
+	// session card's models_used. Gated on a cursor transcript chunk with a
+	// non-empty model; the upsert is first-non-empty-wins, so retries and later
+	// chunks are safe and never clobber the first recovered name. Runs after S3 +
+	// sync state commit, like the codex sidecar, so a failure here leaves only a
+	// delayed model registration the next chunk reconciles.
+	if provider == models.ProviderCursor && req.FileType == "transcript" &&
+		req.Metadata != nil && req.Metadata.Model != nil && *req.Metadata.Model != "" {
+		cursorStore := &dbcursor.Store{DB: s.db}
+		if err := cursorStore.UpsertModel(updateCtx, req.SessionID, *req.Metadata.Model); err != nil {
+			log.Error("Failed to upsert cursor session model",
+				"error", err,
+				"session_id", req.SessionID)
+			respondError(w, http.StatusInternalServerError, "Failed to record cursor session model")
 			return
 		}
 	}

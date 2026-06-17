@@ -22,6 +22,12 @@ type CursorSessionBounds struct {
 	FirstSeen     *time.Time // start anchor fallback (session init time)
 	LastMessageAt *time.Time // end anchor, preferred (meta.json updatedAtMs)
 	LastSyncAt    *time.Time // end anchor fallback (last chunk upload time)
+
+	// Model is the per-session model name recovered from the cursor_session_meta
+	// sidecar (zsr6). Cursor JSONL carries no per-line model, so this is the only
+	// model signal. Empty when the CLI never sent metadata.model — compute then
+	// leaves models_used empty rather than inventing a model.
+	Model string
 }
 
 // cursorSessionWindow resolves the start/end anchors per the precedence above:
@@ -106,11 +112,16 @@ func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage, bo
 // anchor is missing or the window is non-positive (end <= start) — Cursor never
 // invents a zero or negative span.
 func computeCursorSession(out *ComputeResult, messages []*CursorMessage, bounds CursorSessionBounds) {
-	// Cursor JSONL carries no per-line model in v1 (the deferred model cluster
-	// owns populating real names). Initialize to a non-nil empty slice so the
-	// session card marshals models_used as [] rather than null — the frontend's
-	// required SessionCardDataSchema.models_used rejects null (y0kc).
+	// Cursor JSONL carries no per-line model. The model name (when known) comes
+	// from the cursor_session_meta sidecar via bounds.Model (zsr6); when present
+	// it is the session's sole model. Initialize to a non-nil empty slice so the
+	// session card marshals models_used as [] rather than null when no model was
+	// recovered — the frontend's required SessionCardDataSchema.models_used
+	// rejects null (y0kc). Never invent a model: leave [] when bounds.Model is "".
 	out.ModelsUsed = []string{}
+	if bounds.Model != "" {
+		out.ModelsUsed = []string{bounds.Model}
+	}
 	if start, end := cursorSessionWindow(bounds); start != nil && end != nil {
 		if d := end.Sub(*start).Milliseconds(); d > 0 {
 			out.DurationMs = &d
