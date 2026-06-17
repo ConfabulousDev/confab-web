@@ -52,8 +52,8 @@ func TestParseCursorJSONLSeparatesConversationFromMarkers(t *testing.T) {
 	if users != 3 {
 		t.Errorf("user messages = %d, want 3", users)
 	}
-	if assistants != 6 {
-		t.Errorf("assistant messages = %d, want 6", assistants)
+	if assistants != 8 {
+		t.Errorf("assistant messages = %d, want 8", assistants)
 	}
 }
 
@@ -66,8 +66,8 @@ func TestComputeFromCursorRolloutSession(t *testing.T) {
 	if result.UserMessages != 3 {
 		t.Errorf("UserMessages = %d, want 3", result.UserMessages)
 	}
-	if result.AssistantMessages != 6 {
-		t.Errorf("AssistantMessages = %d, want 6", result.AssistantMessages)
+	if result.AssistantMessages != 8 {
+		t.Errorf("AssistantMessages = %d, want 8", result.AssistantMessages)
 	}
 	// Cursor JSONL has no per-line timestamps, so duration is unknowable.
 	if result.DurationMs != nil {
@@ -83,7 +83,7 @@ func TestComputeFromCursorRolloutTools(t *testing.T) {
 
 	wantTools := map[string]int{
 		"Read": 1, "Grep": 1, "Glob": 1, "SemanticSearch": 1, "Task": 1,
-		"StrReplace": 1, "Write": 1, "Shell": 1, "Delete": 1,
+		"StrReplace": 1, "Write": 1, "Shell": 3, "Delete": 1,
 		"WebSearch": 1, "AskQuestion": 1,
 	}
 	var wantTotal int
@@ -166,10 +166,10 @@ func TestComputeFromCursorRolloutAlwaysWritesEmptyTokensV2(t *testing.T) {
 // signal rather than dropped silently.
 func TestComputeFromCursorRolloutTurnEndedErrorTolerated(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	// Parse must succeed and yield the 9 conversation messages despite the
+	// Parse must succeed and yield the 11 conversation messages despite the
 	// error turn marker.
-	if len(messages) != 9 {
-		t.Errorf("parsed conversation messages = %d, want 9", len(messages))
+	if len(messages) != 11 {
+		t.Errorf("parsed conversation messages = %d, want 11", len(messages))
 	}
 }
 

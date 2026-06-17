@@ -1,6 +1,10 @@
 package analytics
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"regexp"
+	"strings"
+)
 
 // Cursor agent-transcript JSONL wire shapes (gevp / fy5q spec).
 //
@@ -55,6 +59,28 @@ type CursorBlock struct {
 	Text  string          `json:"text,omitempty"`
 	Name  string          `json:"name,omitempty"`
 	Input json.RawMessage `json:"input,omitempty"`
+}
+
+// trailingBareRedacted matches a trailing bare `[REDACTED]` placeholder with any
+// surrounding whitespace. It deliberately matches only the bare token (no
+// colon/type) so Confab CLI `[REDACTED:TYPE]` markers — a different contract for
+// a real redacted secret — stay intact.
+var trailingBareRedacted = regexp.MustCompile(`\s*\[REDACTED\]\s*$`)
+
+// cleanCursorAssistantText strips Cursor's native bare `[REDACTED]` placeholder
+// from assistant text. Cursor's on-disk JSONL appends a bare `[REDACTED]` to
+// nearly every assistant turn (parent wkkd) — either as the entire text block on
+// tool-only turns or as a trailing suffix after the narrative; it is scaffolding
+// noise, not a counted secret. This removes a trailing bare `[REDACTED]` and
+// returns "" when the block's whole content was the placeholder, so callers can
+// omit an empty assistant element. Confab CLI `[REDACTED:TYPE]` markers are
+// never touched. Mirrors the frontend cleanCursorAssistantText.
+func cleanCursorAssistantText(raw string) string {
+	cleaned := trailingBareRedacted.ReplaceAllString(raw, "")
+	if strings.TrimSpace(cleaned) == "" {
+		return ""
+	}
+	return cleaned
 }
 
 // stringInput decodes the block's tool input and returns the string value at

@@ -62,7 +62,10 @@ func PrepareCursorTranscript(messages []*CursorMessage) (string, map[int]string)
 	return b.String(), idMap
 }
 
-// joinCursorText concatenates the text of every text block in a message.
+// joinCursorText concatenates the text of every text block in a message, then
+// strips Cursor's native bare `[REDACTED]` placeholder (fa3h). When only the
+// placeholder was present the result is "" — PrepareCursorTranscript then omits
+// the empty assistant element while still rendering the line's tool calls.
 func joinCursorText(content []CursorBlock) string {
 	var segments []string
 	for _, block := range content {
@@ -70,7 +73,7 @@ func joinCursorText(content []CursorBlock) string {
 			segments = append(segments, block.Text)
 		}
 	}
-	return strings.Join(segments, "\n")
+	return cleanCursorAssistantText(strings.Join(segments, "\n"))
 }
 
 // cursorToolInputSummary renders a tool call's most salient input as a compact
