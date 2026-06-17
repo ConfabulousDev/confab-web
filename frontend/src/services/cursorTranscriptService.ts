@@ -116,6 +116,28 @@ function toolInputSummary(input: Record<string, unknown> | undefined): string {
   return '';
 }
 
+// Cursor's on-disk JSONL appends a bare `[REDACTED]` to nearly every assistant
+// turn (parent wkkd) — either as the entire text block on tool-only turns or as
+// a trailing suffix after the narrative. It is provider scaffolding noise, not a
+// counted secret, so it is stripped before display, search, and recap.
+//
+// Ground truth (real ~/.cursor transcripts, fa3h): the bare token is ALWAYS
+// either the whole trimmed block or a trailing suffix — never embedded
+// mid-sentence. Confab CLI `[REDACTED:TYPE]` markers are a DIFFERENT contract
+// (a real redacted secret) and must stay visible — we match only the bare token
+// with no colon/type.
+const TRAILING_BARE_REDACTED = /\s*\[REDACTED\]\s*$/;
+
+/** Strip Cursor's native bare `[REDACTED]` placeholder from assistant text.
+ *  Removes a trailing bare `[REDACTED]` (with any surrounding whitespace) and
+ *  returns `""` when the block's entire content was the placeholder, so the
+ *  caller can omit an empty assistant row. Never touches Confab CLI
+ *  `[REDACTED:TYPE]` markers. */
+export function cleanCursorAssistantText(raw: string): string {
+  const cleaned = raw.replace(TRAILING_BARE_REDACTED, '');
+  return cleaned.trim().length === 0 ? '' : cleaned;
+}
+
 /** Transform accumulated raw Cursor entries into the render-item stream. Pure +
  *  synchronous; safe inside `useMemo`. Cursor wire lines carry no stable id, so
  *  render-item ids are synthetic and line-derived: `${lineIndex}` for
@@ -145,8 +167,13 @@ export function normalizeCursorLines(rawLines: CursorRawEntry[]): CursorRenderIt
     }
 
     // assistant: emit one assistant item (narrative) plus one tool item per
-    // tool_use block, in wire order.
-    if (text.length > 0) items.push({ kind: 'assistant', id: `${lineIndex}`, text });
+    // tool_use block, in wire order. Strip Cursor's native bare `[REDACTED]`
+    // first; when nothing narrative remains, omit the assistant row entirely so
+    // a tool-only turn shows only its tool rows (fa3h).
+    const assistantText = cleanCursorAssistantText(text);
+    if (assistantText.length > 0) {
+      items.push({ kind: 'assistant', id: `${lineIndex}`, text: assistantText });
+    }
 
     blocks.forEach((block, blockIndex) => {
       const tool = asCursorToolUseBlock(block);

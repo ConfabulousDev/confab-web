@@ -9,6 +9,7 @@ import {
   parseCursorJSONL,
   normalizeCursorLines,
   extractCursorModel,
+  cleanCursorAssistantText,
 } from './cursorTranscriptService';
 
 function line(obj: unknown): string {
@@ -102,6 +103,102 @@ describe('normalizeCursorLines', () => {
     expect(tools.length).toBeGreaterThan(0);
     for (const t of tools) {
       expect(t).not.toHaveProperty('output');
+    }
+  });
+});
+
+// fa3h: Cursor's on-disk JSONL appends a bare `[REDACTED]` to nearly every
+// assistant turn — either as a trailing suffix after narrative or as the
+// entire text block on tool-only turns. Strip it during normalize. Never touch
+// Confab CLI `[REDACTED:TYPE]` markers (different contract — stay visible).
+describe('cleanCursorAssistantText (fa3h)', () => {
+  it('strips a trailing "\\n\\n[REDACTED]" suffix and preserves the narrative', () => {
+    expect(cleanCursorAssistantText('Checking the repo for open alerts.\n\n[REDACTED]')).toBe(
+      'Checking the repo for open alerts.',
+    );
+  });
+
+  it('strips a trailing single-newline "\\n[REDACTED]" suffix', () => {
+    expect(cleanCursorAssistantText('Fetching details.\n[REDACTED]')).toBe('Fetching details.');
+  });
+
+  it('returns "" for a block whose entire content is "[REDACTED]"', () => {
+    expect(cleanCursorAssistantText('[REDACTED]')).toBe('');
+  });
+
+  it('returns "" for whitespace + "[REDACTED]" only', () => {
+    expect(cleanCursorAssistantText('  \n[REDACTED]\n  ')).toBe('');
+  });
+
+  it('handles carriage returns before the placeholder', () => {
+    expect(cleanCursorAssistantText('Doing work.\r\n\r\n[REDACTED]')).toBe('Doing work.');
+  });
+
+  it('leaves text with no placeholder untouched', () => {
+    expect(cleanCursorAssistantText('Just narrative, no redaction.')).toBe(
+      'Just narrative, no redaction.',
+    );
+  });
+
+  it('NEVER strips a Confab CLI [REDACTED:TYPE] marker (different contract)', () => {
+    expect(cleanCursorAssistantText('See [REDACTED:GITHUB_TOKEN] in the env.')).toBe(
+      'See [REDACTED:GITHUB_TOKEN] in the env.',
+    );
+    // even when trailing
+    expect(cleanCursorAssistantText('Token is [REDACTED:GITHUB_TOKEN]')).toBe(
+      'Token is [REDACTED:GITHUB_TOKEN]',
+    );
+  });
+});
+
+describe('normalizeCursorLines [REDACTED] handling (fa3h)', () => {
+  const narrativePlusRedactedPlusTool = {
+    role: 'assistant',
+    message: {
+      content: [
+        { type: 'text', text: 'Checking the repo for open alerts.\n\n[REDACTED]' },
+        { type: 'tool_use', name: 'Shell', input: { command: 'gh api alerts' } },
+      ],
+    },
+  };
+
+  const redactedOnlyPlusTool = {
+    role: 'assistant',
+    message: {
+      content: [
+        { type: 'text', text: '[REDACTED]' },
+        { type: 'tool_use', name: 'Shell', input: { command: 'gh api alerts' } },
+      ],
+    },
+  };
+
+  it('strips the trailing [REDACTED] but keeps the assistant narrative and the tool row', () => {
+    const items = normalizeCursorLines(rawOf(narrativePlusRedactedPlusTool));
+    expect(items.map((i) => i.kind)).toEqual(['assistant', 'tool']);
+    const assistant = items[0];
+    if (assistant?.kind === 'assistant') {
+      expect(assistant.text).toBe('Checking the repo for open alerts.');
+      expect(assistant.text).not.toContain('[REDACTED]');
+    }
+  });
+
+  it('omits the assistant item entirely on a [REDACTED]-only line but keeps the tool row', () => {
+    const items = normalizeCursorLines(rawOf(redactedOnlyPlusTool));
+    expect(items.map((i) => i.kind)).toEqual(['tool']);
+  });
+
+  it('preserves a Confab CLI [REDACTED:TYPE] marker in normalized assistant text', () => {
+    const withTypedMarker = {
+      role: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'Using [REDACTED:GITHUB_TOKEN] for auth.' }],
+      },
+    };
+    const items = normalizeCursorLines(rawOf(withTypedMarker));
+    const assistant = items[0];
+    expect(assistant?.kind).toBe('assistant');
+    if (assistant?.kind === 'assistant') {
+      expect(assistant.text).toContain('[REDACTED:GITHUB_TOKEN]');
     }
   });
 });

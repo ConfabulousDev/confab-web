@@ -2,6 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { userEvent, within, waitFor } from 'storybook/test';
 import CursorTranscriptPane from './CursorTranscriptPane';
 import type { CursorRenderItem } from './cursorCategories';
+import {
+  parseCursorJSONL,
+  normalizeCursorLines,
+} from '@/services/cursorTranscriptService';
 
 const meta: Meta<typeof CursorTranscriptPane> = {
   title: 'Session/CursorTranscriptPane',
@@ -72,6 +76,67 @@ export const SearchActive: Story = {
       description: {
         story:
           'Cmd-F opens the shared transcript search bar (useTranscriptSearch). Typing a query highlights matches inline across user / assistant / tool rows.',
+      },
+    },
+  },
+};
+
+// fa3h: Cursor's on-disk JSONL appends a bare `[REDACTED]` to nearly every
+// assistant turn — as a trailing suffix after narrative, or as the entire text
+// block on tool-only turns. Normalizing these raw lines strips the placeholder:
+// the first assistant row shows narrative only, and the second (text was only
+// `[REDACTED]`) drops its assistant bubble while its Shell tool row still
+// renders. A Confab CLI `[REDACTED:TYPE]` marker is a different contract and
+// stays visible.
+const redactedRawJSONL = [
+  JSON.stringify({
+    role: 'user',
+    message: { content: [{ type: 'text', text: 'Check for open Dependabot alerts.' }] },
+  }),
+  JSON.stringify({
+    role: 'assistant',
+    message: {
+      content: [
+        {
+          type: 'text',
+          text: 'Checking the repo for open Dependabot alerts via the GitHub CLI.\n\n[REDACTED]',
+        },
+        { type: 'tool_use', name: 'Shell', input: { command: 'gh api dependabot/alerts' } },
+      ],
+    },
+  }),
+  JSON.stringify({
+    role: 'assistant',
+    message: {
+      content: [
+        { type: 'text', text: '[REDACTED]' },
+        { type: 'tool_use', name: 'Shell', input: { command: 'gh pr list --state open' } },
+      ],
+    },
+  }),
+  JSON.stringify({
+    role: 'assistant',
+    message: {
+      content: [{ type: 'text', text: 'The token [REDACTED:GITHUB_TOKEN] is set in the env.' }],
+    },
+  }),
+].join('\n');
+
+const redactedItems = normalizeCursorLines(parseCursorJSONL(redactedRawJSONL).rawLines);
+
+export const RedactedStripped: Story = {
+  args: {
+    sessionId: 'demo',
+    items: redactedItems,
+    filteredItems: redactedItems,
+    loading: false,
+    error: null,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Cursor's native bare `[REDACTED]` is stripped during normalize (fa3h): trailing suffixes vanish, a `[REDACTED]`-only turn drops its assistant bubble but keeps its tool row, and a Confab CLI `[REDACTED:TYPE]` marker stays visible.",
       },
     },
   },
