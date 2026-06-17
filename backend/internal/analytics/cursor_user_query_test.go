@@ -41,7 +41,7 @@ func TestParseCursorUserPrompt(t *testing.T) {
 // the human prompt inside it still does.
 func TestExtractCursorSearchTextStripsUserQueryEnvelope(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	text := extractCursorSearchText(messages)
+	text := extractCursorSearchText(mainOnly(messages))
 
 	if strings.Contains(text, "<user_query>") || strings.Contains(text, "</user_query>") {
 		t.Errorf("search text must not contain the <user_query> envelope tags:\n%s", text)

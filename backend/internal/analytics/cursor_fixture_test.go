@@ -271,6 +271,97 @@ func TestCursorFixtureNotClaudeEnvelope(t *testing.T) {
 	})
 }
 
+// cursorSubagentFixturePath locates the sanitized Cursor subagent transcript
+// fixture (wc9t). Cursor stores subagent transcripts under
+// agent-transcripts/<root>/subagents/<uuid>.jsonl with the identical line
+// envelope as the main thread plus a subagent-only UpdateCurrentStep marker.
+var cursorSubagentFixturePath = filepath.Join("testdata", "cursor", "subagent.jsonl")
+
+// readCursorSubagentFixture loads every JSONL line from the subagent fixture,
+// failing the test if any line is not a valid JSON object.
+func readCursorSubagentFixture(t *testing.T) []cursorLine {
+	t.Helper()
+	content, err := os.ReadFile(cursorSubagentFixturePath)
+	if err != nil {
+		t.Fatalf("read cursor subagent fixture: %v", err)
+	}
+	var lines []cursorLine
+	sc := bufio.NewScanner(bytes.NewReader(content))
+	sc.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	for n := 1; sc.Scan(); n++ {
+		raw := bytes.TrimSpace(sc.Bytes())
+		if len(raw) == 0 {
+			continue
+		}
+		var line cursorLine
+		if err := json.Unmarshal(raw, &line); err != nil {
+			t.Fatalf("subagent line %d is not a valid JSON object: %v", n, err)
+		}
+		lines = append(lines, line)
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan cursor subagent fixture: %v", err)
+	}
+	if len(lines) == 0 {
+		t.Fatal("cursor subagent fixture is empty")
+	}
+	return lines
+}
+
+// TestCursorSubagentFixtureSharesMainEnvelope guards the central wc9t claim: the
+// subagent transcript uses the IDENTICAL line envelope as the main thread
+// (user/assistant rows with message.content blocks; turn_ended markers), and
+// carries the subagent-only UpdateCurrentStep tool with its three input keys.
+func TestCursorSubagentFixtureSharesMainEnvelope(t *testing.T) {
+	lines := readCursorSubagentFixture(t)
+
+	var sawUser, sawAssistant, sawTurnEnded, sawUpdateStep bool
+	for _, l := range lines {
+		switch l.Role {
+		case "user":
+			sawUser = true
+		case "assistant":
+			sawAssistant = true
+		case "":
+			if l.Type == "turn_ended" {
+				sawTurnEnded = true
+			}
+		default:
+			t.Errorf("unexpected subagent row role %q", l.Role)
+		}
+		if l.Message == nil {
+			continue
+		}
+		for _, b := range l.Message.Content {
+			if b.Name == "UpdateCurrentStep" {
+				sawUpdateStep = true
+				var in map[string]json.RawMessage
+				if err := json.Unmarshal(b.Input, &in); err != nil {
+					t.Fatalf("UpdateCurrentStep input not an object: %v", err)
+				}
+				for _, k := range []string{"current_step", "final_summary", "completed_subtitle"} {
+					if _, ok := in[k]; !ok {
+						t.Errorf("UpdateCurrentStep input missing key %q (keys %v)", k, keys(in))
+					}
+				}
+			}
+		}
+	}
+
+	if !sawUser {
+		t.Error("subagent fixture must contain a user row")
+	}
+	if !sawAssistant {
+		t.Error("subagent fixture must contain assistant rows")
+	}
+	if !sawTurnEnded {
+		t.Error("subagent fixture must contain a turn_ended marker")
+	}
+	if !sawUpdateStep {
+		t.Error("subagent fixture must contain an UpdateCurrentStep tool_use")
+	}
+}
+
 func keys(m map[string]json.RawMessage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

@@ -22,7 +22,7 @@ Each Cursor session produces the same provider-agnostic cards as every other pro
 - **Tools** — which tools were called and how often, using Cursor's own tool names (`Read`, `Grep`, `Glob`, `SemanticSearch`, `StrReplace`, `Write`, `Shell`, `Delete`, `WebSearch`, `AskQuestion`, `Task`).
 - **Conversation** — turn structure, active time, and message counts.
 - **Code activity** — files touched and language breakdown, derived from Cursor's file tool calls.
-- **Agents & skills** — present for consistency; see [Subagents](#subagents) below.
+- **Agents & skills** — subagent (Task) invocations, plus activity aggregated from subagent threads; see [Subagents](#subagents) below.
 - **Session** — high-level session metadata.
 
 There is no **Tokens** or **Cost** card for Cursor — see [Tokens and cost](#tokens-and-cost).
@@ -44,7 +44,14 @@ Cursor's agent transcript does not record a per-message model identifier, so Con
 
 ## Subagents
 
-Cursor can spawn subagents (stored as separate transcript files), but in this release Confabulous processes the **main thread only**. Subagent threads are not fetched or aggregated yet. The Agents & skills card therefore reflects the main thread alone.
+Cursor spawns subagents into separate transcript files. Confabulous uploads and parses those subagent files and **aggregates their activity into the parent session**: tool calls, code activity, agent invocations, and search text all include the subagents' work.
+
+Some cards stay main-thread only by design, so they reflect what you actually saw in the session:
+
+- **Conversation** turn counts, message counts, session duration, and model reflect the **main thread** — subagents run within the main session, so they don't widen these.
+- The **transcript pane** shows the main thread only; subagent threads contribute to the cards and to search, but are not rendered as separate transcript rows.
+
+Because subagent text feeds the search index, searching for a phrase that appears only inside a subagent will still match the session.
 
 ## Deep links
 
