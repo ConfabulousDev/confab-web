@@ -14,8 +14,8 @@
 // 'neutral' fallback policies below).
 //
 // Marketing prose hardcoded outside this file: Quickstart.tsx, HeroCards.tsx,
-// QuickstartCTA.tsx spell out the provider list ("Claude Code, Codex, and
-// OpenCode") in conjunctive sentences that don't generate cleanly from the
+// QuickstartCTA.tsx spell out the provider list ("Claude Code, Codex, OpenCode,
+// and Cursor") in conjunctive sentences that don't generate cleanly from the
 // registry. Hand-update those when another provider lands.
 
 import type { ReactNode } from 'react';

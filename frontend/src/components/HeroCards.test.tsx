@@ -72,13 +72,17 @@ describe('HeroCards', () => {
     }
   });
 
-  it('Multi-provider card renders Demo, Claude Code docs, Codex docs in that order', () => {
+  it('Multi-provider card renders Demo, Claude Code, Codex, OpenCode, Cursor docs in that order', () => {
     render(<HeroCards />);
     const demo = linkPosition('Multi-provider support: Demo');
     const claudeCode = linkPosition('Multi-provider support: Claude Code docs');
     const codex = linkPosition('Multi-provider support: Codex docs');
+    const openCode = linkPosition('Multi-provider support: OpenCode docs');
+    const cursor = linkPosition('Multi-provider support: Cursor docs');
     expect(demo).toBeLessThan(claudeCode);
     expect(claudeCode).toBeLessThan(codex);
+    expect(codex).toBeLessThan(openCode);
+    expect(openCode).toBeLessThan(cursor);
   });
 
   it('cards are not themselves buttons (no card-level role=button)', () => {
