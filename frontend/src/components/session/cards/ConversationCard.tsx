@@ -95,8 +95,13 @@ export function ConversationCard({ data, loading, error, provider, tokenSpeed }:
         : TOKEN_SPEED_TOOLTIP,
   };
 
+  // zsk4: providers whose synced transcripts lack per-message timestamps
+  // (Cursor) can't compute per-turn timing/utilization, so those rows never
+  // appear. Show a single muted footer explaining why instead of a sparse card.
+  const timingFooter = !measurable ? adapter.conversationTimingUnavailableNote : undefined;
+
   return (
-    <CardWrapper title="Conversation" icon={ConversationIcon}>
+    <CardWrapper title="Conversation" icon={ConversationIcon} footer={timingFooter}>
       {data.assistant_utilization_pct != null && (
         <StatRow
           label="Assistant utilization"

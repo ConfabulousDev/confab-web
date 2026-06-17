@@ -87,6 +87,9 @@ export const cursorAdapter: CursorAdapter = {
   tokenSpeedUnavailableTooltip:
     'Cursor transcripts do not include token counts or per-turn timing, so output token speed cannot be computed.',
 
+  conversationTimingUnavailableNote:
+    "Turn timing and utilization aren't available for Cursor sessions. Cursor's agent transcript records conversation and tool calls but not per-message timestamps, so assistant/user durations and utilization can't be computed from synced files.",
+
   calculateMessageCost: () => 0,
 
   useDeepLinkFilterReset(items, targetId, filters) {

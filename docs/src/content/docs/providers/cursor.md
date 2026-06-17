@@ -20,7 +20,7 @@ Cursor hides some scaffolding in its own UI and writes a bare `[REDACTED]` place
 Each Cursor session produces the same provider-agnostic cards as every other provider:
 
 - **Tools** — which tools were called and how often, using Cursor's own tool names (`Read`, `Grep`, `Glob`, `SemanticSearch`, `StrReplace`, `Write`, `Shell`, `Delete`, `WebSearch`, `AskQuestion`, `Task`).
-- **Conversation** — turn structure, active time, and message counts.
+- **Conversation** — turn structure and message counts. Cursor's transcript has no per-message timestamps, so per-turn timing and assistant utilization can't be computed; the card shows only the metrics it can derive (user prompts) plus a short note explaining why the timing rows are absent.
 - **Code activity** — files touched and language breakdown, derived from Cursor's file tool calls.
 - **Agents & skills** — subagent (Task) invocations, plus activity aggregated from subagent threads; see [Subagents](#subagents) below.
 - **Session** — high-level session metadata.

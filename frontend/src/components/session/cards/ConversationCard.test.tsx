@@ -148,4 +148,93 @@ describe('ConversationCard', () => {
       expect(row?.getAttribute('title')).toBe(cursorAdapter.tokenSpeedUnavailableTooltip);
     });
   });
+
+  // zsk4: unmeasured providers (Cursor) lack per-turn timing on the wire. Rather
+  // than render five "Not available" rows, the card shows a single muted footer
+  // explaining why timing/utilization metrics are absent.
+  describe('timing-unavailable footer (zsk4)', () => {
+    // The cursor adapter always defines this note; `?? ''` keeps the type a
+    // plain string for the text matchers without an `as` cast, and the
+    // toBeTruthy guard below fails loudly if the adapter ever drops it.
+    const note = cursorAdapter.conversationTimingUnavailableNote ?? '';
+
+    it('exposes a non-empty cursor timing-unavailable note', () => {
+      expect(cursorAdapter.conversationTimingUnavailableNote).toBeTruthy();
+    });
+
+    it('renders the cursor timing-unavailable footer note', () => {
+      const { getByText } = render(
+        <ConversationCard
+          data={makeData({
+            avg_assistant_turn_ms: null,
+            avg_user_thinking_ms: null,
+            total_assistant_duration_ms: null,
+            total_user_duration_ms: null,
+            assistant_utilization_pct: null,
+          })}
+          loading={false}
+          provider="cursor"
+          tokenSpeed={null}
+        />
+      );
+      expect(getByText(note)).toBeInTheDocument();
+    });
+
+    it('keeps real rows (user prompts, token speed) alongside the footer', () => {
+      const { getByText } = render(
+        <ConversationCard
+          data={makeData({
+            user_turns: 7,
+            avg_assistant_turn_ms: null,
+            avg_user_thinking_ms: null,
+            total_assistant_duration_ms: null,
+            total_user_duration_ms: null,
+            assistant_utilization_pct: null,
+          })}
+          loading={false}
+          provider="cursor"
+          tokenSpeed={null}
+        />
+      );
+      expect(getByText('User prompts')).toBeInTheDocument();
+      expect(getByText('7')).toBeInTheDocument();
+      expect(getByText('Token speed')).toBeInTheDocument();
+    });
+
+    it('does not render fake timing rows on Cursor', () => {
+      const { queryByText } = render(
+        <ConversationCard
+          data={makeData({
+            avg_assistant_turn_ms: null,
+            avg_user_thinking_ms: null,
+            total_assistant_duration_ms: null,
+            total_user_duration_ms: null,
+            assistant_utilization_pct: null,
+          })}
+          loading={false}
+          provider="cursor"
+          tokenSpeed={null}
+        />
+      );
+      expect(queryByText('Assistant utilization')).toBeNull();
+      expect(queryByText('Total assistant time')).toBeNull();
+      expect(queryByText('Total user time')).toBeNull();
+      expect(queryByText('Avg assistant time')).toBeNull();
+      expect(queryByText('Avg user time')).toBeNull();
+    });
+
+    it('does not render the footer for measurable providers (claude-code)', () => {
+      const { queryByText } = render(
+        <ConversationCard data={makeData()} loading={false} provider="claude-code" />
+      );
+      expect(queryByText(note)).toBeNull();
+    });
+
+    it('does not render the footer for measurable providers (codex)', () => {
+      const { queryByText } = render(
+        <ConversationCard data={makeData()} loading={false} provider="codex" />
+      );
+      expect(queryByText(note)).toBeNull();
+    });
+  });
 });

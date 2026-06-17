@@ -1,4 +1,5 @@
 import styles from '../SessionSummaryPanel.module.css';
+import cardStyles from './Card.module.css';
 
 interface CardWrapperProps {
   title: string;
@@ -7,12 +8,18 @@ interface CardWrapperProps {
   /** Optional action element (e.g., refresh button) shown in header */
   action?: React.ReactNode;
   children: React.ReactNode;
+  /**
+   * Optional muted footer below the stat rows (zsk4). Use to explain why a
+   * metric is absent by design rather than padding the card with placeholder
+   * rows (e.g. Cursor's missing per-turn timing).
+   */
+  footer?: React.ReactNode;
 }
 
 /**
  * Base wrapper for summary cards. Provides consistent header and styling.
  */
-export function CardWrapper({ title, subtitle, icon, action, children }: CardWrapperProps) {
+export function CardWrapper({ title, subtitle, icon, action, children, footer }: CardWrapperProps) {
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -26,6 +33,7 @@ export function CardWrapper({ title, subtitle, icon, action, children }: CardWra
         </span>
       </div>
       <div className={styles.cardContent}>{children}</div>
+      {footer && <div className={cardStyles.cardFooter}>{footer}</div>}
     </div>
   );
 }
