@@ -4914,4 +4914,202 @@ func TestSyncCursor_HTTP_Integration(t *testing.T) {
 			t.Errorf("first_seen changed from %v to %v; far-future created_at must be clamped/ignored", firstSeenBefore, firstSeenAfter)
 		}
 	})
+
+	// nfbe: Cursor's CLI-supplied first_user_message arrives wrapped in the same
+	// <user_query> envelope as the transcript. The session-list title must show
+	// the human prompt, not the raw tags — so intake extracts <user_query> for
+	// cursor sessions before validating/storing first_user_message.
+	t.Run("chunk extracts <user_query> from a cursor first_user_message", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-fum",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-fum.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		wrapped := "<user_query>\ndoes gh repo have any outstanding dependabot alerts?\n</user_query>"
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-fum.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				FirstUserMessage: &wrapped,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstUserMessage *string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1", sessionID).Scan(&firstUserMessage); err != nil {
+			t.Fatalf("query first_user_message: %v", err)
+		}
+		if firstUserMessage == nil {
+			t.Fatal("first_user_message is NULL; the cleaned prompt was not stored")
+		}
+		if *firstUserMessage != "does gh repo have any outstanding dependabot alerts?" {
+			t.Errorf("first_user_message = %q, want the extracted prompt", *firstUserMessage)
+		}
+	})
+
+	// A cursor first_user_message that carries NO envelope is stored verbatim
+	// (never dropped) — the extraction falls back to the raw text.
+	t.Run("chunk stores a cursor first_user_message without an envelope verbatim", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-fum-plain",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-fum-plain.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		plain := "plain prompt with no envelope"
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-fum-plain.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				FirstUserMessage: &plain,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstUserMessage *string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1", sessionID).Scan(&firstUserMessage); err != nil {
+			t.Fatalf("query first_user_message: %v", err)
+		}
+		if firstUserMessage == nil || *firstUserMessage != plain {
+			t.Errorf("first_user_message = %v, want %q stored verbatim", firstUserMessage, plain)
+		}
+	})
+
+	// An empty <user_query> envelope must not overwrite the title with "" — the
+	// field is dropped so the existing value (here: none) is preserved.
+	t.Run("chunk drops an empty-query cursor first_user_message", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-empty-q",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-empty-q.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		emptyQuery := "<user_query>   </user_query>"
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-empty-q.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				FirstUserMessage: &emptyQuery,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstUserMessage *string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1", sessionID).Scan(&firstUserMessage); err != nil {
+			t.Fatalf("query first_user_message: %v", err)
+		}
+		if firstUserMessage != nil {
+			t.Errorf("first_user_message = %q, want NULL (empty query must not write a blank title)", *firstUserMessage)
+		}
+	})
+
+	// A non-cursor provider's first_user_message is NOT run through the cursor
+	// envelope extractor — its raw value (envelope-shaped or not) is stored as-is.
+	t.Run("non-cursor first_user_message is not envelope-stripped", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSession(t, env, user.ID, "claude-fum")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		// Same envelope-shaped text, but a default (claude-code) session: stored verbatim.
+		wrapped := "<user_query>not cursor, keep verbatim</user_query>"
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "transcript.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"type":"user","message":"hi"}`},
+			Metadata: &api.SyncChunkMetadata{
+				FirstUserMessage: &wrapped,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstUserMessage *string
+		if err := env.DB.QueryRow(env.Ctx,
+			"SELECT first_user_message FROM sessions WHERE id = $1", sessionID).Scan(&firstUserMessage); err != nil {
+			t.Fatalf("query first_user_message: %v", err)
+		}
+		if firstUserMessage == nil || *firstUserMessage != wrapped {
+			t.Errorf("first_user_message = %v, want %q stored verbatim for a non-cursor provider", firstUserMessage, wrapped)
+		}
+	})
 }
