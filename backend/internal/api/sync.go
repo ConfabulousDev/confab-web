@@ -45,7 +45,8 @@ type SyncInitRequest struct {
 	// Provider identifies which agent produced the session. Pointer
 	// distinguishes "field omitted" (nil → defaulted to "claude-code")
 	// from "explicit empty string" (rejected with 400). Accepted explicit
-	// values: "claude-code", "codex".
+	// values are the canonical providers in models.CanonicalProviders
+	// ("claude-code", "codex", "opencode", "cursor").
 	Provider *string `json:"provider,omitempty"`
 
 	// ===========================================================================
@@ -65,8 +66,8 @@ type SyncInitRequest struct {
 type SyncInitResponse struct {
 	SessionID string                       `json:"session_id"`
 	// Provider echoes the resolved provider for this session, so clients
-	// can verify which agent identity the backend recorded. Always one of
-	// "claude-code" or "codex".
+	// can verify which agent identity the backend recorded. One of the
+	// canonical providers in models.CanonicalProviders.
 	Provider string                       `json:"provider"`
 	Files    map[string]SyncFileStateResp `json:"files"`
 }
@@ -84,6 +85,26 @@ type SyncChunkMetadata struct {
 	Summary          *string                   `json:"summary,omitempty"`            // First summary from transcript
 	FirstUserMessage *string                   `json:"first_user_message,omitempty"` // First user message
 	CodexRollout     *SyncCodexRolloutMetadata `json:"codex_rollout,omitempty"`      // Codex rollout sidecar metadata (codex provider only)
+
+	// LatestMessageAt carries an explicit session timestamp for providers whose
+	// transcript lines have no per-line timestamp (cursor). When set on a
+	// transcript chunk, it feeds session.last_message_at the same way per-line
+	// timestamp extraction does for Claude/Codex/OpenCode. The Cursor CLI sets
+	// this from ~/.cursor/chats/<workspace-hash>/<session-id>/meta.json's
+	// updatedAtMs (ms → RFC3339); omit it when meta.json is absent and
+	// last_message_at stays NULL until a later chunk carries one. Ignored for
+	// providers that already extract per-line timestamps.
+	LatestMessageAt *time.Time `json:"latest_message_at,omitempty"`
+
+	// Model names the model that produced this Cursor session, sourced by the
+	// CLI from ~/.cursor/.../state.vscdb (composerData.modelConfig.modelName,
+	// joined by composerId == session-uuid). Cursor JSONL carries no model
+	// field, so this is the only model signal. Best-effort: omit when the CLI
+	// cannot recover it. NOTE: surfacing this into analytics ModelsUsed requires
+	// a per-session model store that does not exist without a DB migration
+	// (out of scope for the file-based intake ticket); accepted on the wire and
+	// documented now, persisted by a follow-up.
+	Model *string `json:"model,omitempty"`
 }
 
 // SyncCodexRolloutMetadata registers a Codex thread (root or child subagent)
@@ -425,19 +446,22 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	// Per-line parsing has two independent gates — CF-355 keeps them separate
 	// so codex sessions still get last_message_at populated:
 	//
-	//   1. Timestamp extraction is provider-agnostic. Both Claude Code
-	//      transcripts and Codex rollouts carry a top-level ISO-8601
-	//      "timestamp" on every line. Gated only on transcript file_type so
-	//      agent/etc. files don't touch session.last_message_at.
+	//   1. Per-line timestamp extraction runs for every provider whose lines
+	//      carry a timestamp (Claude/Codex top-level ISO-8601, OpenCode
+	//      info.time.created). Gated on transcript file_type so agent/etc.
+	//      files don't touch session.last_message_at. Cursor lines carry no
+	//      timestamp, so it opts out and relies on metadata.latest_message_at.
 	//
 	//   2. PR-link extraction is Claude-Code-specific (assistant_message
 	//      envelope, tool_use blocks). Gated on provider AND file_type.
 	parseClaudeCode := provider == models.ProviderClaudeCode && req.FileType == "transcript"
-	extractTimestamps := req.FileType == "transcript"
 	// Timestamp extraction is per-line but provider-shaped: Claude Code and Codex
 	// carry a top-level ISO-8601 "timestamp"; OpenCode carries info.time.created
-	// (epoch ms). Pick the matching extractor so every provider populates
-	// session.last_message_at.
+	// (epoch ms). Cursor JSONL lines carry NO timestamp at all — the only timing
+	// signal is metadata.latest_message_at (see below), so cursor opts out of
+	// per-line extraction entirely. Pick the matching extractor so every other
+	// provider populates session.last_message_at.
+	extractTimestamps := req.FileType == "transcript" && provider != models.ProviderCursor
 	extractTimestamp := extractTimestampFromLine
 	if provider == models.ProviderOpencode {
 		extractTimestamp = extractOpenCodeTimestampFromLine
@@ -501,6 +525,16 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		gitInfo = req.Metadata.GitInfo
 		summary = req.Metadata.Summary
 		firstUserMessage = req.Metadata.FirstUserMessage
+
+		// Cursor has no per-line timestamps, so the CLI supplies the session's
+		// latest message time as metadata. Feed it into the same last_message_at
+		// sink the per-line extractors use. Only adopt it when it advances the
+		// high-water mark (a later chunk shouldn't regress the timestamp).
+		if req.Metadata.LatestMessageAt != nil {
+			if latestTimestamp == nil || req.Metadata.LatestMessageAt.After(*latestTimestamp) {
+				latestTimestamp = req.Metadata.LatestMessageAt
+			}
+		}
 	}
 
 	if err := sessionStore.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, summary, firstUserMessage, gitInfo); err != nil {
