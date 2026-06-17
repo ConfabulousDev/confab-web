@@ -55,7 +55,10 @@ export type PricingTable = Record<ProviderId, Record<string, ModelPricing>>;
 // pricing.json (refreshable from confabulous.dev). Until the fetch lands the
 // table is empty — getPricing then warns and bills $0, but cost UI renders
 // only after auth + session-data load, by which point the table is populated.
-let activePricing: PricingTable = { 'claude-code': {}, codex: {}, opencode: {} };
+// `cursor` is keyed but always empty: Cursor transcripts carry no token/cost
+// data and the backend serves no cursor pricing, so cost UI stays hidden. The
+// key is required because PricingTable is Record<ProviderId, …>.
+let activePricing: PricingTable = { 'claude-code': {}, codex: {}, opencode: {}, cursor: {} };
 
 /** Install the effective price table fetched from the backend (CF-515). */
 export function setPricingTable(table: PricingTable): void {

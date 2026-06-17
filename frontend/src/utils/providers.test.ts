@@ -6,7 +6,7 @@ import {
   getProviderMetadataOrFallback,
   providerLabel,
 } from './providers';
-import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon } from '@/components/icons';
+import { ClaudeCodeIcon, CodexIcon, CursorIcon, OpenCodeIcon } from '@/components/icons';
 
 // CF-416 (Phase 1 of frontend provider abstraction).
 //
@@ -71,6 +71,19 @@ describe('PROVIDER_METADATA', () => {
     expect(meta.brandColor).toBe('#656363');
     expect(meta.resumeCommand.idLabel).toBe('Copy OpenCode ID');
     expect(meta.resumeCommand.commandHint).toBe('for opencode resume');
+  });
+
+  // 6qwh: pins the Cursor branding. resumeCommand targets the Cursor agent CLI
+  // (`cursor-agent --resume=<id>`), the only stable resume-by-id path; the
+  // ingested id is the agent-transcripts session UUID.
+  it('pins the cursor entry strings (UI contract)', () => {
+    const meta = PROVIDER_METADATA.cursor;
+    expect(meta.label).toBe('Cursor');
+    expect(meta.brandDisplayName).toBe('Cursor');
+    expect(meta.icon).toBe(CursorIcon);
+    expect(meta.brandColor).toBe('#6b7280');
+    expect(meta.resumeCommand.idLabel).toBe('Copy Cursor ID');
+    expect(meta.resumeCommand.commandHint).toBe('for cursor-agent resume');
   });
 });
 

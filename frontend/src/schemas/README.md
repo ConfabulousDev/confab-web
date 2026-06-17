@@ -9,6 +9,7 @@ Zod validation schemas and the TypeScript type system for the Confab frontend. A
 | `api.ts` | Zod schemas for all API responses: sessions, analytics, trends, org, auth, shares, GitHub links |
 | `claudeTranscript.ts` | Zod schemas for Claude Code transcript JSONL: message types, content blocks, token usage |
 | `codexTranscript.ts` | Zod schemas for Codex rollout JSONL: top-level line envelopes, response_item / event_msg payload variants, forward-compat catch-all branches, and `isKnownCodexLine` / `isKnownResponseItemPayload` / `isKnownEventPayload` type predicates |
+| `cursorTranscript.ts` | Zod schemas for Cursor transcript JSONL: two top-level line shapes (`{role, message:{content[]}}` and `{type:'turn_ended', status, error?}`) and two content-block types (`text`, `tool_use` — `tool_use` has **no `id`**, and there are **no `tool_result` blocks**). Exports `RawCursorLineSchema` / `RawCursorLine` plus `asCursorTextBlock` / `asCursorToolUseBlock` block-narrowing helpers (safe-parse, no `as` casts) consumed by `cursorTranscriptService` |
 | `validation.ts` | Zod schemas for form input validation: share forms, API key creation, email validation |
 
 ## Key Types
