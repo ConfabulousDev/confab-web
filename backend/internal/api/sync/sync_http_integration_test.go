@@ -4647,6 +4647,60 @@ func TestSyncCursor_HTTP_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("chunk with far-future latest_message_at leaves last_message_at NULL", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-future-ts",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-future-ts.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		// Year-9999 is unambiguously >48h in the future regardless of the test
+		// host's clock. A hostile/buggy client supplies it to pin the session to
+		// the top of every recency-sorted listing; the intake must drop it.
+		future := time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-future-ts.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				LatestMessageAt: &future,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		// The transcript content is still persisted (200); only the bad timestamp is dropped.
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var lastMessageAt *time.Time
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT last_message_at FROM sessions WHERE id = $1", sessionID)
+		if err := row.Scan(&lastMessageAt); err != nil {
+			t.Fatalf("query last_message_at: %v", err)
+		}
+		if lastMessageAt != nil {
+			t.Errorf("last_message_at = %v, want NULL (far-future metadata must be clamped/dropped)", lastMessageAt)
+		}
+	})
+
 	t.Run("chunk without latest_message_at leaves last_message_at NULL", func(t *testing.T) {
 		env.CleanDB(t)
 

@@ -529,10 +529,12 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		// Cursor has no per-line timestamps, so the CLI supplies the session's
 		// latest message time as metadata. Feed it into the same last_message_at
 		// sink the per-line extractors use. Only adopt it when it advances the
-		// high-water mark (a later chunk shouldn't regress the timestamp).
-		if req.Metadata.LatestMessageAt != nil {
-			if latestTimestamp == nil || req.Metadata.LatestMessageAt.After(*latestTimestamp) {
-				latestTimestamp = req.Metadata.LatestMessageAt
+		// high-water mark (a later chunk shouldn't regress the timestamp). Clamp
+		// out-of-range-future values first — this client-supplied field is the
+		// easiest sort-order-abuse vector of all the providers' timestamp inputs.
+		if clamped := clampFutureTimestamp(req.Metadata.LatestMessageAt); clamped != nil {
+			if latestTimestamp == nil || clamped.After(*latestTimestamp) {
+				latestTimestamp = clamped
 			}
 		}
 	}
@@ -992,6 +994,18 @@ func extractTextFromMessage(entry map[string]interface{}) string {
 	return ""
 }
 
+// clampFutureTimestamp returns ts unless it is more than 48h in the future, in
+// which case it returns nil. Out-of-range-future timestamps (hostile or clock-
+// skewed) would otherwise sort a session to the top of every most-recent ordering
+// (sessions.last_message_at; see internal/db/session/session.go). Upper bound only —
+// a past timestamp sorts a session down, which is not an abuse vector.
+func clampFutureTimestamp(ts *time.Time) *time.Time {
+	if ts == nil || ts.After(time.Now().Add(48*time.Hour)) {
+		return nil
+	}
+	return ts
+}
+
 // extractTimestampFromLine parses a JSONL line and extracts the timestamp field if present
 // Returns nil if no timestamp found or parsing fails
 func extractTimestampFromLine(line string) *time.Time {
@@ -1022,7 +1036,7 @@ func extractTimestampFromLine(line string) *time.Time {
 		}
 	}
 
-	return &ts
+	return clampFutureTimestamp(&ts)
 }
 
 // extractOpenCodeTimestampFromLine pulls the message creation time from an
@@ -1048,14 +1062,8 @@ func extractOpenCodeTimestampFromLine(line string) *time.Time {
 	if entry.Info.Time.Created <= 0 {
 		return nil
 	}
-	// Reject absurd future timestamps from malformed/hostile transcript data —
-	// an out-of-range `created` would otherwise sort the session to the top of
-	// every "most recent" ordering. Allow a small clock-skew window.
 	ts := time.UnixMilli(entry.Info.Time.Created).UTC()
-	if ts.After(time.Now().Add(48 * time.Hour)) {
-		return nil
-	}
-	return &ts
+	return clampFutureTimestamp(&ts)
 }
 
 // UpdateSummaryRequest is the request body for PATCH /api/v1/sessions/{external_id}/summary
