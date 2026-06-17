@@ -22,7 +22,7 @@ A singleton `APIClient` class that wraps `fetch` with:
 
 - **Zod validation**: All responses are validated at runtime. Methods like `getValidated()`, `postValidated()`, `patchValidated()` parse responses through Zod schemas from `@/schemas/api.ts`. Additional helpers: `deleteVoid()` for DELETE operations, `getString()` for plain text responses.
 - **Auth handling**: 401 responses trigger `handleAuthFailure()` (redirect to `/`) unless the endpoint is in the skip list (e.g., `/me`, `/sessions/:id`).
-- **Error classes**: `APIError`, `AuthenticationError`, `NetworkError` with status codes and backend error message extraction.
+- **Error classes**: `APIError`, `AuthenticationError`, `NetworkError` with status codes and backend error message extraction. `APIValidationError` (a Zod-schema mismatch on a 200 body) is defined in `@/schemas/api.ts` and re-exported here so UI can `instanceof`-distinguish it from an HTTP `APIError` (cd3z).
 - **Credential management**: All requests include `credentials: 'include'` for cookie-based auth.
 
 #### Exported API namespaces
@@ -45,6 +45,7 @@ A singleton `APIClient` class that wraps `fetch` with:
 class APIError extends Error { status: number; statusText: string; data?: unknown }
 class AuthenticationError extends APIError { /* always status 401 */ }
 class NetworkError extends Error { /* fetch TypeError */ }
+class APIValidationError extends Error { endpoint: string; zodError: z.ZodError } // 200 body failed Zod (re-exported from @/schemas/api)
 ```
 
 ### claudeTranscriptService.ts -- Transcript Processing

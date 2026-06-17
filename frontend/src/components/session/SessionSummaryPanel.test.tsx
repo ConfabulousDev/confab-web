@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import type { SessionAnalytics } from '@/schemas/api';
-import { analyticsAPI, APIError } from '@/services/api';
+import { SessionAnalyticsSchema } from '@/schemas/api';
+import { analyticsAPI, APIError, APIValidationError } from '@/services/api';
+import { buildCursorAnalyticsFixture } from './cursorAnalyticsFixture';
 
 // Mock useAnalyticsPolling
 const mockForceRefetch = vi.fn();
@@ -109,6 +111,76 @@ describe('SessionSummaryPanel', () => {
       render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="claude-code" />);
 
       expect(screen.getByText('No analytics available')).toBeInTheDocument();
+    });
+  });
+
+  // cd3z: the hard error state ("Failed to load analytics" with no card grid)
+  // gave no clue why Cursor sessions failed. The panel must surface actionable
+  // detail distinguishing an HTTP failure from a client-side schema mismatch.
+  describe('actionable error surfacing (cd3z)', () => {
+    function renderWithError(error: Error) {
+      mockUseAnalyticsPolling.mockReturnValue({
+        analytics: null,
+        loading: false,
+        error,
+        forceRefetch: mockForceRefetch,
+        pollingState: 'active',
+        refetch: vi.fn(),
+      });
+      render(<SessionSummaryPanel sessionId="s1" isOwner={true} provider="cursor" />);
+    }
+
+    it('still shows the headline error so the state is recognizable', () => {
+      renderWithError(new APIError('Request failed: Gateway Timeout', 504, 'Gateway Timeout'));
+      expect(screen.getByText('Failed to load analytics')).toBeInTheDocument();
+    });
+
+    it('surfaces the HTTP status code for an APIError', () => {
+      renderWithError(new APIError('Request failed: Gateway Timeout', 504, 'Gateway Timeout'));
+      expect(screen.getByText(/504/)).toBeInTheDocument();
+    });
+
+    it('labels a client-side schema mismatch distinctly from an HTTP failure', () => {
+      // Derive a real ZodError from a failing parse (cost.estimated_usd dropped)
+      // rather than hand-building issues — keeps the failing-field path faithful
+      // to actual wire/schema drift.
+      const invalid: unknown = { ...buildCursorAnalyticsFixture(), cost: {} };
+      const result = SessionAnalyticsSchema.safeParse(invalid);
+      if (result.success) throw new Error('expected fixture without cost.estimated_usd to fail validation');
+      renderWithError(new APIValidationError('/sessions/s1/analytics', result.error));
+      // The detail must mention validation/invalid response and the failing field,
+      // not just a generic message.
+      expect(screen.getByText(/invalid|validation/i)).toBeInTheDocument();
+      expect(screen.getByText(/estimated_usd/)).toBeInTheDocument();
+    });
+
+    it('surfaces a plain Error message when neither HTTP nor validation', () => {
+      renderWithError(new Error('NetworkError: failed to fetch'));
+      expect(screen.getByText(/failed to fetch/)).toBeInTheDocument();
+    });
+  });
+
+  // cd3z: regression coverage for the live Cursor wire shape. The Summary tab
+  // showed the hard error on Cursor sessions; assert the captured payload parses
+  // cleanly AND renders the card grid (no error/empty state).
+  describe('Cursor analytics regression (cd3z)', () => {
+    it('SessionAnalyticsSchema parses the captured Cursor fixture', () => {
+      const result = SessionAnalyticsSchema.safeParse(buildCursorAnalyticsFixture());
+      expect(result.success).toBe(true);
+    });
+
+    it('renders the card grid (no hard error) for a Cursor session', () => {
+      render(
+        <SessionSummaryPanel
+          sessionId="cursor-1"
+          isOwner={false}
+          provider="cursor"
+          initialAnalytics={buildCursorAnalyticsFixture()}
+        />
+      );
+      expect(screen.getByText('Session Summary')).toBeInTheDocument();
+      expect(screen.queryByText('Failed to load analytics')).not.toBeInTheDocument();
+      expect(screen.queryByText('No analytics available')).not.toBeInTheDocument();
     });
   });
 

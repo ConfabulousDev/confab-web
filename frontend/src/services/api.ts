@@ -34,6 +34,7 @@ import {
   CardTypesResponseSchema,
   UnpricedModelsResponseSchema,
   validateResponse,
+  APIValidationError,
   type SessionDetail,
   type SessionShare,
   type APIKey,
@@ -68,6 +69,9 @@ import {
 
 // Re-export types for consumers
 export type { GitHubLink, SessionAnalytics } from '@/schemas/api';
+// Re-export the validation error class so error-surfacing UI can use instanceof
+// to distinguish a client-side schema mismatch from an HTTP failure (cd3z).
+export { APIValidationError };
 
 /**
  * Handles authentication failures by redirecting to home.

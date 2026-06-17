@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SessionAnalytics, GitHubLink } from '@/schemas/api';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import { buildCodexAnalyticsFixture } from './codexAnalyticsFixture';
+import { buildCursorAnalyticsFixture } from './cursorAnalyticsFixture';
 
 // Helper to create analytics with both legacy and cards format
 function createAnalytics(base: {
@@ -353,8 +354,8 @@ const meta = {
   title: 'Session/SessionSummaryPanel',
   component: SessionSummaryPanel,
   args: {
-    // Default provider for all stories. The CodexSession story overrides
-    // this; everything else inherits the Claude default.
+    // Default provider for all stories. The CodexSession and CursorSession
+    // stories override this; everything else inherits the Claude default.
     provider: 'claude-code',
   },
   parameters: {
@@ -607,5 +608,24 @@ export const CodexSession: Story = {
     isOwner: true,
     provider: 'codex',
     initialAnalytics: buildCodexAnalyticsFixture(),
+  },
+};
+
+/**
+ * Cursor session (cd3z). Closes the 6qwh gap — there was no Cursor summary
+ * story, which let the "Failed to load analytics" regression slip through.
+ * Exercises the panel against the shape ComputeFromCursorRollout produces and
+ * the analytics endpoint serves: zero tokens / "0" cost (Cursor JSONL has no
+ * usage data), no tokens_v2 card (empty by_provider is omitted from the wire),
+ * null durations (no timestamps), Cursor's own tool names, and no smart_recap.
+ * The card grid must render — no hard error, no empty state. See
+ * cursorAnalyticsFixture.ts for the full per-field rationale.
+ */
+export const CursorSession: Story = {
+  args: {
+    sessionId: 'cursor-session-id',
+    isOwner: true,
+    provider: 'cursor',
+    initialAnalytics: buildCursorAnalyticsFixture(),
   },
 };
