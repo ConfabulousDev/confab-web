@@ -1,21 +1,26 @@
 // Renders the transcript-tab content for Cursor sessions (18n2, MVP).
 //
 // A virtualized list of render items (user / assistant / tool) with Cmd-F
-// in-transcript search (shared `useTranscriptSearch` toolkit) and deep-link
-// scroll-to. Intentionally leaner than Claude/Codex/OpenCode: NO minimap /
-// timeline bar and NO cost rail — Cursor's JSONL carries no token/cost data (no
-// cost rail) and no per-message time, so row times are ESTIMATED (ce79). It
-// fetches nothing itself (SessionViewer drives fetch/poll via the adapter).
+// in-transcript search (shared `useTranscriptSearch` toolkit), deep-link
+// scroll-to, and a shared turn-based TimelineBar minimap (zztp). Leaner than
+// Claude/Codex/OpenCode in one way: NO cost rail — Cursor's JSONL carries no
+// token/cost data. Row times (and therefore the timeline segments) are
+// ESTIMATED (ce79): interpolated over the session bounds, never sourced from
+// the wire, so the bar hides entirely when the bounds are unknown and its
+// tooltip flags the estimate. It fetches nothing itself (SessionViewer drives
+// fetch/poll via the adapter).
 //
 // Tool rows render the call (name + one-line input summary) with NO output:
 // Cursor records tool inputs only, never results.
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import { formatCodexTimestamp } from '@/components/transcript/codex/codexFormat';
+import TimelineBar from '@/components/transcript/TimelineBar';
+import { useCursorSegmentLayout } from './cursorTimelineSegments';
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { renderTextWithHighlight } from '@/utils/renderHighlight';
@@ -37,6 +42,11 @@ import styles from './CursorTranscriptPane.module.css';
 // per-message timestamps, so these are interpolated, not real (ce79).
 const ESTIMATED_TIME_TOOLTIP =
   'Estimated — Cursor transcripts have no per-message timestamps.';
+
+// zztp: disclaimer appended to every TimelineBar segment tooltip — the segment
+// durations come from the same estimated per-row times, so they are
+// approximate, not real per-message wall-clock.
+const TIMELINE_ESTIMATED_NOTE = 'Estimated times';
 
 /** Row-header time marker for an estimated Cursor timestamp: a muted `~` prefix
  *  plus the formatted time, with the "estimated" tooltip. Renders nothing when
@@ -166,15 +176,24 @@ export default function CursorTranscriptPane({
 }: CursorTranscriptPaneProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const hasScrolledToTarget = useRef(false);
+  // zztp: index of the topmost visible row, so the bar indicator has something
+  // to point at before the user hovers a row.
+  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
 
   // Estimate per-row timestamps over the FULL item stream (ce79), so each row's
   // time reflects its true position in the session — independent of which
-  // categories are currently filtered in. Look them up by id when rendering the
-  // filtered rows. A no-op (timestamps undefined) when bounds are unknown.
-  const timestampById = useMemo(() => {
-    const stamped = attachCursorTimestamps(items, { start: firstSeen, end: lastSyncAt });
-    return new Map(stamped.map((it) => [it.id, it.timestamp]));
-  }, [items, firstSeen, lastSyncAt]);
+  // categories are currently filtered in. The timeline segments (zztp) also
+  // read these timestamps, so compute the stamped stream once and look it up by
+  // id when rendering the filtered rows. A no-op (timestamps undefined) when
+  // bounds are unknown.
+  const stampedItems = useMemo(
+    () => attachCursorTimestamps(items, { start: firstSeen, end: lastSyncAt }),
+    [items, firstSeen, lastSyncAt],
+  );
+  const timestampById = useMemo(
+    () => new Map(stampedItems.map((it) => [it.id, it.timestamp])),
+    [stampedItems],
+  );
 
   // Cmd-F transcript search over the filtered list. Cursor has no separator
   // rows, so the filtered index IS the virtual index — no indirection.
@@ -212,6 +231,78 @@ export default function CursorTranscriptPane({
       );
     },
     [virtualizer],
+  );
+
+  // Map each item id to its index in the UNFILTERED stream — the axis both the
+  // segment layout and the position indicator speak. Cursor has no separator
+  // rows, so ids are the only stable handle between the filtered and unfiltered
+  // arrays. Mirrors OpenCodeTranscriptPane.
+  const idToUnfilteredIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    items.forEach((item, idx) => map.set(item.id, idx));
+    return map;
+  }, [items]);
+
+  // zztp / CF-361 parity: the set of UNFILTERED indices whose item survives the
+  // active filter, so the bar greys out fully-filtered segments. `undefined`
+  // when nothing is filtered.
+  const visibleIndices = useMemo(() => {
+    if (filteredItems.length === items.length) return undefined;
+    const set = new Set<number>();
+    filteredItems.forEach((item) => {
+      const idx = idToUnfilteredIndex.get(item.id);
+      if (idx !== undefined) set.add(idx);
+    });
+    return set;
+  }, [items.length, filteredItems, idToUnfilteredIndex]);
+
+  // The segment layout indexes the UNFILTERED stream, but the indicator tracks
+  // the topmost visible FILTERED row — translate that row's id back to its
+  // unfiltered index.
+  const selectedUnfilteredIndex = useMemo(() => {
+    const selected = filteredItems[firstVisibleIndex];
+    if (!selected) return 0;
+    return idToUnfilteredIndex.get(selected.id) ?? 0;
+  }, [filteredItems, firstVisibleIndex, idToUnfilteredIndex]);
+
+  // zztp: turn-based timeline segments over the estimated-timestamp stream. The
+  // layout is empty (and the bar self-hides) whenever the row times are unknown.
+  const segmentLayout = useCursorSegmentLayout(stampedItems, selectedUnfilteredIndex);
+
+  // Track the topmost visible row so the bar indicator has something to point at
+  // when the user hasn't hovered a row.
+  const updateFirstVisible = useCallback(() => {
+    const visible = virtualizer.getVirtualItems();
+    const first = visible[0];
+    if (first) setFirstVisibleIndex(first.index);
+  }, [virtualizer]);
+
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateFirstVisible, { passive: true });
+    updateFirstVisible();
+    return () => el.removeEventListener('scroll', updateFirstVisible);
+  }, [updateFirstVisible]);
+
+  // Bar click → scroll to the first visible item at or after the segment's
+  // unfiltered start index. The bar only fires clicks on un-filtered segments,
+  // so at least one item in the range maps into the filtered list.
+  const onSeekFromBar = useCallback(
+    (unfilteredStart: number) => {
+      const filteredIdById = new Map<string, number>();
+      filteredItems.forEach((it, idx) => filteredIdById.set(it.id, idx));
+      for (let i = unfilteredStart; i < items.length; i++) {
+        const candidate = items[i];
+        if (!candidate) continue;
+        const filteredIdx = filteredIdById.get(candidate.id);
+        if (filteredIdx !== undefined) {
+          scrollToRow(filteredIdx);
+          return;
+        }
+      }
+    },
+    [items, filteredItems, scrollToRow],
   );
 
   // Re-arm the one-shot scroll when the deep-link target changes.
@@ -343,6 +434,18 @@ export default function CursorTranscriptPane({
           })}
         </div>
       </div>
+
+      {/* zztp: shared turn-based minimap. Self-hides when the estimated row
+          times are unknown (empty layout). assistantLabel="Assistant" matches
+          the OpenCode pane for cross-provider tooltip consistency; the
+          estimated-times note flags that the durations are interpolated. */}
+      <TimelineBar
+        layout={segmentLayout}
+        visibleIndices={visibleIndices}
+        onSeek={onSeekFromBar}
+        assistantLabel="Assistant"
+        tooltipNote={TIMELINE_ESTIMATED_NOTE}
+      />
 
       {search.isOpen && (
         <TranscriptSearchBar

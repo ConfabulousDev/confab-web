@@ -32,6 +32,12 @@ export interface TimelineBarProps<S extends SpeakerSegment> {
   onSeek: (startIndex: number) => void;
   /** Tooltip label for assistant segments (e.g. "Codex", "Assistant"). */
   assistantLabel: string;
+  /**
+   * zztp: optional suffix appended to every segment tooltip (new line). Cursor
+   * passes an "estimated times" disclaimer because its per-row timestamps are
+   * interpolated, not real (ce79); other providers omit it.
+   */
+  tooltipNote?: string;
 }
 
 export default function TimelineBar<S extends SpeakerSegment>({
@@ -39,6 +45,7 @@ export default function TimelineBar<S extends SpeakerSegment>({
   visibleIndices,
   onSeek,
   assistantLabel,
+  tooltipNote,
 }: TimelineBarProps<S>) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hoveredSegment, setHoveredSegment] = useState<S | null>(null);
@@ -106,6 +113,7 @@ export default function TimelineBar<S extends SpeakerSegment>({
           style={{ top: tooltipPosition.top, left: tooltipPosition.left }}
         >
           {formatTooltip(hoveredSegment, visibleIndices, assistantLabel)}
+          {tooltipNote && <div className={styles.tooltipNote}>{tooltipNote}</div>}
         </div>
       )}
     </div>
