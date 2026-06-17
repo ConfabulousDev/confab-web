@@ -202,6 +202,8 @@ function SessionViewer({
                 error={error}
                 targetId={targetId}
                 isCostMode={isCostMode}
+                firstSeen={session.first_seen}
+                lastSyncAt={session.last_sync_at}
               />
             </div>
           )}

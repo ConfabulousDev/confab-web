@@ -262,6 +262,67 @@ export function extractCursorModel(): string | undefined {
 }
 
 // ============================================================================
+// Estimated per-row timestamps (ce79)
+// ============================================================================
+
+/** Session-level time bounds for estimating per-row timestamps. `start` is the
+ *  session's `firstSeen` (which 5w7r already lowers to fold in `metadata.created_at`)
+ *  and `end` its `lastSyncAt`. Either may be absent on a session detail. */
+export interface CursorTimestampBounds {
+  start?: string | null;
+  end?: string | null;
+}
+
+/** The line index a render item came from — the numeric prefix of its synthetic
+ *  id (`${lineIndex}` or `${lineIndex}-${blockIndex}`). All items from one wire
+ *  line (an assistant narrative plus its tool calls) share this index, so they
+ *  inherit the same estimated timestamp. */
+function lineIndexOf(item: CursorRenderItem): number {
+  const dash = item.id.indexOf('-');
+  return Number.parseInt(dash === -1 ? item.id : item.id.slice(0, dash), 10);
+}
+
+/** Attach ESTIMATED per-row timestamps to Cursor render items by linear
+ *  interpolation between the session's `start` and `end` bounds.
+ *
+ *  Cursor JSONL has no per-message time, so each distinct wire line is treated
+ *  as one conversation row spaced evenly across `[start, end]`: the first row
+ *  gets `start`, the last gets `end`, the rest fall on the line. Tool items
+ *  inherit their parent line's timestamp (they share its line index). With a
+ *  single row, it gets `start`; with equal bounds, every row gets `start`.
+ *
+ *  Pure + synchronous (safe inside `useMemo`). Returns the items UNCHANGED (no
+ *  `timestamp`) when a bound is missing, unparseable, or inverted (`start > end`)
+ *  — the row header simply omits the time rather than showing a bogus one. */
+export function attachCursorTimestamps(
+  items: CursorRenderItem[],
+  bounds: CursorTimestampBounds,
+): CursorRenderItem[] {
+  if (items.length === 0) return items;
+
+  const startMs = bounds.start ? Date.parse(bounds.start) : NaN;
+  const endMs = bounds.end ? Date.parse(bounds.end) : NaN;
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) {
+    return items;
+  }
+
+  // Distinct, ordered line indices → one interpolation slot each.
+  const ordinalByLine = new Map<number, number>();
+  for (const item of items) {
+    const line = lineIndexOf(item);
+    if (!ordinalByLine.has(line)) ordinalByLine.set(line, ordinalByLine.size);
+  }
+  const lineCount = ordinalByLine.size;
+  const span = endMs - startMs;
+
+  return items.map((item) => {
+    const ordinal = ordinalByLine.get(lineIndexOf(item)) ?? 0;
+    const ms = lineCount <= 1 ? startMs : startMs + (span * ordinal) / (lineCount - 1);
+    return { ...item, timestamp: new Date(Math.round(ms)).toISOString() };
+  });
+}
+
+// ============================================================================
 // Fetch + cache
 // ============================================================================
 
