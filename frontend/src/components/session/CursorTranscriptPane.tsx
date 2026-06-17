@@ -3,9 +3,9 @@
 // A virtualized list of render items (user / assistant / tool) with Cmd-F
 // in-transcript search (shared `useTranscriptSearch` toolkit) and deep-link
 // scroll-to. Intentionally leaner than Claude/Codex/OpenCode: NO minimap /
-// timeline bar and NO cost rail — Cursor's JSONL carries no timestamps (no
-// timeline axis) and no token/cost data (no cost rail). It fetches nothing
-// itself (SessionViewer drives fetch/poll via the adapter).
+// timeline bar and NO cost rail — Cursor's JSONL carries no token/cost data (no
+// cost rail) and no per-message time, so row times are ESTIMATED (ce79). It
+// fetches nothing itself (SessionViewer drives fetch/poll via the adapter).
 //
 // Tool rows render the call (name + one-line input summary) with NO output:
 // Cursor records tool inputs only, never results.
@@ -14,15 +14,35 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import { formatCodexTimestamp } from '@/components/transcript/codex/codexFormat';
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import type { CursorRenderItem } from './cursorCategories';
+import { attachCursorTimestamps } from '@/services/cursorTranscriptService';
 import CursorContextSections from './CursorContextSections';
 import CursorMessageBody from './CursorMessageBody';
 import { extractCursorItemText } from './extractCursorItemText';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './CursorTranscriptPane.module.css';
+
+// Tooltip shown on every estimated row time — Cursor transcripts have no
+// per-message timestamps, so these are interpolated, not real (ce79).
+const ESTIMATED_TIME_TOOLTIP =
+  'Estimated — Cursor transcripts have no per-message timestamps.';
+
+/** Row-header time marker for an estimated Cursor timestamp: a muted `~` prefix
+ *  plus the formatted time, with the "estimated" tooltip. Renders nothing when
+ *  the row has no timestamp (bounds unknown). */
+function EstimatedTime({ timestamp }: { timestamp?: string }) {
+  if (!timestamp) return null;
+  return (
+    <span className={styles.estimatedTime} title={ESTIMATED_TIME_TOOLTIP}>
+      <span className={styles.estimatedTilde}>~</span>
+      {formatCodexTimestamp(timestamp)}
+    </span>
+  );
+}
 
 export interface CursorTranscriptPaneProps {
   sessionId: string;
@@ -34,6 +54,11 @@ export interface CursorTranscriptPaneProps {
   error: string | null;
   /** Deep-link target, addressed by render-item id (synthetic line-based id). */
   targetId?: string;
+  /** Session start bound (`first_seen`). With `lastSyncAt`, drives the ESTIMATED
+   *  per-row timestamps (ce79). Omitted/absent → row headers show no time. */
+  firstSeen?: string | null;
+  /** Session end bound (`last_sync_at`). See `firstSeen`. */
+  lastSyncAt?: string | null;
 }
 
 const ESTIMATED_ROW_HEIGHT = 120;
@@ -52,6 +77,7 @@ function ToolRow({
       <div className={styles.rowHeader}>
         <span className={styles.roleLabel}>Tool</span>
         <span className={styles.toolName}>{item.toolName}</span>
+        <EstimatedTime timestamp={item.timestamp} />
       </div>
       {item.input ? (
         <pre className={styles.toolInput}>
@@ -76,6 +102,7 @@ function Row({
       <div className={cx(styles.row, styles.userRow)}>
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>User</span>
+          <EstimatedTime timestamp={item.timestamp} />
         </div>
         <CursorMessageBody
           text={item.text}
@@ -91,6 +118,7 @@ function Row({
       <div className={cx(styles.row, styles.assistantRow)}>
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>Assistant</span>
+          <EstimatedTime timestamp={item.timestamp} />
         </div>
         <CursorMessageBody
           text={item.text}
@@ -111,9 +139,20 @@ export default function CursorTranscriptPane({
   loading,
   error,
   targetId,
+  firstSeen,
+  lastSyncAt,
 }: CursorTranscriptPaneProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const hasScrolledToTarget = useRef(false);
+
+  // Estimate per-row timestamps over the FULL item stream (ce79), so each row's
+  // time reflects its true position in the session — independent of which
+  // categories are currently filtered in. Look them up by id when rendering the
+  // filtered rows. A no-op (timestamps undefined) when bounds are unknown.
+  const timestampById = useMemo(() => {
+    const stamped = attachCursorTimestamps(items, { start: firstSeen, end: lastSyncAt });
+    return new Map(stamped.map((it) => [it.id, it.timestamp]));
+  }, [items, firstSeen, lastSyncAt]);
 
   // Cmd-F transcript search over the filtered list. Cursor has no separator
   // rows, so the filtered index IS the virtual index — no indirection.
@@ -224,8 +263,11 @@ export default function CursorTranscriptPane({
       <div ref={parentRef} className={styles.scroll}>
         <div className={styles.virtualizer} style={{ height: `${virtualizer.getTotalSize()}px` }}>
           {virtualizer.getVirtualItems().map((virtualItem) => {
-            const item = filteredItems[virtualItem.index];
-            if (!item) return null;
+            const rawItem = filteredItems[virtualItem.index];
+            if (!rawItem) return null;
+            // Overlay the estimated timestamp (looked up by id from the full
+            // stream) onto the filtered render item for this row.
+            const item: CursorRenderItem = { ...rawItem, timestamp: timestampById.get(rawItem.id) };
             const isTarget = targetId !== undefined && item.id === targetId;
             const isCurrentSearchMatch = search.currentMatchFilteredIndex === virtualItem.index;
             const searchQuery = search.isOpen ? search.highlightQuery : undefined;

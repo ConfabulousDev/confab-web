@@ -73,6 +73,23 @@
   color: var(--color-text-secondary);
 }
 
+/* ce79: estimated per-row time, pushed to the trailing edge of the header.
+   Muted to signal it is interpolated, not a real per-message timestamp. */
+.estimatedTime {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1em;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
+.estimatedTilde {
+  opacity: 0.7;
+}
+
 .toolInput {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

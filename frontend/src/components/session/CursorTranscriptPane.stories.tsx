@@ -352,6 +352,37 @@ export const SearchActiveInMarkdown: Story = {
   },
 };
 
+// ce79: Cursor JSONL has no per-message time, so each row shows an ESTIMATED
+// time interpolated over the session's [firstSeen, lastSyncAt] bounds. The first
+// row sits at firstSeen, the last at lastSyncAt, the rest evenly between; tool
+// rows inherit their parent assistant line's time. A muted `~` prefix and a
+// tooltip flag the estimate. Passing the bounds drives the interpolation.
+export const EstimatedTimestamps: Story = {
+  args: {
+    sessionId: 'demo',
+    items,
+    filteredItems: items,
+    loading: false,
+    error: null,
+    firstSeen: '2026-06-17T10:00:00.000Z',
+    lastSyncAt: '2026-06-17T10:06:00.000Z',
+  },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => {
+      const times = canvasElement.querySelectorAll('[title^="Estimated"]');
+      if (times.length === 0) throw new Error('no estimated times rendered yet');
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'ce79: per-row estimated times interpolated over the session bounds (firstSeen → lastSyncAt). Times increase monotonically down the transcript; the assistant row and its Read/Grep tool rows share one line time. The `~` prefix and the "Estimated — Cursor transcripts have no per-message timestamps." tooltip mark them as estimates, not real per-message timestamps.',
+      },
+    },
+  },
+};
+
 export const Loading: Story = {
   args: { sessionId: 'demo', items: [], filteredItems: [], loading: true, error: null },
 };

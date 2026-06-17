@@ -67,6 +67,12 @@ export interface TranscriptPaneProps<TItem> {
   /** Provider-specific opaque id. Claude: message UUID. Codex: lineId. */
   targetId?: string;
   isCostMode: boolean;
+  /** Session time bounds (ce79). Always provided by SessionViewer. Only the
+   *  Cursor pane reads them — its JSONL has no per-message time, so it estimates
+   *  per-row timestamps by interpolating over `[firstSeen, lastSyncAt]`. Other
+   *  panes ignore them (they carry real per-message times). */
+  firstSeen?: string | null;
+  lastSyncAt?: string | null;
 }
 
 export interface SessionMetaFallback {

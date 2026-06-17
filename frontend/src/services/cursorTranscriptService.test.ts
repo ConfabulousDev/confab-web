@@ -11,6 +11,7 @@ import {
   extractCursorModel,
   cleanCursorAssistantText,
   parseCursorUserText,
+  attachCursorTimestamps,
 } from './cursorTranscriptService';
 import { extractCursorItemText } from '@/components/session/extractCursorItemText';
 
@@ -350,5 +351,134 @@ describe('extractCursorItemText searches the extracted prompt (nfbe)', () => {
     const text = extractCursorItemText(items[0]!);
     expect(text).toContain('find the validation seam');
     expect(text).not.toContain('user_query');
+  });
+});
+
+// ce79: Cursor lines carry no per-message timestamp, so estimated per-row times
+// are interpolated frontend-side over the distinct wire lines (each line index
+// becomes one conversation row) between the session start (firstSeen) and end
+// (lastSyncAt) bounds. Tool render items inherit their parent assistant line's
+// timestamp because they share its line index.
+describe('attachCursorTimestamps', () => {
+  const T0 = '2026-06-17T10:00:00.000Z';
+  const T1 = '2026-06-17T10:00:10.000Z';
+  const MID = '2026-06-17T10:00:05.000Z';
+
+  // Three distinct wire lines (user, assistant, user) → three conversation rows
+  // interpolated to T0, midpoint, T1.
+  const threeLineRaw = rawOf(
+    { role: 'user', message: { content: [{ type: 'text', text: 'first prompt' }] } },
+    { role: 'assistant', message: { content: [{ type: 'text', text: 'a reply' }] } },
+    { role: 'user', message: { content: [{ type: 'text', text: 'second prompt' }] } },
+  );
+
+  it('interpolates linearly over distinct lines: first=start, last=end, middle=midpoint', () => {
+    const items = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: T0,
+      end: T1,
+    });
+    expect(items).toHaveLength(3);
+    expect(items[0]?.timestamp).toBe(T0);
+    expect(items[1]?.timestamp).toBe(MID);
+    expect(items[2]?.timestamp).toBe(T1);
+  });
+
+  it('produces monotonically non-decreasing timestamps down the transcript', () => {
+    const items = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: T0,
+      end: T1,
+    });
+    for (let i = 1; i < items.length; i++) {
+      const prev = Date.parse(items[i - 1]!.timestamp!);
+      const cur = Date.parse(items[i]!.timestamp!);
+      expect(cur).toBeGreaterThanOrEqual(prev);
+    }
+  });
+
+  it('makes tool items inherit their parent assistant line timestamp', () => {
+    // One user line, then one assistant line carrying narrative + two tool_use
+    // blocks. The assistant row and both tool rows share line index 1, so all
+    // three carry the same (end) timestamp.
+    const raw = rawOf(
+      { role: 'user', message: { content: [{ type: 'text', text: 'do it' }] } },
+      {
+        role: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'reading and grepping' },
+            { type: 'tool_use', name: 'Read', input: { path: 'a.go' } },
+            { type: 'tool_use', name: 'Grep', input: { pattern: 'x' } },
+          ],
+        },
+      },
+    );
+    const items = attachCursorTimestamps(normalizeCursorLines(raw), { start: T0, end: T1 });
+    // user(line0)=T0; assistant + 2 tools (line1)=T1
+    expect(items[0]?.kind).toBe('user');
+    expect(items[0]?.timestamp).toBe(T0);
+    const lineOne = items.slice(1);
+    expect(lineOne).toHaveLength(3);
+    for (const it of lineOne) {
+      expect(it.timestamp).toBe(T1);
+    }
+  });
+
+  it('assigns the single row the start timestamp when there is one line', () => {
+    const items = attachCursorTimestamps(
+      normalizeCursorLines(
+        rawOf({ role: 'user', message: { content: [{ type: 'text', text: 'only one' }] } }),
+      ),
+      { start: T0, end: T1 },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]?.timestamp).toBe(T0);
+  });
+
+  it('assigns all rows the same timestamp when bounds are equal', () => {
+    const items = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: T0,
+      end: T0,
+    });
+    for (const it of items) {
+      expect(it.timestamp).toBe(T0);
+    }
+  });
+
+  it('omits timestamps when a bound is missing', () => {
+    const noEnd = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: T0,
+      end: null,
+    });
+    for (const it of noEnd) {
+      expect(it.timestamp).toBeUndefined();
+    }
+    const noStart = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: undefined,
+      end: T1,
+    });
+    for (const it of noStart) {
+      expect(it.timestamp).toBeUndefined();
+    }
+  });
+
+  it('omits timestamps when bounds are unparseable or inverted', () => {
+    const bad = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: 'not-a-date',
+      end: T1,
+    });
+    for (const it of bad) {
+      expect(it.timestamp).toBeUndefined();
+    }
+    const inverted = attachCursorTimestamps(normalizeCursorLines(threeLineRaw), {
+      start: T1,
+      end: T0,
+    });
+    for (const it of inverted) {
+      expect(it.timestamp).toBeUndefined();
+    }
+  });
+
+  it('returns an empty list unchanged', () => {
+    expect(attachCursorTimestamps([], { start: T0, end: T1 })).toEqual([]);
   });
 });

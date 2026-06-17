@@ -116,9 +116,9 @@ export const cursorAdapter: CursorAdapter = {
     );
   },
 
-  // The pane is MVP and ignores visibleIndices / isCostMode (no timeline bar,
-  // no cost rail), but the adapter contract supplies them.
-  TranscriptPane({ sessionId, items, filteredItems, loading, error, targetId }) {
+  // The pane ignores visibleIndices / isCostMode (no timeline bar, no cost rail),
+  // but reads firstSeen/lastSyncAt to estimate per-row timestamps (ce79).
+  TranscriptPane({ sessionId, items, filteredItems, loading, error, targetId, firstSeen, lastSyncAt }) {
     return (
       <CursorTranscriptPane
         sessionId={sessionId}
@@ -127,6 +127,8 @@ export const cursorAdapter: CursorAdapter = {
         loading={loading}
         error={error}
         targetId={targetId}
+        firstSeen={firstSeen}
+        lastSyncAt={lastSyncAt}
       />
     );
   },

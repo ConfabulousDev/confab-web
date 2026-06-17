@@ -6,9 +6,14 @@
 // flat category set mirroring opencodeCategories (minus `unknown`: both wire
 // shapes are fully handled, so there is no residual catch-all kind).
 //
-// Render items carry NO timeCreated / model / usage / cost — Cursor lines have
-// none of those fields. Tool items carry only the call (name + a one-line input
-// summary); there is no tool output to show (Cursor records inputs only).
+// Render items carry NO model / usage / cost — Cursor lines have none of those
+// fields. Tool items carry only the call (name + a one-line input summary);
+// there is no tool output to show (Cursor records inputs only).
+//
+// ce79: `timestamp` is an OPTIONAL, ESTIMATED ISO 8601 time. Cursor JSONL has no
+// per-message timestamp, so it is interpolated frontend-side over the session's
+// start/end bounds (see attachCursorTimestamps); it is absent until those bounds
+// are known and never sourced from the wire.
 
 export type CursorCategory = 'user' | 'assistant' | 'tool';
 
@@ -20,9 +25,9 @@ export type CursorCategory = 'user' | 'assistant' | 'tool';
 export type CursorUserSection = { tag: string; label: string; content: string };
 
 export type CursorRenderItem =
-  | { kind: 'user'; id: string; text: string; sections?: CursorUserSection[] }
-  | { kind: 'assistant'; id: string; text: string }
-  | { kind: 'tool'; id: string; toolName: string; input?: string };
+  | { kind: 'user'; id: string; text: string; timestamp?: string; sections?: CursorUserSection[] }
+  | { kind: 'assistant'; id: string; text: string; timestamp?: string }
+  | { kind: 'tool'; id: string; toolName: string; input?: string; timestamp?: string };
 
 export type CursorFilterState = {
   user: boolean;
