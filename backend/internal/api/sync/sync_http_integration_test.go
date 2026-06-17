@@ -814,7 +814,7 @@ func TestSyncInit_MetadataNesting_HTTP_Integration(t *testing.T) {
 		reqBody := map[string]interface{}{
 			"external_id":     "mixed-format-session",
 			"transcript_path": "/home/user/project/transcript.jsonl",
-			"cwd":             "/home/user/top-level-cwd",        // Should be ignored
+			"cwd":             "/home/user/top-level-cwd",         // Should be ignored
 			"git_info":        map[string]string{"branch": "old"}, // Should be ignored
 			"metadata": map[string]interface{}{
 				"cwd":      "/home/user/metadata-cwd",
@@ -3065,12 +3065,12 @@ func TestSyncChunk_PRLinkExtraction_HTTP_Integration(t *testing.T) {
 
 		// Verify github link was created
 		var link struct {
-			ID       int64  `db:"id"`
-			Owner    string `db:"owner"`
-			Repo     string `db:"repo"`
-			Ref      string `db:"ref"`
-			Source   string `db:"source"`
-			LinkType string `db:"link_type"`
+			ID       int64   `db:"id"`
+			Owner    string  `db:"owner"`
+			Repo     string  `db:"repo"`
+			Ref      string  `db:"ref"`
+			Source   string  `db:"source"`
+			LinkType string  `db:"link_type"`
 			Title    *string `db:"title"`
 		}
 		row := env.DB.QueryRow(env.Ctx,
@@ -4744,6 +4744,174 @@ func TestSyncCursor_HTTP_Integration(t *testing.T) {
 		}
 		if lastMessageAt != nil {
 			t.Errorf("last_message_at = %v, want NULL (no timestamp source for cursor without metadata)", lastMessageAt)
+		}
+	})
+
+	t.Run("chunk with earlier created_at lowers first_seen", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-created",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-created.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		// first_seen is set at init (≈now). A created_at well in the past must
+		// lower it to refine the interpolation start anchor.
+		var firstSeenBefore time.Time
+		if err := env.DB.QueryRow(env.Ctx, "SELECT first_seen FROM sessions WHERE id = $1", sessionID).Scan(&firstSeenBefore); err != nil {
+			t.Fatalf("query first_seen: %v", err)
+		}
+
+		created := time.Date(2026, 6, 15, 9, 0, 0, 0, time.UTC)
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-created.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				CreatedAt: &created,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstSeenAfter time.Time
+		if err := env.DB.QueryRow(env.Ctx, "SELECT first_seen FROM sessions WHERE id = $1", sessionID).Scan(&firstSeenAfter); err != nil {
+			t.Fatalf("query first_seen after: %v", err)
+		}
+		if !firstSeenAfter.UTC().Equal(created) {
+			t.Errorf("first_seen = %v, want lowered to created_at %v", firstSeenAfter.UTC(), created)
+		}
+		if !firstSeenAfter.Before(firstSeenBefore) {
+			t.Errorf("first_seen was not lowered: before=%v after=%v", firstSeenBefore, firstSeenAfter)
+		}
+	})
+
+	t.Run("chunk with later created_at does not raise first_seen", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-created-late",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-created-late.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		var firstSeenBefore time.Time
+		if err := env.DB.QueryRow(env.Ctx, "SELECT first_seen FROM sessions WHERE id = $1", sessionID).Scan(&firstSeenBefore); err != nil {
+			t.Fatalf("query first_seen: %v", err)
+		}
+
+		// A created_at AFTER the current first_seen must not push first_seen
+		// forward — first_seen is a high-water-mark floor, only lowered.
+		later := firstSeenBefore.Add(time.Hour)
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-created-late.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				CreatedAt: &later,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstSeenAfter time.Time
+		if err := env.DB.QueryRow(env.Ctx, "SELECT first_seen FROM sessions WHERE id = $1", sessionID).Scan(&firstSeenAfter); err != nil {
+			t.Fatalf("query first_seen after: %v", err)
+		}
+		if !firstSeenAfter.UTC().Equal(firstSeenBefore.UTC()) {
+			t.Errorf("first_seen changed from %v to %v; a later created_at must not raise it", firstSeenBefore, firstSeenAfter)
+		}
+	})
+
+	t.Run("chunk with far-future created_at leaves first_seen unchanged", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-created-future",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-created-future.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		var firstSeenBefore time.Time
+		if err := env.DB.QueryRow(env.Ctx, "SELECT first_seen FROM sessions WHERE id = $1", sessionID).Scan(&firstSeenBefore); err != nil {
+			t.Fatalf("query first_seen: %v", err)
+		}
+
+		// Year-9999 created_at is dropped by the same future-clamp the other
+		// metadata timestamps use; first_seen stays put.
+		future := time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-created-future.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				CreatedAt: &future,
+			},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var firstSeenAfter time.Time
+		if err := env.DB.QueryRow(env.Ctx, "SELECT first_seen FROM sessions WHERE id = $1", sessionID).Scan(&firstSeenAfter); err != nil {
+			t.Fatalf("query first_seen after: %v", err)
+		}
+		if !firstSeenAfter.UTC().Equal(firstSeenBefore.UTC()) {
+			t.Errorf("first_seen changed from %v to %v; far-future created_at must be clamped/ignored", firstSeenBefore, firstSeenAfter)
 		}
 	})
 }

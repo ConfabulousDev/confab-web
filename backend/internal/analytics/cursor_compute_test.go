@@ -4,7 +4,12 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 )
+
+// noBounds is the zero-signal session window: no created_at/first_seen and no
+// last_message_at/last_sync_at. Compute must leave DurationMs nil for it.
+var noBounds = CursorSessionBounds{}
 
 // loadCursorFixtureMessages parses the committed fy5q fixture
 // (testdata/cursor/main.jsonl) into the typed Cursor message slice the compute
@@ -61,7 +66,7 @@ func TestParseCursorJSONLSeparatesConversationFromMarkers(t *testing.T) {
 // purely from message structure (no timestamps in Cursor JSONL).
 func TestComputeFromCursorRolloutSession(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages)
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
 
 	if result.UserMessages != 3 {
 		t.Errorf("UserMessages = %d, want 3", result.UserMessages)
@@ -79,7 +84,7 @@ func TestComputeFromCursorRolloutSession(t *testing.T) {
 // once under its Cursor-specific name.
 func TestComputeFromCursorRolloutTools(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages)
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
 
 	wantTools := map[string]int{
 		"Read": 1, "Grep": 1, "Glob": 1, "SemanticSearch": 1, "Task": 1,
@@ -110,7 +115,7 @@ func TestComputeFromCursorRolloutTools(t *testing.T) {
 // SemanticSearch are searches while WebSearch is NOT.
 func TestComputeFromCursorRolloutCodeActivity(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages)
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
 
 	if result.FilesRead != 1 {
 		t.Errorf("FilesRead = %d, want 1 (Read only)", result.FilesRead)
@@ -129,7 +134,7 @@ func TestComputeFromCursorRolloutCodeActivity(t *testing.T) {
 // the subagent_type field of the Task input (main-thread-only agents card).
 func TestComputeFromCursorRolloutAgents(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages)
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
 
 	if result.TotalAgentInvocations != 1 {
 		t.Errorf("TotalAgentInvocations = %d, want 1", result.TotalAgentInvocations)
@@ -145,7 +150,7 @@ func TestComputeFromCursorRolloutAgents(t *testing.T) {
 // written with an empty by_provider tree and zero cost (no invented dollars).
 func TestComputeFromCursorRolloutAlwaysWritesEmptyTokensV2(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	result := ComputeFromCursorRollout(context.Background(), messages)
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
 
 	if result.TokensV2 == nil {
 		t.Fatal("TokensV2 must always be written (empty tree), got nil")
@@ -175,8 +180,95 @@ func TestComputeFromCursorRolloutTurnEndedErrorTolerated(t *testing.T) {
 
 // TestComputeFromCursorRolloutEmpty guards the nil/empty input path.
 func TestComputeFromCursorRolloutEmpty(t *testing.T) {
-	result := ComputeFromCursorRollout(context.Background(), nil)
+	result := ComputeFromCursorRollout(context.Background(), nil, noBounds)
 	if result == nil {
 		t.Fatal("ComputeFromCursorRollout(nil) must return a non-nil result")
+	}
+}
+
+// TestComputeFromCursorRolloutDurationFromBounds locks the core 5w7r contract:
+// Cursor lines carry no per-line timestamps, so DurationMs is derived from the
+// session window (start = created_at ?? first_seen; end = last_message_at ??
+// last_sync_at). With a clean T0→T1 window the duration is exactly the span.
+func TestComputeFromCursorRolloutDurationFromBounds(t *testing.T) {
+	messages := loadCursorFixtureMessages(t)
+	t0 := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(90 * time.Minute)
+
+	result := ComputeFromCursorRollout(context.Background(), messages, CursorSessionBounds{
+		FirstSeen:     ptrTime(t0),
+		LastMessageAt: ptrTime(t1),
+	})
+
+	if result.DurationMs == nil {
+		t.Fatal("DurationMs = nil, want span between session bounds")
+	}
+	wantMs := int64(90 * 60 * 1000)
+	if *result.DurationMs != wantMs {
+		t.Errorf("DurationMs = %d, want %d (T1-T0)", *result.DurationMs, wantMs)
+	}
+}
+
+// TestComputeCursorBoundsStartPrecedence verifies created_at is preferred over
+// first_seen as the start anchor, and last_message_at over last_sync_at as the
+// end anchor (start = created_at ?? first_seen; end = last_message_at ??
+// last_sync_at).
+func TestComputeCursorBoundsStartPrecedence(t *testing.T) {
+	createdAt := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	firstSeen := time.Date(2026, 6, 15, 10, 30, 0, 0, time.UTC)
+	lastMessage := time.Date(2026, 6, 15, 11, 0, 0, 0, time.UTC)
+	lastSync := time.Date(2026, 6, 15, 11, 30, 0, 0, time.UTC)
+
+	start, end := cursorSessionWindow(CursorSessionBounds{
+		CreatedAt:     ptrTime(createdAt),
+		FirstSeen:     ptrTime(firstSeen),
+		LastMessageAt: ptrTime(lastMessage),
+		LastSyncAt:    ptrTime(lastSync),
+	})
+	if start == nil || !start.Equal(createdAt) {
+		t.Errorf("start = %v, want created_at %v (created_at preferred over first_seen)", start, createdAt)
+	}
+	if end == nil || !end.Equal(lastMessage) {
+		t.Errorf("end = %v, want last_message_at %v (preferred over last_sync_at)", end, lastMessage)
+	}
+
+	// Fallbacks: no created_at → first_seen; no last_message_at → last_sync_at.
+	start, end = cursorSessionWindow(CursorSessionBounds{
+		FirstSeen:  ptrTime(firstSeen),
+		LastSyncAt: ptrTime(lastSync),
+	})
+	if start == nil || !start.Equal(firstSeen) {
+		t.Errorf("start = %v, want first_seen fallback %v", start, firstSeen)
+	}
+	if end == nil || !end.Equal(lastSync) {
+		t.Errorf("end = %v, want last_sync_at fallback %v", end, lastSync)
+	}
+}
+
+// TestComputeFromCursorRolloutDurationDegrades covers the graceful-degradation
+// edge cases: a missing bound, and an end-before-start window (which must not
+// emit a negative or zero-padded duration).
+func TestComputeFromCursorRolloutDurationDegrades(t *testing.T) {
+	messages := loadCursorFixtureMessages(t)
+	t0 := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Hour)
+
+	cases := []struct {
+		name   string
+		bounds CursorSessionBounds
+	}{
+		{"no bounds at all", noBounds},
+		{"start only", CursorSessionBounds{FirstSeen: ptrTime(t0)}},
+		{"end only", CursorSessionBounds{LastMessageAt: ptrTime(t1)}},
+		{"end before start", CursorSessionBounds{FirstSeen: ptrTime(t1), LastMessageAt: ptrTime(t0)}},
+		{"zero-length window", CursorSessionBounds{FirstSeen: ptrTime(t0), LastMessageAt: ptrTime(t0)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ComputeFromCursorRollout(context.Background(), messages, tc.bounds)
+			if result.DurationMs != nil {
+				t.Errorf("DurationMs = %d, want nil (%s must degrade, not invent a non-positive span)", *result.DurationMs, tc.name)
+			}
+		})
 	}
 }
