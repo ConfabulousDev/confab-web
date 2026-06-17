@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbcodex "github.com/ConfabulousDev/confab-web/internal/db/codex"
 	dbevents "github.com/ConfabulousDev/confab-web/internal/db/events"
@@ -538,6 +539,22 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		gitInfo = req.Metadata.GitInfo
 		summary = req.Metadata.Summary
 		firstUserMessage = req.Metadata.FirstUserMessage
+
+		// Cursor's CLI-supplied first_user_message arrives wrapped in the same
+		// <user_query> envelope as the transcript's user text. Unwrap it for
+		// cursor sessions so the session-list title shows the human prompt, not
+		// the raw tags (nfbe). Extraction only shrinks the value (or returns it
+		// unchanged when no envelope is present), so the length validated above
+		// on the raw input still holds — no re-validation needed. If extraction
+		// yields nothing (an empty <user_query>), drop the field rather than
+		// writing an empty title (the store COALESCEs NULL, not "").
+		if provider == models.ProviderCursor && firstUserMessage != nil {
+			if cleaned := analytics.ExtractCursorUserPrompt(*firstUserMessage); cleaned != "" {
+				firstUserMessage = &cleaned
+			} else {
+				firstUserMessage = nil
+			}
+		}
 
 		// Cursor has no per-line timestamps, so the CLI supplies the session's
 		// latest message time as metadata. Feed it into the same last_message_at

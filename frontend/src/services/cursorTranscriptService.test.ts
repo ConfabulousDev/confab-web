@@ -10,7 +10,9 @@ import {
   normalizeCursorLines,
   extractCursorModel,
   cleanCursorAssistantText,
+  parseCursorUserText,
 } from './cursorTranscriptService';
+import { extractCursorItemText } from '@/components/session/extractCursorItemText';
 
 function line(obj: unknown): string {
   return JSON.stringify(obj);
@@ -206,5 +208,147 @@ describe('normalizeCursorLines [REDACTED] handling (fa3h)', () => {
 describe('extractCursorModel', () => {
   it('returns undefined — Cursor lines carry no model field', () => {
     expect(extractCursorModel()).toBeUndefined();
+  });
+});
+
+// nfbe: Cursor user `text` blocks arrive wrapped in an envelope. The human
+// prompt lives in `<user_query>…</user_query>`; injected context (rules,
+// attached files, skills, …) arrives as sibling top-level tagged blocks. The
+// user row must show ONLY the prompt — the tags must never render literally.
+// Ground truth (real ~/.cursor agent-transcripts): every user text block is
+// `<user_query>…</user_query>` (sometimes preceded by a bare `[Image]` line or
+// a `<manually_attached_skills>…</manually_attached_skills>` block); `[Image #N]`
+// placeholders appear INSIDE the query.
+describe('parseCursorUserText (nfbe)', () => {
+  it('extracts the <user_query> content as the prompt and trims it', () => {
+    const { prompt } = parseCursorUserText(
+      '<user_query>\ndoes gh repo have any outstanding dependabot alerts?\n</user_query>',
+    );
+    expect(prompt).toBe('does gh repo have any outstanding dependabot alerts?');
+  });
+
+  it('does not leak the envelope tags into the prompt', () => {
+    const { prompt } = parseCursorUserText('<user_query>hello world</user_query>');
+    expect(prompt).not.toContain('<user_query>');
+    expect(prompt).not.toContain('</user_query>');
+  });
+
+  it('falls back to the raw text (trimmed) when no <user_query> tag is present', () => {
+    const { prompt, sections } = parseCursorUserText('  plain prompt with no envelope  ');
+    expect(prompt).toBe('plain prompt with no envelope');
+    expect(sections).toEqual([]);
+  });
+
+  it('falls back to raw when the <user_query> tag is unclosed (never drops content)', () => {
+    const raw = '<user_query>unterminated prompt body';
+    const { prompt } = parseCursorUserText(raw);
+    expect(prompt).toBe(raw.trim());
+  });
+
+  it('concatenates multiple <user_query> blocks', () => {
+    const { prompt } = parseCursorUserText(
+      '<user_query>first</user_query>\n<user_query>second</user_query>',
+    );
+    expect(prompt).toContain('first');
+    expect(prompt).toContain('second');
+  });
+
+  it('keeps [Image #N] placeholders literal inside the prompt (v1, no image render)', () => {
+    const { prompt } = parseCursorUserText(
+      '<user_query>\nthis user msg: [Image #1] needs work\n</user_query>',
+    );
+    expect(prompt).toContain('[Image #1]');
+  });
+
+  it('captures other recognized top-level tagged blocks as sections (consumed by 0rcv)', () => {
+    const { prompt, sections } = parseCursorUserText(
+      '<manually_attached_skills>\nSkill body here.\n</manually_attached_skills>\n<user_query>\nwrite up some tickets.\n</user_query>',
+    );
+    expect(prompt).toBe('write up some tickets.');
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.tag).toBe('manually_attached_skills');
+    expect(sections[0]?.content).toContain('Skill body here.');
+    expect(sections[0]?.label.length).toBeGreaterThan(0);
+  });
+
+  it('returns an empty prompt for an empty query without throwing', () => {
+    const { prompt } = parseCursorUserText('<user_query></user_query>');
+    expect(prompt).toBe('');
+  });
+
+  it('returns an empty prompt for a whitespace-only query', () => {
+    const { prompt } = parseCursorUserText('<user_query>   \n  </user_query>');
+    expect(prompt).toBe('');
+  });
+});
+
+describe('normalizeCursorLines user-query extraction (nfbe)', () => {
+  const wrappedUserLine = {
+    role: 'user',
+    message: {
+      content: [
+        {
+          type: 'text',
+          text: '<user_query>\ndoes gh repo have any outstanding dependabot alerts?\n</user_query>',
+        },
+      ],
+    },
+  };
+
+  it('renders only the extracted prompt in the user row (no envelope tags)', () => {
+    const items = normalizeCursorLines(rawOf(wrappedUserLine));
+    expect(items).toHaveLength(1);
+    const first = items[0];
+    expect(first?.kind).toBe('user');
+    if (first?.kind === 'user') {
+      expect(first.text).toBe('does gh repo have any outstanding dependabot alerts?');
+      expect(first.text).not.toContain('<user_query>');
+    }
+  });
+
+  it('omits the user row entirely when the extracted prompt is empty', () => {
+    const emptyQuery = {
+      role: 'user',
+      message: { content: [{ type: 'text', text: '<user_query>   </user_query>' }] },
+    };
+    const items = normalizeCursorLines(rawOf(emptyQuery));
+    expect(items).toHaveLength(0);
+  });
+
+  it('carries the parsed sections on the user render item (shape for 0rcv)', () => {
+    const withContext = {
+      role: 'user',
+      message: {
+        content: [
+          {
+            type: 'text',
+            text: '<manually_attached_skills>\nSkill body.\n</manually_attached_skills>\n<user_query>\ngo\n</user_query>',
+          },
+        ],
+      },
+    };
+    const items = normalizeCursorLines(rawOf(withContext));
+    const first = items[0];
+    expect(first?.kind).toBe('user');
+    if (first?.kind === 'user') {
+      expect(first.text).toBe('go');
+      expect(first.sections?.[0]?.tag).toBe('manually_attached_skills');
+    }
+  });
+});
+
+describe('extractCursorItemText searches the extracted prompt (nfbe)', () => {
+  it('matches the prompt text, not the stripped envelope tags', () => {
+    const items = normalizeCursorLines(
+      rawOf({
+        role: 'user',
+        message: {
+          content: [{ type: 'text', text: '<user_query>find the validation seam</user_query>' }],
+        },
+      }),
+    );
+    const text = extractCursorItemText(items[0]!);
+    expect(text).toContain('find the validation seam');
+    expect(text).not.toContain('user_query');
   });
 });
