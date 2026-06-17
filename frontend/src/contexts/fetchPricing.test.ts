@@ -20,6 +20,7 @@ describe('fetchPricing', () => {
       'claude-code': { 'opus-4-7': { input: 7, output: 25, cacheWrite: 6.25, cacheWrite1h: 0, cacheRead: 0.5 } },
       codex: {},
       opencode: {},
+      cursor: {},
     };
     mockFetch({ schema_version: 0, updated_at: '2026-06-01T00:00:00Z', pricing: table });
 

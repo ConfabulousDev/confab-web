@@ -49,4 +49,7 @@ export const PRICING_FIXTURE: PricingTable = {
     'mistral-large-2411': { input: 2.0, output: 6.0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 },
     'mistral-small-2501': { input: 0.1, output: 0.3, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 },
   },
+  // Cursor transcripts carry no token/cost data and the backend serves no cursor
+  // pricing; the key is present only because PricingTable is Record<ProviderId, …>.
+  cursor: {},
 };
