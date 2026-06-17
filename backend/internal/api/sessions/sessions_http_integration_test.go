@@ -408,7 +408,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 	t.Run("filter_options includes static providers list", func(t *testing.T) {
 		env.CleanDB(t)
 
-		// Even with no sessions at all, both canonical providers must be
+		// Even with no sessions at all, every canonical provider must be
 		// present in filter_options.providers — the list is a static enum,
 		// not derived from user data.
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -431,6 +431,7 @@ func TestListSessions_HTTP_Integration(t *testing.T) {
 			models.ProviderClaudeCode: false,
 			models.ProviderCodex:      false,
 			models.ProviderOpencode:   false,
+			models.ProviderCursor:     false,
 		}
 		for _, p := range result.FilterOptions.Providers {
 			if _, ok := want[p]; ok {
