@@ -151,6 +151,15 @@ export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   readonly tokenSpeedUnavailableTooltip?: string;
 
   /**
+   * Conversation card footer note (zsk4). Set when a provider's synced
+   * transcript has no per-message timestamps, so per-turn timing and
+   * utilization can't be computed. The card renders this as a single muted
+   * footer instead of five "Not available" rows. Omitted for providers that
+   * carry real per-turn timing (Claude, Codex, OpenCode).
+   */
+  readonly conversationTimingUnavailableNote?: string;
+
+  /**
    * Per-session Tokens summary card tooltip for the "Fast mode" row.
    * Only the provider that surfaces the row (Claude's Anthropic priority
    * tier) defines this. CF-436.

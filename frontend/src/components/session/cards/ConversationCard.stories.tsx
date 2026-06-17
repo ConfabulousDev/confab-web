@@ -189,6 +189,29 @@ export const Loading: Story = {
 };
 
 /**
+ * zsk4: Cursor sessions have no per-message timestamps on the wire, so all
+ * per-turn timing fields are null. Rather than five "Not available" rows, the
+ * card shows only its real rows (User prompts + a "—" Token speed) plus a single
+ * muted footer explaining why timing and utilization are absent.
+ */
+export const CursorNoTiming: Story = {
+  args: {
+    provider: 'cursor',
+    data: {
+      user_turns: 12,
+      assistant_turns: 12,
+      avg_assistant_turn_ms: null,
+      avg_user_thinking_ms: null,
+      total_assistant_duration_ms: null,
+      total_user_duration_ms: null,
+      assistant_utilization_pct: null,
+    },
+    loading: false,
+    tokenSpeed: null,
+  },
+};
+
+/**
  * Codex session with the same fully-populated timing data as Default.
  * Tooltips swap "Claude Code" → "Codex" via the provider prop (CF-441).
  */
