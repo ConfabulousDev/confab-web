@@ -35,4 +35,4 @@ When a Codex session spawns subagents, Confabulous aggregates the main thread pl
 
 ## Other supported providers
 
-Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/) and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
+Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Cursor](/providers/cursor/), and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.

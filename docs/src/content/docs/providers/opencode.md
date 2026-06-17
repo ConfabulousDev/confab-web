@@ -33,4 +33,4 @@ Because OpenCode runs models from many providers, each session is priced against
 
 ## Other supported providers
 
-Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/) and [Codex](/providers/codex/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
+Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Codex](/providers/codex/), and [Cursor](/providers/cursor/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.

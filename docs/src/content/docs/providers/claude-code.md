@@ -39,4 +39,4 @@ confab setup --provider claude-code --config-dir <dir> --backend-url <url>
 
 ## Other supported providers
 
-Confabulous treats every provider as a first-class citizen. [Codex](/providers/codex/) and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
+Confabulous treats every provider as a first-class citizen. [Codex](/providers/codex/), [Cursor](/providers/cursor/), and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
