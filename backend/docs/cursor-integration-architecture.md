@@ -124,6 +124,43 @@ JSONL. The only `id` fields that appear are **nested inside `AskQuestion` input*
 key must synthesize one (e.g. positional index); it cannot read one from the
 wire.
 
+### Cursor-native `[REDACTED]` in assistant `text`
+
+Cursor appends a **bare** `[REDACTED]` placeholder to nearly every assistant
+turn on disk. Across a full local scan it appears in exactly two shapes and
+**never** embedded mid-sentence:
+
+- **standalone** — the whole `text` block is `[REDACTED]` (a tool-only turn: the
+  assistant emitted just `tool_use` blocks, with `[REDACTED]` standing in for the
+  absent narrative); or
+- **trailing** — `[REDACTED]` (with surrounding whitespace) appended after the
+  real narrative in a `text` block.
+
+> **This is Cursor's own UI scaffolding, NOT Confab CLI secret scrubbing.** It is
+> a `tool_use`-adjacent placeholder Cursor writes into the agent-transcripts JSONL
+> before upload — distinct from the `tool_use` blocks themselves (which carry the
+> real tool name and `input`). It is **not** the Confab CLI `[REDACTED:TYPE]`
+> marker (e.g. `[REDACTED:GITHUB_TOKEN]`) that the upload-time secret scrubber
+> emits on Claude/Codex transcripts. The bare token has **no** colon/type; a real
+> redacted secret always does.
+
+**Confab strips the bare token during normalize** (shipped in fa3h). The strip
+helper is `cleanCursorAssistantText` — `frontend/src/services/cursorTranscriptService.ts`
+(exported) and mirrored in `backend/internal/analytics/cursor_types.go`. It matches
+only a **trailing bare** `[REDACTED]` (regex `\s*\[REDACTED\]\s*$`, no colon/type)
+and returns `""` when the block's whole trimmed content was the placeholder, so a
+`[REDACTED]`-only assistant turn omits its assistant row while its `tool_use` rows
+still render. It is applied everywhere assistant text is surfaced:
+`normalizeCursorLines` (frontend display + Cmd-F search), `extractCursorSearchText`
+(backend search index), and `joinCursorText` / `PrepareCursorTranscript` (backend
+smart recap).
+
+The contrast with the Confab CLI `[REDACTED:TYPE]` marker is deliberate and
+load-bearing: the typed markers are a real redacted secret and are **never**
+touched by the strip — they stay visible in the transcript and are **counted** by
+the `RedactionsAnalyzer` on the providers that emit them. Cursor has no such
+analyzer or redactions card, because its bare `[REDACTED]` is noise, not a secret.
+
 ## Main-thread tools
 
 The full set of tool `name` values observed across a complete local scan

@@ -13,6 +13,8 @@ Confabulous has first-class support for [Cursor](https://cursor.com) agent sessi
 
 Cursor's agent transcript records tool **inputs only**, so there are no tool **outputs** to display. Confabulous shows each tool call and its arguments, but not the result the tool returned.
 
+Cursor hides some scaffolding in its own UI and writes a bare `[REDACTED]` placeholder into the transcript instead; Confabulous strips that on-disk placeholder so transcripts read cleanly. This is Cursor's own scaffolding, not a redacted secret — it is unrelated to the `[REDACTED:TYPE]` markers the confab CLI writes when it scrubs secrets on other providers.
+
 ## Analytics cards
 
 Each Cursor session produces the same provider-agnostic cards as every other provider:
@@ -51,5 +53,3 @@ Cursor's transcript has no stable per-message or per-tool identifiers, so deep-l
 ## Other supported providers
 
 Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Codex](/providers/codex/), and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
-</content>
-</invoke>
