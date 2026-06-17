@@ -22,6 +22,9 @@ func TestProviderCanonicalConstants(t *testing.T) {
 	if ProviderOpencode != "opencode" {
 		t.Errorf("ProviderOpencode = %q, want %q", ProviderOpencode, "opencode")
 	}
+	if ProviderCursor != "cursor" {
+		t.Errorf("ProviderCursor = %q, want %q", ProviderCursor, "cursor")
+	}
 }
 
 // TestCanonicalProvidersExcludesLegacy asserts that CanonicalProviders
@@ -29,7 +32,7 @@ func TestProviderCanonicalConstants(t *testing.T) {
 // allowlist (validation.ValidateProvider, filter UI enum); legacy values
 // must NOT be acceptable inputs from clients.
 func TestCanonicalProvidersExcludesLegacy(t *testing.T) {
-	want := []string{ProviderClaudeCode, ProviderCodex, ProviderOpencode}
+	want := []string{ProviderClaudeCode, ProviderCodex, ProviderOpencode, ProviderCursor}
 	if !reflect.DeepEqual(CanonicalProviders, want) {
 		t.Errorf("CanonicalProviders = %v, want %v (deterministic order required)", CanonicalProviders, want)
 	}
@@ -72,6 +75,7 @@ func TestNormalizeProvider(t *testing.T) {
 		{"claude-code", "claude-code"},
 		{"Claude Code", "claude-code"},
 		{"codex", "codex"},
+		{"cursor", "cursor"},
 		{"unknown-provider", "unknown-provider"},
 		{"", ""},
 	}

@@ -70,7 +70,7 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | string | No | Agent that produced the session: `"claude-code"` or `"codex"`. **Omit the field to default to `"claude-code"`** (preserves backward compatibility with older CLIs). An explicit empty string returns 400. Any other value returns 400. |
+| `provider` | string | No | Agent that produced the session: `"claude-code"`, `"codex"`, `"opencode"`, or `"cursor"`. **Omit the field to default to `"claude-code"`** (preserves backward compatibility with older CLIs). An explicit empty string returns 400. Any other value returns 400. |
 | `external_id` | string | Yes | Unique session identifier (UUID from the originating agent) |
 | `transcript_path` | string | Yes | Path to transcript file on user's machine |
 | `metadata` | object | No | Session metadata (see below) |
@@ -176,6 +176,8 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 | `metadata.git_info` | object | No | Git repository metadata. See [`git_info` fields](#git_info-fields). |
 | `metadata.summary` | string | No | Session summary (nil=don't update, ""=clear) |
 | `metadata.first_user_message` | string | No | First user message (nil=don't update, ""=clear) |
+| `metadata.latest_message_at` | string (RFC3339) | No | Explicit latest-message timestamp for providers whose transcript lines carry none (cursor). When present on a transcript chunk, it advances `session.last_message_at` the same way per-line timestamp extraction does for other providers. Ignored for providers that already extract per-line timestamps. See [Cursor Metadata](#cursor-metadata) below. |
+| `metadata.model` | string | No | Model that produced a cursor session (the cursor JSONL has no model field). Accepted on the wire and documented; see [Cursor Metadata](#cursor-metadata) for the current persistence status. |
 | `metadata.codex_rollout` | object | No | Codex rollout sidecar metadata (codex sessions only). See [Codex Rollout Metadata](#codex-rollout-metadata) below. |
 
 **Response:**
@@ -244,6 +246,29 @@ parent-child tree shape and per-thread metadata.
 - Other free-form fields: a non-empty incoming value overwrites the stored value; an empty incoming value preserves the stored non-empty value.
 
 **Cascade behavior:** Deleting the hosted session or the owning user removes the row via `ON DELETE CASCADE`.
+
+#### Cursor Metadata
+
+Cursor agent-transcript JSONL (uploaded from
+`~/.cursor/projects/<path>/agent-transcripts/<session-id>.jsonl`) is **not**
+Claude Code JSONL: its conversation lines carry no top-level
+`timestamp`/`uuid`/`usage`/`model` fields, and tool-use blocks have no `id`.
+Two chunk-metadata fields exist specifically so the CLI can supply the timing
+and model signals that the transcript lines lack:
+
+| Field | Source on the CLI host | Backend behavior |
+|-------|------------------------|------------------|
+| `latest_message_at` (RFC3339) | `~/.cursor/chats/<workspace-hash>/<session-id>/meta.json` → `updatedAtMs` (ms → RFC3339) | Advances `session.last_message_at`. Omit when `meta.json` is absent; `last_message_at` stays NULL until a later chunk carries one. Cursor performs **no** per-line timestamp extraction. |
+| `model` | `~/.cursor/.../state.vscdb` → `composerData.modelConfig.modelName`, joined by `composerId == <session-id>` (best-effort; `state.vscdb` is a rotating cache, so the model may be absent for older sessions) | Accepted on the wire and documented. **Not yet persisted into analytics `models_used`** — that requires a per-session model store (a DB migration) which is out of scope for file-based intake; see the model-persistence follow-up. Omit the field rather than inventing a model. |
+
+**meta.json ↔ transcript correlation:** `meta.json` is keyed by a Cursor
+**workspace hash** (`~/.cursor/chats/<hash>/<session-id>/`), while transcripts
+live under a **sanitized project path**
+(`~/.cursor/projects/<path>/agent-transcripts/<session-id>/`). The CLI must
+correlate the two **by session-id**.
+
+Cursor sessions accept only the main transcript file in v1; subagent files
+(`subagents/<id>.jsonl`, uploaded as `file_type=agent`) are not yet processed.
 
 ---
 

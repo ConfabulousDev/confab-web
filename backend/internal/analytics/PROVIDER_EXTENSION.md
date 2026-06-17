@@ -1,6 +1,6 @@
 # Adding a New Provider
 
-This guide covers what it takes to add a third AI agent provider (alongside Claude Code and Codex). The provider abstraction was introduced in CF-399 / CF-402 / CF-403; the registry lives in `internal/analytics/provider.go`.
+This guide covers what it takes to add a new AI agent provider (the registry already carries Claude Code, Codex, OpenCode, and Cursor). The provider abstraction was introduced in CF-399 / CF-402 / CF-403; the registry lives in `internal/analytics/provider.go`.
 
 ## Contract
 
@@ -74,16 +74,19 @@ The Codex implementation (`SyncCodexRolloutMetadata` + `ValidateCodexRolloutMeta
 
 ## Per-card / per-provider file layout
 
-Each card has a dedicated analyzer file per provider, named `analyzer_<card>_<provider>.go`. `ls analyzer_*.go` shows the full grid at a glance. When adding a third provider, create the parallel set of analyzer files and update the README matrix.
+Two layouts exist in this package and **both are valid** — pick the one that fits:
 
-## Checklist for the third-provider author
+- **Split layout (Claude, Codex).** Each card has a dedicated analyzer file per provider, named `analyzer_<card>_<provider>.go`. `ls analyzer_*.go` shows the grid at a glance. Worth it when the per-card logic is large.
+- **Consolidated layout (OpenCode, Cursor) — preferred for new providers.** A single `<provider>_compute.go` holds the orchestrator (`ComputeFromXxxRollout`) plus the cards as inline `computeXxx<Card>` functions; there are **no** `analyzer_<card>_<provider>.go` files. This is lighter when the provider's cards are small (e.g. a provider whose JSONL lacks tokens/timestamps and whose cards mostly degrade to empty). See `opencode_compute.go` / `cursor_compute.go` for the reference.
+
+## Checklist for the new-provider author
 
 - [ ] Add canonical name + permanent aliases to `internal/models/provider.go::CanonicalProviders` / `AllowedProviders` / `LegacyAliases`.
 - [ ] Implement `SessionProvider` in `internal/analytics/<provider>_provider.go`. Include lazy-materialize if your sessions span multiple files.
 - [ ] Register the provider in `init()`.
-- [ ] Add per-card analyzers `analyzer_<card>_<provider>.go` (7 cards: tokens, session, tools, code_activity, conversation, agents_and_skills, redactions).
-- [ ] Implement transcript XML emission in `<provider>_transcript.go` and search-index extraction in `<provider>_search.go`. Keep the orchestrator (`ComputeFromXxxRollout`) thin — it dispatches to the per-card analyzers.
-- [ ] Optional: typed HTTP-intake metadata sub-block (above).
+- [ ] Implement the cards. **Either** add split per-card analyzers `analyzer_<card>_<provider>.go` (cards: tokens, session, tools, code_activity, conversation, agents_and_skills, redactions) **or** follow the consolidated layout with inline `compute<Provider><Card>` functions in `<provider>_compute.go` (preferred). Update the README provider notes either way.
+- [ ] Implement transcript XML emission (`analyzer_smart_recap_<provider>.go`, `PrepareXxxTranscript`) and search-index extraction (`<provider>_search.go`). Keep the orchestrator (`ComputeFromXxxRollout`) thin.
+- [ ] Optional: typed HTTP-intake metadata sub-block (above). Providers whose transcript lines lack a timestamp can carry one as chunk metadata (see Cursor's `latest_message_at` in `internal/api/sync.go` + `backend/API.md`).
 - [ ] Frontend adapter — see `frontend/src/providers/README.md` for the matching frontend checklist.
 - [ ] Per-provider test fixtures in `frontend/src/test-fixtures/session.ts::DEFAULTS_BY_PROVIDER`.
 - [ ] Pricing: add the provider's families to the single source `backend/internal/pricingsource/pricing.json` (provider-nested) and bump `updated_at`. The frontend reads the table from the backend at runtime — no second table to update.

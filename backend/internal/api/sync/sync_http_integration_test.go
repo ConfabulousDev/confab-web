@@ -4530,3 +4530,166 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusOK)
 	})
 }
+
+// =============================================================================
+// Cursor provider (4r41) — sync intake accepts provider: "cursor"
+//
+// Cursor agent-transcript JSONL carries NO per-line timestamps, so the chunk
+// handler must NOT attempt per-line extraction for cursor. The only timing
+// signal is metadata.latest_message_at, supplied by the CLI from meta.json's
+// updatedAtMs. These tests pin that contract end-to-end.
+// =============================================================================
+
+func TestSyncCursor_HTTP_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping HTTP integration test in short mode")
+	}
+
+	os.Setenv("LOG_FORMAT", "json")
+	env := testutil.SetupTestEnvironment(t)
+
+	cursor := models.ProviderCursor
+
+	t.Run("init creates a cursor session and echoes the provider", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		reqBody := api.SyncInitRequest{
+			ExternalID:     "cursor-session-1",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-1.jsonl",
+			CWD:            "/home/user/project",
+			Provider:       &cursor,
+		}
+
+		resp, err := client.Post("/api/v1/sync/init", reqBody)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var result api.SyncInitResponse
+		testutil.ParseJSON(t, resp, &result)
+		if result.Provider != cursor {
+			t.Errorf("response provider = %q, want %q", result.Provider, cursor)
+		}
+
+		var sessionType string
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT session_type FROM sessions WHERE external_id = $1 AND user_id = $2",
+			"cursor-session-1", user.ID)
+		if err := row.Scan(&sessionType); err != nil {
+			t.Fatalf("failed to query session_type: %v", err)
+		}
+		if sessionType != cursor {
+			t.Errorf("session_type = %q, want %q", sessionType, cursor)
+		}
+	})
+
+	t.Run("chunk with latest_message_at metadata sets session last_message_at", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-ts",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-ts.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		want := time.Date(2026, 6, 15, 12, 30, 0, 0, time.UTC)
+		reqBody := api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-ts.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			// Cursor lines carry no timestamps at all.
+			Lines: []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+			Metadata: &api.SyncChunkMetadata{
+				LatestMessageAt: &want,
+			},
+		}
+
+		resp, err := client.Post("/api/v1/sync/chunk", reqBody)
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var lastMessageAt *time.Time
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT last_message_at FROM sessions WHERE id = $1", sessionID)
+		if err := row.Scan(&lastMessageAt); err != nil {
+			t.Fatalf("query last_message_at: %v", err)
+		}
+		if lastMessageAt == nil {
+			t.Fatal("last_message_at is NULL; metadata.latest_message_at was not applied")
+		}
+		if !lastMessageAt.UTC().Equal(want) {
+			t.Errorf("last_message_at = %v, want %v", lastMessageAt.UTC(), want)
+		}
+	})
+
+	t.Run("chunk without latest_message_at leaves last_message_at NULL", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		initResp, err := client.Post("/api/v1/sync/init", api.SyncInitRequest{
+			ExternalID:     "cursor-session-no-ts",
+			TranscriptPath: "/home/user/.cursor/projects/p/agent-transcripts/cursor-session-no-ts.jsonl",
+			Provider:       &cursor,
+		})
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		var initResult api.SyncInitResponse
+		testutil.ParseJSON(t, initResp, &initResult)
+		initResp.Body.Close()
+		sessionID := initResult.SessionID
+
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "cursor-session-no-ts.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}`},
+		})
+		if err != nil {
+			t.Fatalf("chunk failed: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusOK)
+
+		var lastMessageAt *time.Time
+		row := env.DB.QueryRow(env.Ctx,
+			"SELECT last_message_at FROM sessions WHERE id = $1", sessionID)
+		if err := row.Scan(&lastMessageAt); err != nil {
+			t.Fatalf("query last_message_at: %v", err)
+		}
+		if lastMessageAt != nil {
+			t.Errorf("last_message_at = %v, want NULL (no timestamp source for cursor without metadata)", lastMessageAt)
+		}
+	})
+}
