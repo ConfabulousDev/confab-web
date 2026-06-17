@@ -2,9 +2,42 @@ package analytics
 
 import (
 	"context"
+	"time"
 
 	"github.com/shopspring/decimal"
 )
+
+// CursorSessionBounds carries the session-level timing anchors used to estimate
+// a Cursor session's duration. Cursor JSONL lines have no per-line timestamps
+// (4r41), so the only timing signal is the session window:
+//
+//	start = created_at ?? first_seen      (created_at refines first_seen at ingest)
+//	end   = last_message_at ?? last_sync_at
+//
+// All fields are optional; cursorSessionWindow resolves the precedence and
+// computeCursorSession derives DurationMs only when a strictly-positive window
+// is available (no invented or non-positive spans — Cursor's honesty rule).
+type CursorSessionBounds struct {
+	CreatedAt     *time.Time // start anchor, preferred (meta.json createdAtMs)
+	FirstSeen     *time.Time // start anchor fallback (session init time)
+	LastMessageAt *time.Time // end anchor, preferred (meta.json updatedAtMs)
+	LastSyncAt    *time.Time // end anchor fallback (last chunk upload time)
+}
+
+// cursorSessionWindow resolves the start/end anchors per the precedence above:
+// start = created_at ?? first_seen; end = last_message_at ?? last_sync_at.
+// Either result may be nil when no anchor of that kind is present.
+func cursorSessionWindow(b CursorSessionBounds) (start, end *time.Time) {
+	start = b.CreatedAt
+	if start == nil {
+		start = b.FirstSeen
+	}
+	end = b.LastMessageAt
+	if end == nil {
+		end = b.LastSyncAt
+	}
+	return start, end
+}
 
 // Cursor tool-name constants. These are Cursor's own tool names — they do NOT
 // overlap with Claude's (Cursor's edit tool is StrReplace, not Edit/MultiEdit),
@@ -23,14 +56,19 @@ const (
 // ComputeFromCursorRollout maps a parsed Cursor session (main transcript only
 // in v1 — subagents are deferred) onto the canonical ComputeResult shape.
 //
-// Cursor synced JSONL carries no timestamps, tokens, model, or cost, so the
-// timing-derived cards (duration, conversation turn timings) and the
-// token/cost cards degrade gracefully: tokens_v2 is always written with an
-// empty by_provider tree (no invented dollars — real cost is follow-up 59m1),
-// and DurationMs stays nil. The structure-derived cards (session counts,
-// tools, code activity, agents, conversation turn counts, search text) are
-// computed from message + tool_use structure.
-func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage) *ComputeResult {
+// Cursor synced JSONL carries no per-line timestamps, tokens, model, or cost.
+// The token/cost cards degrade gracefully: tokens_v2 is always written with an
+// empty by_provider tree (no invented dollars — real cost is follow-up 59m1).
+// Session DurationMs is estimated from the session-level window in bounds
+// (start = created_at ?? first_seen; end = last_message_at ?? last_sync_at);
+// it stays nil when the window is absent or non-positive. The structure-derived
+// cards (session counts, tools, code activity, agents, conversation turn counts,
+// search text) are computed from message + tool_use structure.
+//
+// Per-row estimated timestamps for transcript display are NOT computed here:
+// they are interpolated frontend-side (ce79) from these same session bounds, so
+// there is only one estimator and stored JSONL is never mutated.
+func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage, bounds CursorSessionBounds) *ComputeResult {
 	result := &ComputeResult{
 		ToolStats:         make(map[string]*ToolStats),
 		LanguageBreakdown: make(map[string]int),
@@ -52,7 +90,7 @@ func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage) *C
 		return result
 	}
 
-	computeCursorSession(result, messages)
+	computeCursorSession(result, messages, bounds)
 	computeCursorConversation(result, messages)
 	computeCursorTools(result, messages)
 	computeCursorCodeActivity(result, messages)
@@ -61,9 +99,18 @@ func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage) *C
 	return result
 }
 
-// computeCursorSession derives message-count stats. Cursor lines carry no
-// timestamps, so DurationMs is left nil and timing is unknowable.
-func computeCursorSession(out *ComputeResult, messages []*CursorMessage) {
+// computeCursorSession derives message-count stats and estimates DurationMs
+// from the session window. Cursor lines carry no per-line timestamps, so
+// duration is the span between the session bounds (start = created_at ??
+// first_seen; end = last_message_at ?? last_sync_at). It is left nil when either
+// anchor is missing or the window is non-positive (end <= start) — Cursor never
+// invents a zero or negative span.
+func computeCursorSession(out *ComputeResult, messages []*CursorMessage, bounds CursorSessionBounds) {
+	if start, end := cursorSessionWindow(bounds); start != nil && end != nil {
+		if d := end.Sub(*start).Milliseconds(); d > 0 {
+			out.DurationMs = &d
+		}
+	}
 	for _, msg := range messages {
 		switch msg.Role {
 		case "user":
