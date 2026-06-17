@@ -270,6 +270,16 @@ and passed as sync metadata by the CLI. A second local source,
 by `conversationId == <session-uuid>` but **no** token/usage/cost columns — it
 can enrich the model name but never the cost.
 
+Because the synced JSONL has no model field, the model needs a per-session
+read-back path for analytics. The sync handler persists a non-empty
+`metadata.model` from a cursor transcript chunk into the **`cursor_session_meta`**
+sidecar (PK `session_id`, first-non-empty-model-wins, mirroring the
+`codex_rollouts` precedent), and `cursorProvider.Parse` reads it back so
+`cards.session.models_used` is `[<model>]` (zsr6). Absent → `[]`, never an
+invented model. This populates only the model name; real **tokens/cost** remain
+a separate follow-up (59m1) and a `pricing.json` Cursor section becomes
+defensible only once real tokens exist.
+
 ## Why this differs from Claude Code
 
 | Aspect | Claude Code | Cursor |

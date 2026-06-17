@@ -44,6 +44,13 @@ func (p *cursorProvider) Parse(ctx context.Context, input ParseInput) (Rollout, 
 	if err != nil {
 		return nil, err
 	}
+	// Fold the per-session model (cursor_session_meta sidecar) into bounds so
+	// compute can surface it in models_used. Absent → empty string → no model.
+	model, err := loadCursorSessionMeta(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	bounds.Model = model
 	return &cursorRollout{
 		messages:         messages,
 		validationErrors: lineErrors,
@@ -141,4 +148,26 @@ func loadCursorSessionBounds(ctx context.Context, input ParseInput) (CursorSessi
 		LastMessageAt: lastMessageAt,
 		LastSyncAt:    lastSyncAt,
 	}, nil
+}
+
+// loadCursorSessionMeta reads the per-session model from the cursor_session_meta
+// sidecar (zsr6), the only source of a Cursor session's model name (the synced
+// JSONL has none). Returns "" when no row exists — compute then leaves
+// models_used empty rather than inventing a model. Reads input.DB directly,
+// mirroring loadCursorSessionBounds, so the analytics package stays free of a
+// db/cursor import.
+func loadCursorSessionMeta(ctx context.Context, input ParseInput) (string, error) {
+	var model string
+	row := input.DB.QueryRowContext(ctx, `
+		SELECT model
+		FROM cursor_session_meta
+		WHERE session_id = $1
+	`, input.SessionID)
+	if err := row.Scan(&model); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return model, nil
 }
