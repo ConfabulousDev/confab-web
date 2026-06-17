@@ -32,7 +32,7 @@ docs/src/content/docs/
 ├── getting-started/           # Audience-specific onboarding (end users vs admins)
 ├── self-hosting/              # Deployment walkthrough, samples, config reference, demo mode
 ├── cli/                       # confab CLI overview, commands, bundled skills
-├── providers/                 # Per-provider details (claude-code, codex, opencode)
+├── providers/                 # Per-provider details (claude-code, codex, cursor, opencode)
 ├── features/                  # Per-feature docs (sessions, trends, org analytics, sharing, smart recap)
 ├── api/                       # API reference (index linking into backend/API.md)
 └── architecture/              # System architecture
@@ -76,7 +76,7 @@ Config changes (`astro.config.mjs`, `src/content.config.ts`, `src/styles/custom.
   - Stay variable-only: prefer overriding `--sl-color-*` over per-component CSS so Starlight upgrades don't break the theme. Fenced code blocks (Expressive Code) inherit the gray ramp.
   - Mirror Starlight's own structure: dark values under `:root`, light under `:root[data-theme='light']`.
   - `custom.css` also makes a few chrome elements app-consistent: the wordmark and header social icon use neutral text colors (not Starlight's accent default), and the splash hero CTA is overridden from Starlight's full pill to the app's compact filled-accent button (radius + padding + a shrunk arrow icon). `custom.css` is a plain global stylesheet — do **not** use `:global()` there (it's a CSS-modules/scoped-style construct and is silently dropped as an invalid selector); use plain descendant selectors.
-- **Provider logo strip:** `src/components/ProviderLogos.astro` renders the "Works with" row on the splash page (`index.mdx`). It inlines the same official marks the main app uses (`frontend/src/components/icons.tsx` — Claude clay `#d97757`, Codex teal `#10a37f`, OpenCode monochrome via `currentColor`); keep them in sync. SVGs are inlined (not `<img>`) so OpenCode's `currentColor` adapts per theme.
+- **Provider logo strip:** `src/components/ProviderLogos.astro` renders the "Works with" row on the splash page (`index.mdx`). It inlines the same official marks the main app uses (`frontend/src/components/icons.tsx` — Claude clay `#d97757`, Codex teal `#10a37f`, Cursor monochrome via `currentColor`, OpenCode monochrome via `currentColor`); keep them in sync. SVGs are inlined (not `<img>`) so the `currentColor` marks adapt per theme.
 - First-visit theme defaults to **dark** to match the main app, via a pre-paint script at the top of the `head` array in `astro.config.mjs` that seeds `localStorage['starlight-theme']` with `'dark'` when unset. Explicit choices from Starlight's theme switcher are preserved.
 
 ## Deployment

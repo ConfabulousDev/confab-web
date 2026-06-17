@@ -93,6 +93,7 @@ export default defineConfig({
           items: [
             { label: 'Claude Code', slug: 'providers/claude-code' },
             { label: 'Codex', slug: 'providers/codex' },
+            { label: 'Cursor', slug: 'providers/cursor' },
             { label: 'OpenCode', slug: 'providers/opencode' },
           ],
         },
