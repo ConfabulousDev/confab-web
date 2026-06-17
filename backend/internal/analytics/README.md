@@ -269,6 +269,7 @@ See `PROVIDER_EXTENSION.md` (in this directory) for the full checklist.
 - **Integration tests** (require Docker via `testutil.SetupTestEnvironment`): store operations, precomputer staleness queries, smart recap end-to-end, search index, trends aggregation, org analytics.
 - Test files follow the `*_test.go` convention alongside source files. `testdata_helpers_test.go` provides shared test fixtures.
 - `TestGetModelFamily_Parity` (`pricing_test.go`) loads the repo-root `testdata/model_family_parity.json` — a cross-language fixture also consumed by the frontend's `tokenStats.test.ts` — and asserts `getModelFamily` matches each row's `backend` family key. It guards backend↔frontend normalizer drift (nrxr / 5x6e F7); the one intentional divergence (malformed `claude-opus-4a-5`) is pinned in the fixture.
+- `cursor_fixture_test.go` smoke-parses `testdata/cursor/main.jsonl`, the sanitized Cursor agent-transcript wire-format fixture (the `{role, message.content[]}` envelope — **not** Claude Code JSONL). It asserts the line/block shapes, tool coverage (incl. `StrReplace`, Cursor's edit tool), and `turn_ended` markers documented in `../../docs/cursor-integration-architecture.md`. Downstream Cursor tickets (parser, analytics compute, frontend adapter) consume the same fixture.
 
 Key test patterns:
 - Analyzers are tested by constructing `TranscriptFile` or `FileCollection` objects with known lines and asserting on `Result()`.
