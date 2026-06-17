@@ -201,7 +201,7 @@ describe('getModelFamily', () => {
   it('throws when provider is unknown', () => {
     expect(() =>
       // @ts-expect-error — exercising the unknown-provider error path.
-      getModelFamily('cursor', 'whatever'),
+      getModelFamily('windsurf', 'whatever'),
     ).toThrow();
   });
 });
@@ -305,7 +305,7 @@ describe('calculateCost', () => {
   it('throws when provider is unknown', () => {
     expect(() =>
       // @ts-expect-error — exercising the unknown-provider error path.
-      calculateCost('cursor', 'whatever', usage({ input: 100 })),
+      calculateCost('windsurf', 'whatever', usage({ input: 100 })),
     ).toThrow();
   });
 
@@ -354,6 +354,7 @@ describe('calculateCost', () => {
       },
       codex: {},
       opencode: {},
+      cursor: {},
     };
     setPricingTable(stale);
     try {

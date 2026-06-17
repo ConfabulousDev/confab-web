@@ -19,9 +19,9 @@
 // registry. Hand-update those when another provider lands.
 
 import type { ReactNode } from 'react';
-import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon } from '@/components/icons';
+import { ClaudeCodeIcon, CodexIcon, CursorIcon, OpenCodeIcon } from '@/components/icons';
 
-export const PROVIDER_VALUES = ['claude-code', 'codex', 'opencode'] as const;
+export const PROVIDER_VALUES = ['claude-code', 'codex', 'opencode', 'cursor'] as const;
 export type ProviderId = (typeof PROVIDER_VALUES)[number];
 
 /**
@@ -93,6 +93,21 @@ export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
     // intentionally decoupled (uses currentColor) so it adapts per theme.
     brandColor: '#656363',
     resumeCommand: { idLabel: 'Copy OpenCode ID', commandHint: 'for opencode resume' },
+  },
+  cursor: {
+    id: 'cursor',
+    label: 'Cursor',
+    brandDisplayName: 'Cursor',
+    icon: CursorIcon,
+    // Cursor's brand mark is monochrome; the CursorIcon uses currentColor so it
+    // adapts per theme. brandColor drives the Trends chart series, which recharts
+    // needs as a fixed hex (not currentColor / a CSS var), so it pins a neutral
+    // slate (#6b7280) — readable on both chart backgrounds and distinct from the
+    // #9ca3af unknown-provider gray and OpenCode's #656363.
+    brandColor: '#6b7280',
+    // The ingested Cursor session id is the agent-transcripts UUID. Cursor's only
+    // real resume-by-id path is the agent CLI: `cursor-agent --resume=<id>`.
+    resumeCommand: { idLabel: 'Copy Cursor ID', commandHint: 'for cursor-agent resume' },
   },
 };
 

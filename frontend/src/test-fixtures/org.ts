@@ -58,6 +58,20 @@ const DEFAULTS_BY_PROVIDER: Record<ProviderId, ProviderDefaults> = {
     avgAssistantTimeMs: 6_000_000,
     avgUserTimeMs: 3_000_000,
   },
+  cursor: {
+    emailDomain: 'example.com',
+    sessionCount: 8,
+    // Cursor transcripts carry no cost data; the fixture cost is story
+    // decoration only (the per-provider defaults are not asserted in tests).
+    totalCostUSD: '0.00',
+    totalDurationMs: 72_000_000,
+    totalAssistantTimeMs: 48_000_000,
+    totalUserTimeMs: 24_000_000,
+    avgCostUSD: '0.00',
+    avgDurationMs: 9_000_000,
+    avgAssistantTimeMs: 6_000_000,
+    avgUserTimeMs: 3_000_000,
+  },
 };
 
 let nextID = 1;
