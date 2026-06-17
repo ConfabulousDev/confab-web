@@ -3,7 +3,7 @@ import { render, fireEvent } from '@testing-library/react';
 import CodexUnknownItem from './CodexUnknownItem';
 import type { CodexUnknownItem as CodexUnknownItemType } from '@/types/codexRenderItem';
 
-vi.mock('./CodexRowActions', () => ({
+vi.mock('../RowActions', () => ({
   default: () => <span data-testid="row-actions" />,
 }));
 
@@ -70,14 +70,14 @@ describe('CodexUnknownItem', () => {
     expect(mark?.textContent).toBe('foo');
   });
 
-  it('renders CodexRowActions when sessionId provided', () => {
+  it('renders RowActions when sessionId provided', () => {
     const { getByTestId } = render(
       <CodexUnknownItem item={baseItem} sessionId="sess-1" />
     );
     expect(getByTestId('row-actions')).toBeInTheDocument();
   });
 
-  it('omits CodexRowActions when sessionId is absent', () => {
+  it('omits RowActions when sessionId is absent', () => {
     const { queryByTestId } = render(<CodexUnknownItem item={baseItem} />);
     expect(queryByTestId('row-actions')).toBeNull();
   });

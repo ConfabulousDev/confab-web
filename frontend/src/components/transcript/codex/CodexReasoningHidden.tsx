@@ -9,7 +9,7 @@
 import type { CodexReasoningHiddenItem } from '@/types/codexRenderItem';
 import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
-import CodexRowActions from './CodexRowActions';
+import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
 export interface CodexReasoningHiddenProps {
@@ -52,9 +52,9 @@ export default function CodexReasoningHidden({
         {formatCodexTimestamp(item.timestamp)}
       </span>
       {sessionId && (
-        <CodexRowActions
+        <RowActions
           sessionId={sessionId}
-          timestamp={item.timestamp}
+          deepLinkMsg={item.timestamp}
           kindLabel="reasoning marker"
         />
       )}

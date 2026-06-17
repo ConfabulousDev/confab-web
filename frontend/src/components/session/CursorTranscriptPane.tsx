@@ -10,7 +10,8 @@
 // Tool rows render the call (name + one-line input summary) with NO output:
 // Cursor records tool inputs only, never results.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
@@ -18,8 +19,14 @@ import { formatCodexTimestamp } from '@/components/transcript/codex/codexFormat'
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { renderTextWithHighlight } from '@/utils/renderHighlight';
+import RowActions from '@/components/transcript/RowActions';
 import type { CursorRenderItem } from './cursorCategories';
 import { attachCursorTimestamps } from '@/services/cursorTranscriptService';
+import {
+  buildCursorRowNav,
+  cursorRowKindLabel,
+  buildCursorRowCopyText,
+} from './cursorRowNav';
 import CursorContextSections from './CursorContextSections';
 import CursorMessageBody from './CursorMessageBody';
 import { extractCursorItemText } from './extractCursorItemText';
@@ -67,10 +74,13 @@ function ToolRow({
   item,
   searchQuery,
   isCurrentSearchMatch,
+  rowActions,
 }: {
   item: Extract<CursorRenderItem, { kind: 'tool' }>;
   searchQuery?: string;
   isCurrentSearchMatch?: boolean;
+  /** a9gr: per-row action cluster (copy text / copy link / skip nav). */
+  rowActions?: ReactNode;
 }) {
   return (
     <div className={cx(styles.row, styles.toolRow)}>
@@ -78,6 +88,7 @@ function ToolRow({
         <span className={styles.roleLabel}>Tool</span>
         <span className={styles.toolName}>{item.toolName}</span>
         <EstimatedTime timestamp={item.timestamp} />
+        {rowActions}
       </div>
       {item.input ? (
         <pre className={styles.toolInput}>
@@ -92,10 +103,13 @@ function Row({
   item,
   searchQuery,
   isCurrentSearchMatch,
+  rowActions,
 }: {
   item: CursorRenderItem;
   searchQuery?: string;
   isCurrentSearchMatch?: boolean;
+  /** a9gr: per-row action cluster (copy text / copy link / skip nav). */
+  rowActions?: ReactNode;
 }) {
   if (item.kind === 'user') {
     return (
@@ -103,6 +117,7 @@ function Row({
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>User</span>
           <EstimatedTime timestamp={item.timestamp} />
+          {rowActions}
         </div>
         <CursorMessageBody
           text={item.text}
@@ -119,6 +134,7 @@ function Row({
         <div className={styles.rowHeader}>
           <span className={styles.roleLabel}>Assistant</span>
           <EstimatedTime timestamp={item.timestamp} />
+          {rowActions}
         </div>
         <CursorMessageBody
           text={item.text}
@@ -129,11 +145,17 @@ function Row({
     );
   }
   return (
-    <ToolRow item={item} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
+    <ToolRow
+      item={item}
+      searchQuery={searchQuery}
+      isCurrentSearchMatch={isCurrentSearchMatch}
+      rowActions={rowActions}
+    />
   );
 }
 
 export default function CursorTranscriptPane({
+  sessionId,
   items,
   filteredItems,
   loading,
@@ -174,6 +196,24 @@ export default function CursorTranscriptPane({
     return filteredItems.findIndex((it) => it.id === targetId);
   }, [filteredItems, targetId]);
 
+  // a9gr: same-kind skip-nav neighbor maps over the FILTERED items (so skip
+  // jumps between visible rows only). The filtered index IS the virtual index
+  // for Cursor — no separator rows — so we scroll straight to it.
+  const { nextOfSameKind, prevOfSameKind } = useMemo(
+    () => buildCursorRowNav(filteredItems),
+    [filteredItems],
+  );
+
+  const scrollToRow = useCallback(
+    (index: number) => {
+      retryOnAnimationFrame(
+        () => virtualizer.scrollToIndex(index, { align: 'start' }),
+        () => false,
+      );
+    },
+    [virtualizer],
+  );
+
   // Re-arm the one-shot scroll when the deep-link target changes.
   useEffect(() => {
     hasScrolledToTarget.current = false;
@@ -182,12 +222,9 @@ export default function CursorTranscriptPane({
   // Scroll to the deep-link target once, after it resolves (items may stream in).
   useEffect(() => {
     if (targetIndex < 0 || hasScrolledToTarget.current) return;
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(targetIndex, { align: 'start' }),
-      () => false,
-    );
+    scrollToRow(targetIndex);
     hasScrolledToTarget.current = true;
-  }, [targetIndex, virtualizer]);
+  }, [targetIndex, scrollToRow]);
 
   // Scroll to the current search match, then bring its first <mark> into view.
   // The match's filtered index IS its virtual index (no divider rows). Mirrors
@@ -271,6 +308,22 @@ export default function CursorTranscriptPane({
             const isTarget = targetId !== undefined && item.id === targetId;
             const isCurrentSearchMatch = search.currentMatchFilteredIndex === virtualItem.index;
             const searchQuery = search.isOpen ? search.highlightQuery : undefined;
+            // a9gr: per-row action cluster. Deep-link uses the synthetic stable
+            // `item.id` (estimated timestamps collide/shift — the existing
+            // resolver matches `item.id` directly); copy-text is the raw row
+            // payload; skip jumps to the next/prev same-kind row.
+            const nextIdx = nextOfSameKind.get(virtualItem.index);
+            const prevIdx = prevOfSameKind.get(virtualItem.index);
+            const rowActions = (
+              <RowActions
+                sessionId={sessionId}
+                deepLinkMsg={item.id}
+                copyText={buildCursorRowCopyText(item)}
+                onSkipToNext={nextIdx !== undefined ? () => scrollToRow(nextIdx) : undefined}
+                onSkipToPrevious={prevIdx !== undefined ? () => scrollToRow(prevIdx) : undefined}
+                kindLabel={cursorRowKindLabel(item)}
+              />
+            );
             return (
               <div
                 key={virtualItem.key}
@@ -283,6 +336,7 @@ export default function CursorTranscriptPane({
                   item={item}
                   searchQuery={searchQuery}
                   isCurrentSearchMatch={isCurrentSearchMatch}
+                  rowActions={rowActions}
                 />
               </div>
             );

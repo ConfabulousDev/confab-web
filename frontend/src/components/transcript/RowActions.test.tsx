@@ -1,14 +1,17 @@
-// Spec tests for CodexRowActions (CF-360).
+// Spec tests for the provider-agnostic RowActions (a9gr; migrated from
+// CodexRowActions.test.tsx).
 //
 // Locks the contract:
-//   - copy-link is ALWAYS rendered, builds the exact URL Claude does
+//   - copy-link is ALWAYS rendered, builds ${origin}/sessions/${sessionId}
+//     ?tab=transcript&msg=${URL-encoded deepLinkMsg} — for BOTH a Codex
+//     timestamp value and a Cursor synthetic-id value
 //   - copy-text is hidden when copyText is undefined / empty / whitespace
 //   - skip buttons are hidden when their callback is undefined
 //   - clicks call the right handler
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import CodexRowActions from './CodexRowActions';
+import RowActions from './RowActions';
 
 // Mock the clipboard API for jsdom — navigator.clipboard isn't defined by default.
 const writeText = vi.fn().mockResolvedValue(undefined);
@@ -22,14 +25,14 @@ beforeEach(() => {
   });
 });
 
-describe('CodexRowActions', () => {
+describe('RowActions', () => {
   it('always renders the copy-link button', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" />);
     expect(screen.getByLabelText(/copy link/i)).toBeInTheDocument();
   });
 
-  it('copy-link writes ${origin}/sessions/${sessionId}?tab=transcript&msg=${URL-encoded timestamp} to clipboard (CF-475)', () => {
-    render(<CodexRowActions sessionId="abc-123" timestamp="2026-05-13T18:00:00Z" />);
+  it('copy-link writes ${origin}/sessions/${sessionId}?tab=transcript&msg=${URL-encoded deepLinkMsg} for a Codex timestamp value', () => {
+    render(<RowActions sessionId="abc-123" deepLinkMsg="2026-05-13T18:00:00Z" />);
     fireEvent.click(screen.getByLabelText(/copy link/i));
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(
@@ -37,37 +40,45 @@ describe('CodexRowActions', () => {
     );
   });
 
+  it('copy-link URL-encodes a Cursor synthetic id value (e.g. a tool row "lineIndex-blockIndex" id)', () => {
+    render(<RowActions sessionId="cur-999" deepLinkMsg="12-3" />);
+    fireEvent.click(screen.getByLabelText(/copy link/i));
+    expect(writeText).toHaveBeenCalledWith(
+      `${window.location.origin}/sessions/cur-999?tab=transcript&msg=${encodeURIComponent('12-3')}`,
+    );
+  });
+
   it('renders copy-text when copyText is non-empty', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText="hello world" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" copyText="hello world" />);
     expect(screen.getByLabelText(/copy text/i)).toBeInTheDocument();
   });
 
   it('hides copy-text when copyText is undefined', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" />);
     expect(screen.queryByLabelText(/copy text/i)).toBeNull();
   });
 
   it('hides copy-text when copyText is the empty string', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText="" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" copyText="" />);
     expect(screen.queryByLabelText(/copy text/i)).toBeNull();
   });
 
   it('hides copy-text when copyText is whitespace-only', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText={'   \n\t  '} />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" copyText={'   \n\t  '} />);
     expect(screen.queryByLabelText(/copy text/i)).toBeNull();
   });
 
   it('copy-text writes the provided text to clipboard', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" copyText="payload" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" copyText="payload" />);
     fireEvent.click(screen.getByLabelText(/copy text/i));
     expect(writeText).toHaveBeenCalledWith('payload');
   });
 
   it('renders next-skip when onSkipToNext is provided', () => {
     render(
-      <CodexRowActions
+      <RowActions
         sessionId="s1"
-        timestamp="2026-05-13T18:00:00Z"
+        deepLinkMsg="2026-05-13T18:00:00Z"
         onSkipToNext={() => undefined}
         kindLabel="user prompt"
       />,
@@ -76,15 +87,15 @@ describe('CodexRowActions', () => {
   });
 
   it('hides next-skip when onSkipToNext is undefined', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" kindLabel="user prompt" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" kindLabel="user prompt" />);
     expect(screen.queryByLabelText(/next user prompt/i)).toBeNull();
   });
 
   it('renders prev-skip when onSkipToPrevious is provided', () => {
     render(
-      <CodexRowActions
+      <RowActions
         sessionId="s1"
-        timestamp="2026-05-13T18:00:00Z"
+        deepLinkMsg="2026-05-13T18:00:00Z"
         onSkipToPrevious={() => undefined}
         kindLabel="user prompt"
       />,
@@ -93,16 +104,16 @@ describe('CodexRowActions', () => {
   });
 
   it('hides prev-skip when onSkipToPrevious is undefined', () => {
-    render(<CodexRowActions sessionId="s1" timestamp="2026-05-13T18:00:00Z" kindLabel="user prompt" />);
+    render(<RowActions sessionId="s1" deepLinkMsg="2026-05-13T18:00:00Z" kindLabel="user prompt" />);
     expect(screen.queryByLabelText(/previous user prompt/i)).toBeNull();
   });
 
   it('skip-next click fires the provided callback', () => {
     const onSkipToNext = vi.fn();
     render(
-      <CodexRowActions
+      <RowActions
         sessionId="s1"
-        timestamp="2026-05-13T18:00:00Z"
+        deepLinkMsg="2026-05-13T18:00:00Z"
         onSkipToNext={onSkipToNext}
         kindLabel="exec command"
       />,
@@ -114,9 +125,9 @@ describe('CodexRowActions', () => {
   it('skip-prev click fires the provided callback', () => {
     const onSkipToPrevious = vi.fn();
     render(
-      <CodexRowActions
+      <RowActions
         sessionId="s1"
-        timestamp="2026-05-13T18:00:00Z"
+        deepLinkMsg="2026-05-13T18:00:00Z"
         onSkipToPrevious={onSkipToPrevious}
         kindLabel="exec command"
       />,
@@ -127,9 +138,9 @@ describe('CodexRowActions', () => {
 
   it('uses "row" as the default kindLabel when none provided', () => {
     render(
-      <CodexRowActions
+      <RowActions
         sessionId="s1"
-        timestamp="2026-05-13T18:00:00Z"
+        deepLinkMsg="2026-05-13T18:00:00Z"
         onSkipToNext={() => undefined}
       />,
     );

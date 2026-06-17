@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import CodexReasoningHidden from './CodexReasoningHidden';
 import type { CodexReasoningHiddenItem } from '@/types/codexRenderItem';
 
-vi.mock('./CodexRowActions', () => ({
+vi.mock('../RowActions', () => ({
   default: () => <span data-testid="row-actions" />,
 }));
 
@@ -24,7 +24,7 @@ describe('CodexReasoningHidden', () => {
     expect(container.querySelector('[data-kind="reasoning_hidden"]')).not.toBeNull();
   });
 
-  it('renders CodexRowActions only when sessionId is provided', () => {
+  it('renders RowActions only when sessionId is provided', () => {
     const { queryByTestId, rerender } = render(<CodexReasoningHidden item={item} />);
     expect(queryByTestId('row-actions')).toBeNull();
 

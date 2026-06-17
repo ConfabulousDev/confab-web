@@ -15,7 +15,7 @@ import { cx } from '@/utils/utils';
 import { formatCodexTimestamp } from './codexFormat';
 import CodexMessageBody from './CodexMessageBody';
 import CodexMessageImages from './CodexMessageImages';
-import CodexRowActions from './CodexRowActions';
+import RowActions from '../RowActions';
 import styles from './CodexMessage.module.css';
 
 export interface CodexAssistantMessageProps {
@@ -139,9 +139,9 @@ export default function CodexAssistantMessage({
           </>
         )}
         {sessionId && (
-          <CodexRowActions
+          <RowActions
             sessionId={sessionId}
-            timestamp={item.timestamp}
+            deepLinkMsg={item.timestamp}
             copyText={item.text}
             onSkipToNext={onSkipToNext}
             onSkipToPrevious={onSkipToPrevious}

@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import CodexTurnSeparator from './CodexTurnSeparator';
 import type { CodexTurnSeparatorItem } from '@/types/codexRenderItem';
 
-vi.mock('./CodexRowActions', () => ({
+vi.mock('../RowActions', () => ({
   default: () => <span data-testid="row-actions" />,
 }));
 
@@ -45,7 +45,7 @@ describe('CodexTurnSeparator', () => {
     expect(container.textContent).not.toContain('TTFT');
   });
 
-  it('renders CodexRowActions only when sessionId is provided', () => {
+  it('renders RowActions only when sessionId is provided', () => {
     const { queryByTestId, rerender } = render(
       <CodexTurnSeparator item={makeItem()} />
     );

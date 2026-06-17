@@ -6,7 +6,7 @@ import { render } from '@testing-library/react';
 import CodexTurnAbortedDivider from './CodexTurnAbortedDivider';
 import type { CodexTurnAbortedItem } from '@/types/codexRenderItem';
 
-vi.mock('./CodexRowActions', () => ({
+vi.mock('../RowActions', () => ({
   default: () => <span data-testid="row-actions" />,
 }));
 
@@ -68,7 +68,7 @@ describe('CodexTurnAbortedDivider', () => {
     expect(root?.textContent).not.toMatch(/Turn aborted\s*·/);
   });
 
-  it('renders CodexRowActions only when sessionId is provided', () => {
+  it('renders RowActions only when sessionId is provided', () => {
     const { queryByTestId, rerender } = render(<CodexTurnAbortedDivider item={makeItem()} />);
     expect(queryByTestId('row-actions')).toBeNull();
     rerender(<CodexTurnAbortedDivider item={makeItem()} sessionId="s1" />);
