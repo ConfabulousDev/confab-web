@@ -12,8 +12,15 @@
 
 export type CursorCategory = 'user' | 'assistant' | 'tool';
 
+// nfbe: one injected-context block parsed out of a Cursor user message envelope
+// (everything that is NOT the human `<user_query>` prompt — e.g. attached files,
+// rules, manually attached skills). `tag` is the raw envelope tag name, `label`
+// a humanized heading, `content` the trimmed block body. nfbe only renders the
+// prompt; these sections are carried for the collapsible-context UI (0rcv).
+export type CursorUserSection = { tag: string; label: string; content: string };
+
 export type CursorRenderItem =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; sections?: CursorUserSection[] }
   | { kind: 'assistant'; id: string; text: string }
   | { kind: 'tool'; id: string; toolName: string; input?: string };
 

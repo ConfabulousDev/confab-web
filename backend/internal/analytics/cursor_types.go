@@ -83,6 +83,43 @@ func cleanCursorAssistantText(raw string) string {
 	return cleaned
 }
 
+// userQueryBlock matches one `<user_query>…</user_query>` envelope block (the
+// human prompt). Cursor wraps every user `text` block in this envelope, often
+// alongside injected-context tags (rules, attached files, skills). The prompt
+// is the only human-authored part; everything else is scaffolding. `(?s)` lets
+// `.` span newlines (queries are multi-line).
+var userQueryBlock = regexp.MustCompile(`(?s)<user_query>(.*?)</user_query>`)
+
+// parseCursorUserPrompt extracts the human prompt from a Cursor user text block
+// by pulling the content of every `<user_query>…</user_query>` envelope and
+// joining them with newlines (trimmed). When NO well-formed `<user_query>` tag
+// is present (plain text, or an unclosed tag), it falls back to the raw text
+// (trimmed) so content is never dropped. The surrounding injected-context tags
+// are discarded — only the prompt reaches search, smart-recap, and the synced
+// first_user_message title. Mirrors the frontend parseCursorUserText (which
+// also returns the discarded sections for the collapsible-context UI; the
+// backend has no consumer for those, so it returns the prompt only).
+func parseCursorUserPrompt(raw string) string {
+	matches := userQueryBlock.FindAllStringSubmatch(raw, -1)
+	if len(matches) == 0 {
+		return strings.TrimSpace(raw)
+	}
+	parts := make([]string, 0, len(matches))
+	for _, m := range matches {
+		parts = append(parts, strings.TrimSpace(m[1]))
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+// ExtractCursorUserPrompt is the exported entry point for parseCursorUserPrompt,
+// used by the sync intake (internal/api) to clean a Cursor-supplied
+// first_user_message before it is validated and stored as the session-list
+// title. Same semantics: unwrap `<user_query>`, fall back to the raw text when
+// no well-formed envelope is present.
+func ExtractCursorUserPrompt(raw string) string {
+	return parseCursorUserPrompt(raw)
+}
+
 // stringInput decodes the block's tool input and returns the string value at
 // key, or "" when the input is absent, not an object, or the key is missing/
 // non-string. Used for path extraction (input.path) and similar scalar fields.
