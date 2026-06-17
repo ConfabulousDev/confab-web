@@ -1,7 +1,10 @@
-/* Cursor transcript pane (MVP, 18n2). Mirrors OpenCodeTranscriptPane.module.css
-   trimmed to the MVP: no timeline-bar rail, no cost-bar wrapper. */
+/* Cursor transcript pane (18n2 + zztp). Mirrors OpenCodeTranscriptPane.module.css
+   minus the cost-bar wrapper: Cursor has no per-message cost. The timeline-bar
+   rail sits beside the scroll area (zztp); it self-hides when the estimated row
+   times are unknown. */
 .container {
   display: flex;
+  gap: var(--spacing-sm, 0.5rem);
   height: 100%;
   min-height: 0;
 }

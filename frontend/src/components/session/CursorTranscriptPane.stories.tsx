@@ -444,6 +444,72 @@ export const SkipNavigation: Story = {
   },
 };
 
+// zztp: with session bounds supplied, the estimated per-row times (ce79) also
+// size a shared turn-based TimelineBar minimap on the right. Hovering a segment
+// shows the turn stats plus an "Estimated times" disclaimer, because the
+// durations come from interpolated times, not real per-message wall-clock.
+export const TimelineBarVisible: Story = {
+  args: {
+    sessionId: 'demo',
+    items,
+    filteredItems: items,
+    loading: false,
+    error: null,
+    firstSeen: '2026-06-17T10:00:00.000Z',
+    lastSyncAt: '2026-06-17T10:06:00.000Z',
+  },
+  play: async ({ canvasElement }) => {
+    // The bar renders at least one user + assistant segment from the bounds.
+    await waitFor(() => {
+      const segments = canvasElement.querySelectorAll('[data-timeline-segment]');
+      if (segments.length === 0) throw new Error('no timeline segments rendered yet');
+    });
+    // Hovering a segment surfaces the estimated-times disclaimer.
+    const first = canvasElement.querySelector('[data-timeline-segment]');
+    if (!(first instanceof HTMLElement)) throw new Error('expected a timeline segment element');
+    await userEvent.hover(first);
+    await waitFor(() => {
+      if (!canvasElement.textContent?.includes('Estimated times')) {
+        throw new Error('estimated-times tooltip note not shown yet');
+      }
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'zztp: the shared TimelineBar minimap, sized from the estimated per-row times (ce79). User and assistant turns render as stripes; the tooltip appends an "Estimated times" disclaimer since the durations are interpolated, not real per-message times. Clicking a segment scrolls the transcript to that turn.',
+      },
+    },
+  },
+};
+
+// zztp: without session bounds the row times are unknown (ce79's "no bogus
+// times" stance), so the timeline layout is empty and the bar hides entirely —
+// the transcript still renders normally.
+export const TimelineBarHiddenWithoutBounds: Story = {
+  args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null },
+  play: async ({ canvasElement }) => {
+    // Rows render…
+    await waitFor(() => {
+      if (canvasElement.querySelectorAll('mark').length > 0) return;
+      if (!canvasElement.textContent?.includes('validation')) {
+        throw new Error('transcript not rendered yet');
+      }
+    });
+    // …but no timeline segments, because the estimated times are unknown.
+    expect(canvasElement.querySelectorAll('[data-timeline-segment]').length).toBe(0);
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'zztp: with no firstSeen/lastSyncAt bounds, the per-row times are unknown, so the timeline layout is empty and the shared bar self-hides (ce79: no bogus times). The transcript list is unaffected.',
+      },
+    },
+  },
+};
+
 export const Loading: Story = {
   args: { sessionId: 'demo', items: [], filteredItems: [], loading: true, error: null },
 };

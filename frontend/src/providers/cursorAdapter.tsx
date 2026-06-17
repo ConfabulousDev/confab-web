@@ -2,8 +2,8 @@
 //
 // Wraps cursorTranscriptService / cursorCategories / CursorFilterDropdown /
 // CursorTranscriptPane to satisfy the ProviderAdapter contract, mirroring
-// opencodeAdapter. The transcript pane is the MVP (virtualized list + Cmd-F
-// search, no minimap/cost rail).
+// opencodeAdapter. The transcript pane is a virtualized list + Cmd-F search
+// with a turn-based timeline minimap (zztp) but no cost rail.
 //
 // Wire format has no model, token, cost, or per-line timestamp fields (st5f).
 // Session timing falls back to firstSeen/lastSyncAt; cost UI shows "Not available".
@@ -110,8 +110,10 @@ export const cursorAdapter: CursorAdapter = {
     );
   },
 
-  // The pane ignores visibleIndices / isCostMode (no timeline bar, no cost rail),
-  // but reads firstSeen/lastSyncAt to estimate per-row timestamps (ce79).
+  // The pane derives its own greying from items vs filteredItems (zztp) and has
+  // no cost rail, so it ignores the contract's visibleIndices / isCostMode. It
+  // reads firstSeen/lastSyncAt to estimate per-row timestamps (ce79), which also
+  // size the timeline minimap.
   TranscriptPane({ sessionId, items, filteredItems, loading, error, targetId, firstSeen, lastSyncAt }) {
     return (
       <CursorTranscriptPane
