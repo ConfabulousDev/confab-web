@@ -28,7 +28,7 @@ function QuickstartCTA({ show }: QuickstartCTAProps) {
       <div className={styles.banner}>
         <div className={styles.content}>
           <span className={styles.message}>
-            Set up session syncing to track your own Claude Code, Codex, and OpenCode sessions.
+            Set up session syncing to track your own Claude Code, Codex, OpenCode, and Cursor sessions.
           </span>
           <button
             className={styles.setupBtn}
