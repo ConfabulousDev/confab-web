@@ -106,6 +106,11 @@ func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage, bo
 // anchor is missing or the window is non-positive (end <= start) — Cursor never
 // invents a zero or negative span.
 func computeCursorSession(out *ComputeResult, messages []*CursorMessage, bounds CursorSessionBounds) {
+	// Cursor JSONL carries no per-line model in v1 (the deferred model cluster
+	// owns populating real names). Initialize to a non-nil empty slice so the
+	// session card marshals models_used as [] rather than null — the frontend's
+	// required SessionCardDataSchema.models_used rejects null (y0kc).
+	out.ModelsUsed = []string{}
 	if start, end := cursorSessionWindow(bounds); start != nil && end != nil {
 		if d := end.Sub(*start).Milliseconds(); d > 0 {
 			out.DurationMs = &d

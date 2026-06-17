@@ -246,6 +246,15 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			AvgTimeMs: c.Session.CompactionAvgTimeMs,
 		}
 
+		// Defensive coerce: models_used is a required, non-nullable array on the
+		// frontend (SessionCardDataSchema). A nil slice marshals to JSON null and
+		// fails the whole Summary parse, so guarantee a non-nil slice on the wire
+		// for any provider — including cards stored before a provider set it (y0kc).
+		modelsUsed := c.Session.ModelsUsed
+		if modelsUsed == nil {
+			modelsUsed = []string{}
+		}
+
 		// Cards format - session includes message breakdown and compaction
 		response.Cards["session"] = SessionCardData{
 			// Message counts
@@ -260,7 +269,7 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 			ThinkingBlocks: c.Session.ThinkingBlocks,
 			// Metadata
 			DurationMs: c.Session.DurationMs,
-			ModelsUsed: c.Session.ModelsUsed,
+			ModelsUsed: modelsUsed,
 			// Compaction
 			CompactionAuto:      c.Session.CompactionAuto,
 			CompactionManual:    c.Session.CompactionManual,
