@@ -57,24 +57,38 @@ const (
 	cursorToolGrep           = "Grep"
 	cursorToolSemanticSearch = "SemanticSearch"
 	cursorToolTask           = "Task"
+
+	// cursorToolUpdateCurrentStep is a subagent-only progress marker (input keys
+	// current_step / final_summary / completed_subtitle), not a real tool call.
+	// It is classified-and-skipped everywhere it appears (decision D2, wc9t) so it
+	// neither inflates tool stats nor surfaces an unfamiliar Cursor-only name.
+	cursorToolUpdateCurrentStep = "UpdateCurrentStep"
 )
 
-// ComputeFromCursorRollout maps a parsed Cursor session (main transcript only
-// in v1 — subagents are deferred) onto the canonical ComputeResult shape.
+// ComputeFromCursorRollout maps a parsed Cursor session — the main transcript
+// plus any subagent rollouts uploaded as file_type='agent' (wc9t) — onto the
+// canonical ComputeResult shape. The slice convention is [main, ...subagents].
 //
 // Cursor synced JSONL carries no per-line timestamps, tokens, model, or cost.
 // The token/cost cards degrade gracefully: tokens_v2 is always written with an
 // empty by_provider tree (no invented dollars — real cost is follow-up 59m1).
-// Session DurationMs is estimated from the session-level window in bounds
-// (start = created_at ?? first_seen; end = last_message_at ?? last_sync_at);
-// it stays nil when the window is absent or non-positive. The structure-derived
-// cards (session counts, tools, code activity, agents, conversation turn counts,
-// search text) are computed from message + tool_use structure.
+//
+// Per-card aggregation (mirrors OpenCode CF-539's asymmetric merge):
+//   - Session counts / DurationMs / models_used: MAIN thread only — subagents
+//     nest within the main session window; the bounds carry the main-thread
+//     window (start = created_at ?? first_seen; end = last_message_at ??
+//     last_sync_at), so DurationMs stays nil when that window is absent or
+//     non-positive.
+//   - Conversation turn counts: MAIN thread only — user-perceived turn structure
+//     does not include subagent reasoning.
+//   - Tools / code activity / agents: merged across ALL rollouts (each analyzer
+//     accumulates via +=, so per-rollout dispatch composes the cross-rollout
+//     total).
 //
 // Per-row estimated timestamps for transcript display are NOT computed here:
 // they are interpolated frontend-side (ce79) from these same session bounds, so
 // there is only one estimator and stored JSONL is never mutated.
-func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage, bounds CursorSessionBounds) *ComputeResult {
+func ComputeFromCursorRollout(ctx context.Context, rollouts [][]*CursorMessage, bounds CursorSessionBounds) *ComputeResult {
 	result := &ComputeResult{
 		ToolStats:         make(map[string]*ToolStats),
 		LanguageBreakdown: make(map[string]int),
@@ -92,15 +106,27 @@ func ComputeFromCursorRollout(ctx context.Context, messages []*CursorMessage, bo
 	result.EstimatedCostUSD = decimal.Zero
 	result.FastCostUSD = decimal.Zero
 
-	if len(messages) == 0 {
+	if len(rollouts) == 0 || len(rollouts[0]) == 0 {
 		return result
 	}
 
-	computeCursorSession(result, messages, bounds)
-	computeCursorConversation(result, messages)
-	computeCursorTools(result, messages)
-	computeCursorCodeActivity(result, messages)
-	computeCursorAgents(result, messages)
+	// Session counts, DurationMs, and conversation turns reflect the main thread
+	// only (rollouts[0]). Subagents nest within the main window and never widen
+	// the user-perceived conversation.
+	main := rollouts[0]
+	computeCursorSession(result, main, bounds)
+	computeCursorConversation(result, main)
+
+	// Tools / code activity / agents merge across every rollout — each analyzer
+	// accumulates via +=, so per-rollout dispatch composes the cross-rollout total.
+	for _, messages := range rollouts {
+		if len(messages) == 0 {
+			continue
+		}
+		computeCursorTools(result, messages)
+		computeCursorCodeActivity(result, messages)
+		computeCursorAgents(result, messages)
+	}
 
 	return result
 }
@@ -177,6 +203,10 @@ func computeCursorTools(out *ComputeResult, messages []*CursorMessage) {
 		}
 		for _, b := range msg.Content {
 			if b.Type != "tool_use" || b.Name == "" {
+				continue
+			}
+			// UpdateCurrentStep is a subagent progress marker, not a tool (D2).
+			if b.Name == cursorToolUpdateCurrentStep {
 				continue
 			}
 			out.TotalToolCalls++

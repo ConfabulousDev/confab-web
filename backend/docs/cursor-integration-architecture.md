@@ -28,16 +28,17 @@ line and block shape described below.
   └── <session-uuid>/
         ├── <session-uuid>.jsonl          # main thread  → file_type=transcript
         └── subagents/
-              └── <subagent-uuid>.jsonl   # subagent thread → DEFERRED (out of v1 scope)
+              └── <subagent-uuid>.jsonl   # subagent thread → file_type=agent
 ```
 
 - `<sanitized-project-path>` is the absolute working-directory path with `/`
   replaced by `-` (e.g. `Users-jackie-dev-confab-web`).
 - `<session-uuid>` is a v4 UUID; the directory name and the main file's basename
   are the **same** UUID. This UUID is the canonical Cursor session id.
-- The `subagents/` directory exists on disk and uses the identical line envelope
-  (plus a subagent-only `UpdateCurrentStep` tool), but **subagent transcripts
-  are deferred from v1** — see [Deferred: subagents](#deferred-subagents).
+- The `subagents/` directory uses the identical line envelope as the main thread
+  (plus a subagent-only `UpdateCurrentStep` tool). The CLI uploads each subagent
+  file as `file_type=agent`; the backend merges its activity into the parent
+  session's analytics — see [Subagents](#subagents).
 
 Session metadata lives in a **separate** tree:
 
@@ -47,16 +48,17 @@ Session metadata lives in a **separate** tree:
 
 See [Session metadata (meta.json)](#session-metadata-metajson).
 
-## Sync contract (v1)
+## Sync contract
 
 | Source file | Maps to |
 |-------------|---------|
 | `agent-transcripts/<uuid>/<uuid>.jsonl` (main) | `file_type=transcript` |
-| `agent-transcripts/<uuid>/subagents/<uuid>.jsonl` | **deferred** — not synced in v1 |
+| `agent-transcripts/<uuid>/subagents/<uuid>.jsonl` | `file_type=agent` |
 
 This mirrors the Codex/OpenCode convention (main file → `transcript`, subagent
-files → `agent`). Only the main transcript is in scope for v1; the `agent`
-mapping for subagents is reserved for the follow-up ticket.
+files → `agent`). The backend parses subagent files with the same envelope as
+the main thread and aggregates their tool/code/agent activity into the parent
+session — see [Subagents](#subagents).
 
 The Cursor session UUID is used as the upstream session id. Because the JSONL
 lines carry no inline timestamps, model, or token usage (see
@@ -316,15 +318,40 @@ readable from the package directory with **no `~/.cursor` access**, satisfying
 fy5q's acceptance criterion. Downstream tickets (gevp parser/compute, 18n2
 frontend service tests) consume the same fixture.
 
-## Deferred: subagents
+## Subagents
 
 Cursor stores subagent transcripts at
 `agent-transcripts/<session-uuid>/subagents/<subagent-uuid>.jsonl`. They use the
 **identical** line envelope as the main thread, plus a subagent-only
 `UpdateCurrentStep` tool (`input` keys: `current_step`, `final_summary`,
-`completed_subtitle`). v1 does **not** sync, parse, or render subagents — the
-layout is documented here only so the follow-up (subagent upload + analytics +
-UI) has the contract. No subagent fixture ships in v1.
+`completed_subtitle`) — a progress marker, **not** a real tool call.
+
+The CLI uploads each subagent file as `file_type=agent` under the parent
+session's hosted session (confab ticket 2brd). The backend (`cursor_provider.go`)
+lists agent files alongside the main transcript and lazily materializes them on
+first compute (`cursorRollout.materialize`), capped at `storage.MaxAgentFiles`;
+a per-file download/parse failure is non-fatal and recorded as a
+`LineValidationError`. This mirrors the OpenCode subagent path (CF-539).
+
+Analytics aggregation is **asymmetric** (OpenCode parity):
+
+- **Merged across `[main, ...subagents]`:** tools, code activity, agents,
+  and the global search index (so a phrase appearing only in a subagent still
+  matches the parent session — `cursor_search.go`).
+- **Main-thread only:** the conversation card (turn counts), the session
+  message counts, the session window / `DurationMs`, and `models_used` —
+  subagents nest within the main session window and do not widen it.
+- `UpdateCurrentStep` is classified-and-skipped in the tools card: it is neither
+  counted as a tool nor surfaced as a tool name.
+
+Transcript rendering stays **main-thread only** (provider parity — Codex and
+OpenCode do not render subagent threads in the main pane); subagents contribute
+to aggregated analytics cards and search recall, not the transcript view.
+
+The fixture `backend/internal/analytics/testdata/cursor/subagent.jsonl` is the
+executable form of this contract: a sanitized subagent transcript with the
+main-thread envelope plus two `UpdateCurrentStep` markers,
+exercised by `cursor_fixture_test.go` and the compute/precompute tests.
 
 ## External corroboration
 
@@ -346,9 +373,9 @@ UI) has the contract. No subagent fixture ships in v1.
 | Decision | Resolution |
 |----------|------------|
 | Fixture location | New `backend/internal/analytics/testdata/cursor/` subdir; main thread only; no separate frontend fixture file. |
-| Sync contract v1 | Main `<uuid>.jsonl` → `file_type=transcript` only; subagents deferred. |
+| Sync contract | Main `<uuid>.jsonl` → `file_type=transcript`; `subagents/<uuid>.jsonl` → `file_type=agent` (wc9t). |
 | Cost semantics | **TBD** — no tokens/cost in synced data; gevp writes empty `tokens_v2`; real cost tracked in 59m1 once Dashboard/Admin-API tokens land. |
-| Subagent aggregation policy | **TBD** — deferred with the rest of subagent support. |
+| Subagent aggregation policy | **Resolved (wc9t)** — merge tools/code/agents/search across `[main, ...subagents]`; conversation, session counts, bounds, and `models_used` stay main-only; `UpdateCurrentStep` ignored; transcript main-only. Mirrors OpenCode CF-539. |
 | Edit-tool mapping | `StrReplace` is the Cursor edit tool; map it explicitly in the code-activity card (gevp). |
 | Model source | Not in JSONL; best-effort sync metadata from `state.vscdb` (joined by `composerId`). |
 
