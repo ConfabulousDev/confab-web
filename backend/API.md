@@ -957,7 +957,7 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.tokens_v2.total_output` | int | Total output tokens (matches `cards.tokens.output`) |
 | `cards.tokens_v2.by_provider` | object | Map of provider id → `{cost_usd, models}`. Claude/Codex use the canonical agent id (`claude-code`/`codex`) as the single key with `getModelFamily()` model keys (fast turns under `"<family> · fast"`); OpenCode keys by model vendor. Each model entry has `input`, `output`, `cache_read`, `cache_write`, `reasoning`, `cost_usd`. The `<synthetic>` sentinel (Claude's no-real-model turns) is excluded from the model map at compute time (xz6g); a session whose only turns are synthetic carries no provider data and the card is omitted. Historical sessions reflect this after a recompute (`POST /cards/invalidate`). |
 | `cards.session.duration_ms` | int\|null | Session duration in ms (null if single message) |
-| `cards.session.models_used` | string[] | Unique model IDs used in the session |
+| `cards.session.models_used` | string[] | Unique model IDs used in the session. Always a JSON array, never null — providers with no per-line model (Cursor in v1) emit `[]`. |
 | `cards.tools.total_calls` | int | Total number of tool invocations |
 | `cards.tools.tool_breakdown` | object | Map of tool name to call count |
 | `cards.tools.error_count` | int | Number of tool calls that returned errors |

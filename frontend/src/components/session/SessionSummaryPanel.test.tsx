@@ -169,6 +169,29 @@ describe('SessionSummaryPanel', () => {
       expect(result.success).toBe(true);
     });
 
+    // y0kc: the fixture must pin session.models_used to the empty array (the real
+    // backend wire shape), and the schema must reject the null the backend used to
+    // emit — the exact production failure that broke the Summary tab for every
+    // Cursor session. The earlier cd3z fixture passed [] but never proved null was
+    // rejected, so the regression slipped through.
+    it('pins session.models_used to [] and rejects the null backend used to emit', () => {
+      const fixture = buildCursorAnalyticsFixture();
+      expect(fixture.cards?.session?.models_used).toEqual([]);
+
+      const withNull: unknown = {
+        ...fixture,
+        cards: {
+          ...fixture.cards,
+          session: { ...fixture.cards?.session, models_used: null },
+        },
+      };
+      const result = SessionAnalyticsSchema.safeParse(withNull);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(JSON.stringify(result.error.issues)).toContain('models_used');
+      }
+    });
+
     it('renders the card grid (no hard error) for a Cursor session', () => {
       render(
         <SessionSummaryPanel

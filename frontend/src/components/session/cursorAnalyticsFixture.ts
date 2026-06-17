@@ -13,6 +13,10 @@
 //     here (matching the live wire) and the flat Tokens card renders instead;
 //   - Cursor lines have no timestamps, so session.duration_ms and the
 //     conversation turn-timing fields are null;
+//   - Cursor has no per-line model in v1, so session.models_used is the empty
+//     array [] — NEVER null. The backend (computeCursorSession) now initializes
+//     it to []string{}; this fixture pins [] so the schema regression guards
+//     that the required models_used array never regresses to null (y0kc);
 //   - Cursor's tool names are its own (Read / Grep / StrReplace / Write), not
 //     Claude's Edit/MultiEdit;
 //   - smart_recap is absent (degrades to the missing-state placeholder); the

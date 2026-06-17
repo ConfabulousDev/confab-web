@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -206,6 +207,47 @@ func TestComputeFromCursorRolloutDurationFromBounds(t *testing.T) {
 	wantMs := int64(90 * 60 * 1000)
 	if *result.DurationMs != wantMs {
 		t.Errorf("DurationMs = %d, want %d (T1-T0)", *result.DurationMs, wantMs)
+	}
+}
+
+// TestComputeFromCursorRolloutSessionModelsUsedNotNull is the y0kc regression:
+// Cursor's session card must marshal models_used as a JSON array ([]), never
+// null. computeCursorSession never populates per-line models (Cursor JSONL has
+// none in v1), but leaving ModelsUsed nil marshals to JSON null, which the
+// frontend's required SessionCardDataSchema.models_used (z.array(z.string()))
+// rejects — breaking the whole Summary analytics load for every Cursor session.
+//
+// This drives the full production wire path the cd3z HTTP test missed:
+// ComputeFromCursorRollout -> ToCards -> ToResponse -> json.Marshal, then
+// inspects the raw JSON to assert the array shape (not a Go-level nil check,
+// which Go-side []string{} vs nil both satisfy — only the wire shape differs).
+func TestComputeFromCursorRolloutSessionModelsUsedNotNull(t *testing.T) {
+	messages := loadCursorFixtureMessages(t)
+	result := ComputeFromCursorRollout(context.Background(), messages, noBounds)
+
+	cards := result.ToCards("test-session", int64(len(messages)))
+	response := cards.ToResponse()
+
+	raw, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal analytics response: %v", err)
+	}
+
+	var decoded struct {
+		Cards struct {
+			Session map[string]json.RawMessage `json:"session"`
+		} `json:"cards"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal analytics response: %v", err)
+	}
+
+	got, ok := decoded.Cards.Session["models_used"]
+	if !ok {
+		t.Fatal("cards.session.models_used key missing from response")
+	}
+	if string(got) != "[]" {
+		t.Errorf("cards.session.models_used = %s, want [] (must be a JSON array, never null — frontend SessionCardDataSchema rejects null)", string(got))
 	}
 }
 
