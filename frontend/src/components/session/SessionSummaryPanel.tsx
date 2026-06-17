@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useDropdown } from '@/hooks';
 import { useAnalyticsPolling } from '@/hooks/useAnalyticsPolling';
-import { analyticsAPI, APIError } from '@/services/api';
+import { analyticsAPI, APIError, APIValidationError } from '@/services/api';
 import { RelativeTime } from '@/components/RelativeTime';
 import Alert from '@/components/Alert';
 import { MoreVerticalIcon, GitHubIcon } from '@/components/icons';
@@ -23,6 +23,27 @@ const SIZE_CLASSES: Record<string, string | undefined> = {
   standard: styles.sizeStandard,
   tall: styles.sizeTall,
 };
+
+/**
+ * cd3z: turn an opaque analytics-fetch failure into an actionable one-line
+ * detail. The bare "Failed to load analytics" gave no clue why Cursor sessions
+ * failed; this distinguishes the two real failure modes so future occurrences
+ * are diagnosable from a screenshot:
+ *   - APIValidationError — the 200 body did not match the Zod schema (a wire /
+ *     schema drift); surface the failing fields.
+ *   - APIError — a non-2xx HTTP response (e.g. 504 from a slow first-load smart
+ *     recap, or a 5xx); surface the status code and backend message.
+ *   - any other Error — surface its message (e.g. network/timeout).
+ */
+function describeAnalyticsError(error: Error): string {
+  if (error instanceof APIValidationError) {
+    return `Invalid analytics response: ${error.message}`;
+  }
+  if (error instanceof APIError) {
+    return `HTTP ${error.status}: ${error.message}`;
+  }
+  return error.message;
+}
 
 interface SessionSummaryPanelProps {
   sessionId: string;
@@ -145,6 +166,7 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
         <div className={styles.card}>
           <div className={styles.cardContent}>
             <div className={styles.analyticsError}>Failed to load analytics</div>
+            <div className={styles.analyticsErrorDetail}>{describeAnalyticsError(error)}</div>
           </div>
         </div>
       );

@@ -918,9 +918,13 @@ export function validateResponse<T>(schema: z.ZodType<T>, data: unknown, endpoin
 }
 
 /**
- * Custom error class for API validation failures
+ * Custom error class for API validation failures.
+ *
+ * Exported (cd3z) so error-surfacing UI can distinguish a client-side schema
+ * mismatch on a 200 body from a non-2xx HTTP failure (APIError) and report the
+ * failing fields instead of a bare "Failed to load analytics".
  */
-class APIValidationError extends Error {
+export class APIValidationError extends Error {
   endpoint: string;
   zodError: z.ZodError;
 

@@ -516,6 +516,16 @@
   font-size: var(--font-sm);
 }
 
+/* cd3z: actionable detail under the headline error (HTTP status or schema
+   validation message). Muted and wrapped so long messages stay readable. */
+.analyticsErrorDetail {
+  padding: 0 var(--spacing-md) var(--spacing-md);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  overflow-wrap: anywhere;
+}
+
 /* Per-card error state (graceful degradation) */
 .cardError {
   padding: var(--spacing-md);
