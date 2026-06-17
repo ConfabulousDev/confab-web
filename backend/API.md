@@ -176,7 +176,7 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 | `metadata.git_info` | object | No | Git repository metadata. See [`git_info` fields](#git_info-fields). |
 | `metadata.summary` | string | No | Session summary (nil=don't update, ""=clear) |
 | `metadata.first_user_message` | string | No | First user message (nil=don't update, ""=clear) |
-| `metadata.latest_message_at` | string (RFC3339) | No | Explicit latest-message timestamp for providers whose transcript lines carry none (cursor). When present on a transcript chunk, it advances `session.last_message_at` the same way per-line timestamp extraction does for other providers. Ignored for providers that already extract per-line timestamps. See [Cursor Metadata](#cursor-metadata) below. |
+| `metadata.latest_message_at` | string (RFC3339) | No | Explicit latest-message timestamp for providers whose transcript lines carry none (cursor). When present on a transcript chunk, it advances `session.last_message_at` the same way per-line timestamp extraction does for other providers. Values more than 48h in the future are silently dropped (the chunk still returns 200) to prevent sort-order abuse; `last_message_at` is left unchanged. Ignored for providers that already extract per-line timestamps. See [Cursor Metadata](#cursor-metadata) below. |
 | `metadata.model` | string | No | Model that produced a cursor session (the cursor JSONL has no model field). Accepted on the wire and documented; see [Cursor Metadata](#cursor-metadata) for the current persistence status. |
 | `metadata.codex_rollout` | object | No | Codex rollout sidecar metadata (codex sessions only). See [Codex Rollout Metadata](#codex-rollout-metadata) below. |
 

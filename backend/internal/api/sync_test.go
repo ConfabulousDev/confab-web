@@ -191,6 +191,13 @@ func TestExtractTimestampFromLine(t *testing.T) {
 			name: "malformed json",
 			line: `{"timestamp":"2026-05-13T01:00:00.000Z","type":`,
 		},
+		{
+			// A valid ISO-8601 timestamp far in the future must be dropped: an
+			// out-of-range value would otherwise sort the session to the top of
+			// every most-recent ordering (sessions.last_message_at abuse).
+			name: "absurd future timestamp rejected",
+			line: `{"type":"assistant","timestamp":"9999-01-01T00:00:00.000Z"}`,
+		},
 	}
 
 	for _, tt := range tests {
