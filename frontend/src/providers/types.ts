@@ -42,6 +42,13 @@ import type {
   OpenCodeRenderItem,
 } from '@/components/session/opencodeCategories';
 import type { OpenCodeRawEntry } from '@/services/opencodeTranscriptService';
+import type {
+  CursorFilterState,
+  CursorHierarchicalCounts,
+  CursorCategory,
+  CursorRenderItem,
+} from '@/components/session/cursorCategories';
+import type { CursorRawEntry } from '@/services/cursorTranscriptService';
 
 export interface FilterAPI<TFilterState, TToggles> {
   state: TFilterState;
@@ -187,6 +194,18 @@ export type OpenCodeAdapter = ProviderAdapter<
   OpenCodeFilterState,
   OpenCodeToggles,
   OpenCodeHierarchicalCounts
+>;
+
+export interface CursorToggles {
+  toggleCategory: (category: CursorCategory) => void;
+}
+
+export type CursorAdapter = ProviderAdapter<
+  CursorRawEntry,
+  CursorRenderItem,
+  CursorFilterState,
+  CursorToggles,
+  CursorHierarchicalCounts
 >;
 
 /**

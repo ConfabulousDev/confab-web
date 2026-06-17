@@ -30,6 +30,11 @@ const DEFAULTS_BY_PROVIDER: Record<ProviderId, ProviderDefaults> = {
     externalIdPrefix: 'opencode-fixture',
     transcriptFileName: 'messages.jsonl',
   },
+  cursor: {
+    externalIdPrefix: 'cursor-fixture',
+    // Cursor transcripts are keyed by the agent-transcripts session UUID.
+    transcriptFileName: 'cursor-session-uuid.jsonl',
+  },
 };
 
 const FIXTURE_TIMESTAMP = '2026-05-13T01:00:00Z';

@@ -11,10 +11,12 @@ Per-provider transcript adapters (CF-417). `SessionViewer` and
 | `types.ts` | `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>` interface, `FilterAPI`, `TranscriptPaneProps`, `SessionMetaFallback` / `SessionMetaResult`. Two views of the same adapter: `ClaudeAdapter` / `CodexAdapter` (concrete-typed for implementers) and `OpaqueAdapter` (`unknown`-typed for consumers). |
 | `claudeAdapter.tsx` | Wraps `claudeTranscriptService`, `useClaudeTranscriptFilters`, `ClaudeFilterDropdown`, `ClaudeTranscriptPane`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. |
 | `codexAdapter.tsx` | Wraps `codexTranscriptService`, `useCodexTranscriptFilters`, `CodexFilterDropdown`, `CodexTranscriptPane`. `computeMeta` walks rawLines for min/max `timestamp`. |
+| `opencodeAdapter.tsx` | Wraps `opencodeTranscriptService`, `useOpenCodeTranscriptFilters`, `OpenCodeFilterDropdown`, `OpenCodeTranscriptPane`. `computeMeta` walks render-items' epoch-ms `timeCreated`; `calculateMessageCost` prefers the reported `info.cost`, else the pricing fallback. |
+| `cursorAdapter.tsx` | Wraps `cursorTranscriptService`, `useCursorTranscriptFilters`, `CursorFilterDropdown`, `CursorTranscriptPane`. Cursor JSONL carries no model/token/cost/timestamp, so `extractModel` is always `undefined`, `computeMeta` always falls back to `firstSeen`/`lastSyncAt`, and `calculateMessageCost` returns 0 (empty pricing → cost UI hidden). The MVP pane has no minimap/cost rail; the adapter's `TranscriptPane` wrapper accepts but ignores `visibleIndices` / `isCostMode`. |
 | `registry.ts` | `getAdapter(provider: string): OpaqueAdapter`. Normalizes `provider` (lowercase, whitespace → `-`), then looks up in a record keyed by `PROVIDER_VALUES`. **Throws on unknown providers** — backend already normalizes on read, so this only fires on a backend-first rollout. |
 | `useTranscriptData.ts` | Shared hook: initial fetch + visibility-gated polling. Single hook, both providers. Skipped when a Storybook `seed` is supplied. |
 | `registry.test.ts` | Drift guard: every `PROVIDER_VALUES` entry must resolve to a distinct adapter; unknown providers must throw. |
-| `claudeAdapter.test.ts` / `codexAdapter.test.ts` / `opencodeAdapter.test.ts` | Per-adapter delegation + pure-method tests. Services are mocked with `vi.mock`. |
+| `claudeAdapter.test.ts` / `codexAdapter.test.ts` / `opencodeAdapter.test.ts` / `cursorAdapter.test.ts` | Per-adapter delegation + pure-method tests. Services are mocked with `vi.mock`. |
 
 ## `ProviderAdapter` interface
 
@@ -71,7 +73,14 @@ plugin accepts property-access calls whose last segment starts with `use`.
 2. Add a `'<id>'` provider block with its model families to the single price
    table, `backend/internal/pricingsource/pricing.json` (CF-515), and bump
    `updated_at`. The frontend reads the table from the backend at runtime — no
-   frontend pricing edit needed.
+   frontend pricing edit needed. **Even when the provider has no pricing**
+   (e.g. Cursor, whose transcripts carry no token/cost data), every frontend
+   `Record<ProviderId, …>` literal still needs a `'<id>'` key to satisfy `tsc`:
+   `activePricing` (`utils/tokenStats.ts`), `PRICING_FIXTURE`
+   (`test/pricingFixture.ts`), `PROVIDER_METADATA` (`utils/providers.ts`),
+   `REGISTRY` (`providers/registry.ts`), and the `DEFAULTS_BY_PROVIDER` maps in
+   `test-fixtures/session.ts` and `test-fixtures/org.ts` — supply an empty `{}`
+   for the pricing maps.
 3. Write `frontend/src/providers/<id>Adapter.tsx`:
    - Type it as `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>`.
    - Wrap an existing transcript service, filter hook, dropdown component, and pane component.

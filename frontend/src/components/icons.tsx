@@ -120,6 +120,29 @@ export const OpenCodeIcon = (
   </svg>
 );
 
+// Cursor mark — the official isometric-cube glyph (cursor.com brand). A hexagon
+// outline split into three diamond faces, the classic "cube" silhouette that
+// identifies Cursor sessions in the UI (mirrors ClaudeCodeIcon / CodexIcon /
+// OpenCodeIcon). Uses `currentColor` so the mark adapts per theme; the
+// chart-series brandColor in providers.ts pins a fixed hex for recharts.
+export const CursorIcon = (
+  <svg data-testid="icon-cursor" width="14" height="14" viewBox="0 0 24 24" fill="none">
+    <path
+      d="M12 2 2 7.5v9L12 22l10-5.5v-9L12 2Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12 2v20M2 7.5 12 12l10-4.5M12 12 2 16.5M12 12l10 4.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 // Terminal icon for Session card header
 export const TerminalIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
