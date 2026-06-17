@@ -270,6 +270,88 @@ export const UserContextSectionsExpanded: Story = {
   },
 };
 
+// pt81: narrative rows (user prompt + assistant text) render through the
+// shared markdown pipeline (CursorMessageBody). The assistant Dependabot
+// final-response shows a rendered pipe table, bold repo name, `###` headers,
+// and a clickable link instead of literal monospace markdown source. Tool rows
+// and the user prompt's inline code render too; tool input summaries stay
+// monospace `<pre>`.
+const markdownItems: CursorRenderItem[] = [
+  {
+    kind: 'user',
+    id: '0',
+    text: 'Check for open Dependabot alerts and summarize by severity. Run `gh api`.',
+  },
+  {
+    kind: 'assistant',
+    id: '1',
+    text: [
+      'Yes — **ConfabulousDev/confab-web** has **14 open Dependabot alerts**:',
+      '',
+      '| Severity | Count |',
+      '|----------|-------|',
+      '| High     | 8     |',
+      '| Moderate | 4     |',
+      '| Low      | 2     |',
+      '',
+      '### Next steps',
+      '',
+      'Full list: [github.com/ConfabulousDev/confab-web/security/dependabot](https://github.com/ConfabulousDev/confab-web/security/dependabot)',
+    ].join('\n'),
+  },
+  { kind: 'tool', id: '1-0', toolName: 'Shell', input: 'gh api dependabot/alerts' },
+];
+
+export const MarkdownNarrative: Story = {
+  args: {
+    sessionId: 'demo',
+    items: markdownItems,
+    filteredItems: markdownItems,
+    loading: false,
+    error: null,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'pt81: user/assistant narrative rows render markdown (bold, pipe tables, `###` headers, links) via the shared CursorMessageBody pipeline. Tool input summaries stay monospace `<pre>`.',
+      },
+    },
+  },
+};
+
+// pt81: Cmd-F over a markdown-rendered assistant row still produces a `<mark>`
+// — search runs against the rendered HTML (highlightTextInHtml), not the raw
+// markdown source, so scroll-to-mark keeps working.
+export const SearchActiveInMarkdown: Story = {
+  args: {
+    sessionId: 'demo',
+    items: markdownItems,
+    filteredItems: markdownItems,
+    loading: false,
+    error: null,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.keyboard('{Meta>}f{/Meta}');
+    const input = await canvas.findByLabelText('Search transcript');
+    await userEvent.type(input, 'Dependabot');
+    await waitFor(() => {
+      if (canvasElement.querySelectorAll('mark').length === 0) {
+        throw new Error('no highlight yet');
+      }
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'pt81: searching a term that appears in a markdown-rendered assistant row wraps the match in `<mark>` inside the rendered HTML, preserving Cmd-F and scroll-to-match.',
+      },
+    },
+  },
+};
+
 export const Loading: Story = {
   args: { sessionId: 'demo', items: [], filteredItems: [], loading: true, error: null },
 };
