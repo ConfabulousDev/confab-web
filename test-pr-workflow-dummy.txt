@@ -1,0 +1,3 @@
+PR workflow test — safe to delete.
+Created: 2026-06-17
+Purpose: exercise commit + PR creation only; no product changes.
