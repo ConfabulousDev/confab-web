@@ -1,4 +1,5 @@
-/* CF-360 row-action buttons (copy text / copy link / skip prev/next).
+/* a9gr / CF-360 row-action buttons (copy text / copy link / skip prev/next).
+   Provider-agnostic; shared by Codex renderers and the Cursor pane.
    Visual spec mirrors Claude's TimelineMessage.module.css button chrome. */
 
 .actions {

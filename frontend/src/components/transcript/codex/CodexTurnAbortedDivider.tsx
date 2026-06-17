@@ -15,7 +15,7 @@ import type { CodexTurnAbortedItem } from '@/types/codexRenderItem';
 import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import { cx } from '@/utils/utils';
 import { formatCodexTimestamp, formatDurationMs } from './codexFormat';
-import CodexRowActions from './CodexRowActions';
+import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
 export interface CodexTurnAbortedDividerProps {
@@ -71,9 +71,9 @@ export default function CodexTurnAbortedDivider({
         {formatCodexTimestamp(item.timestamp)}
       </span>
       {sessionId && (
-        <CodexRowActions
+        <RowActions
           sessionId={sessionId}
-          timestamp={item.timestamp}
+          deepLinkMsg={item.timestamp}
           kindLabel="turn-aborted marker"
         />
       )}

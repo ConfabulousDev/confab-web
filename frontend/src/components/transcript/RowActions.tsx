@@ -1,24 +1,32 @@
-// CF-360 / CF-475: per-row action buttons shared by every Codex renderer.
+// a9gr / CF-360 / CF-475: provider-agnostic per-row action buttons, shared by
+// every Codex renderer and the Cursor transcript pane (sibling of the already-
+// shared TimelineBar / CostBar).
 //
 // Renders, into a row's header-right slot:
 //   [prev-skip?] [next-skip?] [copy-text?] [copy-link]
 //
 // - copy-link is always rendered; it builds a deep-link URL of the form
-//     ${origin}/sessions/${sessionId}?tab=transcript&msg=${timestamp}
-//   where `timestamp` is the render item's ISO 8601 timestamp. The Codex
-//   viewer resolves it via `resolveCodexDeepLinkTarget`. Pre-CF-475 URLs
-//   used a numeric lineId — those land at the top instead of the row.
+//     ${origin}/sessions/${sessionId}?tab=transcript&msg=${deepLinkMsg}
+//   where `deepLinkMsg` is the value the provider's deep-link resolver matches:
+//   Codex passes the render item's ISO 8601 timestamp (resolved via
+//   `resolveCodexDeepLinkTarget`); Cursor passes the synthetic stable `item.id`
+//   (matched directly by `cursorAdapter.useDeepLinkFilterReset`). The value is
+//   URL-encoded here, so callers pass the raw value.
 // - copy-text is shown only when `copyText` is non-empty / non-whitespace.
 // - skip buttons appear only when the corresponding callback is provided
 //   (parent hides at the ends of a same-kind chain).
 
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
-import styles from './CodexRowActions.module.css';
+import styles from './RowActions.module.css';
 
-export interface CodexRowActionsProps {
+export interface RowActionsProps {
   sessionId: string;
-  /** ISO 8601 timestamp of the originating render item — the `?msg=` value. */
-  timestamp: string;
+  /**
+   * The `?msg=` deep-link value — whatever the provider's resolver matches
+   * against. Codex: the ISO 8601 timestamp; Cursor: the synthetic `item.id`.
+   * Passed raw; this component URL-encodes it.
+   */
+  deepLinkMsg: string;
   /** Omitted = no copy-text button. Treated as empty if whitespace-only. */
   copyText?: string;
   /** Both omitted = no skip buttons. Each missing = that direction hidden. */
@@ -28,14 +36,14 @@ export interface CodexRowActionsProps {
   kindLabel?: string;
 }
 
-export default function CodexRowActions({
+export default function RowActions({
   sessionId,
-  timestamp,
+  deepLinkMsg,
   copyText,
   onSkipToNext,
   onSkipToPrevious,
   kindLabel,
-}: CodexRowActionsProps) {
+}: RowActionsProps) {
   const { copy: copyTextHandler, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLinkHandler, copied: linkCopied } = useCopyToClipboard();
 
@@ -45,7 +53,7 @@ export default function CodexRowActions({
 
   function handleCopyLink() {
     void copyLinkHandler(
-      `${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${encodeURIComponent(timestamp)}`,
+      `${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${encodeURIComponent(deepLinkMsg)}`,
     );
   }
 

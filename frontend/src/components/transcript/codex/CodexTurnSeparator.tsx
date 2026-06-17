@@ -3,7 +3,7 @@
 import type { CodexTurnSeparatorItem } from '@/types/codexRenderItem';
 import { cx } from '@/utils/utils';
 import { formatDurationMs } from './codexFormat';
-import CodexRowActions from './CodexRowActions';
+import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
 export interface CodexTurnSeparatorProps {
@@ -46,9 +46,9 @@ export default function CodexTurnSeparator({
           : null}
       </span>
       {sessionId && (
-        <CodexRowActions
+        <RowActions
           sessionId={sessionId}
-          timestamp={item.timestamp}
+          deepLinkMsg={item.timestamp}
           kindLabel="turn separator"
         />
       )}

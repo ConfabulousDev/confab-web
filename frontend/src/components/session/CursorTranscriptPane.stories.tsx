@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { userEvent, within, waitFor } from 'storybook/test';
+import { userEvent, within, waitFor, expect } from 'storybook/test';
 import CursorTranscriptPane from './CursorTranscriptPane';
 import type { CursorRenderItem } from './cursorCategories';
 import {
@@ -378,6 +378,67 @@ export const EstimatedTimestamps: Story = {
       description: {
         story:
           'ce79: per-row estimated times interpolated over the session bounds (firstSeen → lastSyncAt). Times increase monotonically down the transcript; the assistant row and its Read/Grep tool rows share one line time. The `~` prefix and the "Estimated — Cursor transcripts have no per-message timestamps." tooltip mark them as estimates, not real per-message timestamps.',
+      },
+    },
+  },
+};
+
+// a9gr: every row carries a per-row action cluster in its header-right slot —
+// copy-text (raw row payload) + copy-link (deep link to the row) + same-kind
+// skip-prev/next. Copy-link writes `${origin}/sessions/<id>?tab=transcript&msg=
+// <item.id>` (the synthetic stable id, NOT the estimated timestamp). Copy-text
+// is hidden on rows with no payload; skip buttons hide at the ends of a chain.
+export const RowActionsCluster: Story = {
+  args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    // Every row renders a copy-link button.
+    const copyLinks = await canvas.findAllByLabelText('Copy link to row');
+    expect(copyLinks.length).toBeGreaterThan(0);
+    // Rows with a payload render a copy-text button too.
+    const copyTexts = canvas.getAllByLabelText('Copy text');
+    expect(copyTexts.length).toBeGreaterThan(0);
+    // Stub the clipboard so the copy click doesn't throw in the iframe, then
+    // assert copy-link writes the deep-link URL addressed by the row id.
+    const writes: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: (t: string) => { writes.push(t); return Promise.resolve(); } },
+      writable: true,
+      configurable: true,
+    });
+    await userEvent.click(copyLinks[0]!);
+    await waitFor(() => {
+      if (!writes.some((w) => w.includes('tab=transcript&msg='))) {
+        throw new Error('copy-link did not write a deep-link URL');
+      }
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'a9gr: per-row action cluster (copy text / copy link / same-kind skip nav), shared with Codex via the provider-agnostic RowActions. Copy-link deep-links to the row by its synthetic stable id.',
+      },
+    },
+  },
+};
+
+// a9gr: same-kind skip nav. Clicking a row's "Next assistant message" jumps to
+// the next assistant row (over the filtered list); first/last-of-kind rows hide
+// the corresponding button.
+export const SkipNavigation: Story = {
+  args: { sessionId: 'demo', items, filteredItems: items, loading: false, error: null },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const nextAssistant = await canvas.findAllByLabelText('Next assistant message');
+    expect(nextAssistant.length).toBeGreaterThan(0);
+    await userEvent.click(nextAssistant[0]!);
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'a9gr: prev/next skip nav jumps between rows of the same kind (user→user, assistant→assistant, tool→tool) over the filtered list, scrolling via the virtualizer.',
       },
     },
   },

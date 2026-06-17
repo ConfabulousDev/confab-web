@@ -12,7 +12,7 @@ import { computeKeyFingerprint } from '@/utils/reportUnknown';
 import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
 import UnknownRawDetails from '@/components/transcript/UnknownRawDetails';
 import { formatCodexTimestamp, stringifyForDisplay } from './codexFormat';
-import CodexRowActions from './CodexRowActions';
+import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
 export interface CodexUnknownItemProps {
@@ -64,9 +64,9 @@ export default function CodexUnknownItem({
             }}
           />
           {sessionId && (
-            <CodexRowActions
+            <RowActions
               sessionId={sessionId}
-              timestamp={item.timestamp}
+              deepLinkMsg={item.timestamp}
               copyText={raw}
               kindLabel="unrecognized row"
             />

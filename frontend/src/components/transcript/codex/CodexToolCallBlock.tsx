@@ -17,7 +17,7 @@ import {
   leafFileName,
   stringifyForDisplay,
 } from './codexFormat';
-import CodexRowActions from './CodexRowActions';
+import RowActions from '../RowActions';
 import {
   buildPlanSummaryText,
   buildToolCallCopyText,
@@ -81,9 +81,9 @@ export default function CodexToolCallBlock({
         {renderStatusBadge(item)}
         <span className={styles.timestamp}>{formatCodexTimestamp(item.timestamp)}</span>
         {sessionId && (
-          <CodexRowActions
+          <RowActions
             sessionId={sessionId}
-            timestamp={item.timestamp}
+            deepLinkMsg={item.timestamp}
             copyText={buildToolCallCopyText(item)}
             onSkipToNext={onSkipToNext}
             onSkipToPrevious={onSkipToPrevious}
