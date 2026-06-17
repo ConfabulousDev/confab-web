@@ -189,6 +189,87 @@ export const UserQueryEnvelope: Story = {
   },
 };
 
+// 0rcv: a Cursor user envelope often carries injected context (user rules,
+// attached files, manually attached skills, system reminders) alongside the
+// `<user_query>` prompt. nfbe parses those into `sections`; the user row shows
+// the prompt prominently and folds each context block into a collapsed-by-
+// default disclosure so the prompt reads cleanly while the audit context stays
+// one click away.
+const contextRawJSONL = [
+  JSON.stringify({
+    role: 'user',
+    message: {
+      content: [
+        {
+          type: 'text',
+          text:
+            '<user_rules>\nAlways prefer the latest stable versions of libraries.\nNever hardcode colors — use CSS custom properties.\n</user_rules>\n' +
+            '<manually_attached_skills>\nThe user attached a skill with workflow instructions.\n</manually_attached_skills>\n' +
+            '<attached_files>\nsrc/components/session/CursorTranscriptPane.tsx\nsrc/services/cursorTranscriptService.ts\n</attached_files>\n' +
+            '<user_query>\nadd collapsible context sections to the Cursor user row\n</user_query>',
+        },
+      ],
+    },
+  }),
+  JSON.stringify({
+    role: 'assistant',
+    message: {
+      content: [
+        { type: 'text', text: 'Reading the pane and the transcript service to find the user-row seam.' },
+        { type: 'tool_use', name: 'Read', input: { path: 'src/components/session/CursorTranscriptPane.tsx' } },
+      ],
+    },
+  }),
+].join('\n');
+
+const contextItems = normalizeCursorLines(parseCursorJSONL(contextRawJSONL).rawLines);
+
+export const UserContextSections: Story = {
+  args: {
+    sessionId: 'demo',
+    items: contextItems,
+    filteredItems: contextItems,
+    loading: false,
+    error: null,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The user row shows the extracted prompt prominently; injected-context blocks (user rules, manually attached skills, attached files) render as collapsed-by-default disclosures (0rcv). The `<user_query>` tag never appears inside a section body.',
+      },
+    },
+  },
+};
+
+export const UserContextSectionsExpanded: Story = {
+  args: {
+    sessionId: 'demo',
+    items: contextItems,
+    filteredItems: contextItems,
+    loading: false,
+    error: null,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const toggle = await canvas.findByText('User rules');
+    await userEvent.click(toggle);
+    await waitFor(() => {
+      if (!canvasElement.textContent?.includes('latest stable versions')) {
+        throw new Error('section not expanded yet');
+      }
+    });
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Clicking a disclosure expands its injected-context block to show the raw preformatted body (0rcv). Bodies are plain text in v1 — rich rendering of attached-file contents is a follow-up.',
+      },
+    },
+  },
+};
+
 export const Loading: Story = {
   args: { sessionId: 'demo', items: [], filteredItems: [], loading: true, error: null },
 };

@@ -18,6 +18,7 @@ import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
 import { useTranscriptSearch } from '@/hooks/useTranscriptSearch';
 import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import type { CursorRenderItem } from './cursorCategories';
+import CursorContextSections from './CursorContextSections';
 import { extractCursorItemText } from './extractCursorItemText';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './CursorTranscriptPane.module.css';
@@ -78,6 +79,7 @@ function Row({
         <div className={styles.text}>
           {renderTextWithHighlight(item.text, searchQuery, isCurrentSearchMatch)}
         </div>
+        <CursorContextSections sections={item.sections ?? []} />
       </div>
     );
   }
