@@ -50,7 +50,7 @@ func TestCursorProviderDisplayName(t *testing.T) {
 // index) and includes at least one distinctive phrase from the fixture.
 func TestExtractCursorSearchText(t *testing.T) {
 	messages := loadCursorFixtureMessages(t)
-	text := extractCursorSearchText(messages)
+	text := extractCursorSearchText(mainOnly(messages))
 	if text == "" {
 		t.Fatal("search text is empty")
 	}
