@@ -31,7 +31,7 @@ func PrepareCursorTranscript(messages []*CursorMessage) (string, map[int]string)
 
 	b.WriteString("<transcript>\n")
 	for _, msg := range messages {
-		text := joinCursorText(msg.Content)
+		text := joinCursorText(msg.Role, msg.Content)
 		switch msg.Role {
 		case "user":
 			if text == "" {
@@ -63,17 +63,24 @@ func PrepareCursorTranscript(messages []*CursorMessage) (string, map[int]string)
 }
 
 // joinCursorText concatenates the text of every text block in a message, then
-// strips Cursor's native bare `[REDACTED]` placeholder (fa3h). When only the
-// placeholder was present the result is "" — PrepareCursorTranscript then omits
-// the empty assistant element while still rendering the line's tool calls.
-func joinCursorText(content []CursorBlock) string {
+// cleans it per role: user text is unwrapped from its `<user_query>` envelope so
+// the injected-context tags never reach the recap LLM (nfbe); assistant text
+// has Cursor's native bare `[REDACTED]` placeholder stripped (fa3h). When the
+// cleaned result is "" (e.g. an assistant line that was only the placeholder, or
+// an empty query), PrepareCursorTranscript omits the element while still
+// rendering the line's tool calls.
+func joinCursorText(role string, content []CursorBlock) string {
 	var segments []string
 	for _, block := range content {
 		if block.Type == "text" && block.Text != "" {
 			segments = append(segments, block.Text)
 		}
 	}
-	return cleanCursorAssistantText(strings.Join(segments, "\n"))
+	joined := strings.Join(segments, "\n")
+	if role == "user" {
+		return parseCursorUserPrompt(joined)
+	}
+	return cleanCursorAssistantText(joined)
 }
 
 // cursorToolInputSummary renders a tool call's most salient input as a compact

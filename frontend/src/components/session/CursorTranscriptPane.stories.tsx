@@ -142,6 +142,53 @@ export const RedactedStripped: Story = {
   },
 };
 
+// nfbe: Cursor user `text` blocks arrive wrapped in a `<user_query>` envelope,
+// often preceded by injected-context tags (here `<manually_attached_skills>`).
+// Normalizing these raw lines extracts ONLY the human prompt into the user row
+// — the envelope tags never render literally.
+const envelopeRawJSONL = [
+  JSON.stringify({
+    role: 'user',
+    message: {
+      content: [
+        {
+          type: 'text',
+          text: '<manually_attached_skills>\nThe user attached a skill with workflow instructions.\n</manually_attached_skills>\n<user_query>\ndoes gh repo have any outstanding dependabot alerts?\n</user_query>',
+        },
+      ],
+    },
+  }),
+  JSON.stringify({
+    role: 'assistant',
+    message: {
+      content: [
+        { type: 'text', text: 'Checking the repo for open Dependabot alerts.' },
+        { type: 'tool_use', name: 'Shell', input: { command: 'gh api dependabot/alerts' } },
+      ],
+    },
+  }),
+].join('\n');
+
+const envelopeItems = normalizeCursorLines(parseCursorJSONL(envelopeRawJSONL).rawLines);
+
+export const UserQueryEnvelope: Story = {
+  args: {
+    sessionId: 'demo',
+    items: envelopeItems,
+    filteredItems: envelopeItems,
+    loading: false,
+    error: null,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Cursor user messages arrive wrapped in a `<user_query>` envelope (often with injected-context tags like `<manually_attached_skills>`). Normalize extracts only the human prompt (nfbe) — the user row shows the prompt with no envelope tags.',
+      },
+    },
+  },
+};
+
 export const Loading: Story = {
   args: { sessionId: 'demo', items: [], filteredItems: [], loading: true, error: null },
 };

@@ -19,7 +19,7 @@ import {
   asCursorToolUseBlock,
   type RawCursorLine,
 } from '@/schemas/cursorTranscript';
-import type { CursorRenderItem } from '@/components/session/cursorCategories';
+import type { CursorRenderItem, CursorUserSection } from '@/components/session/cursorCategories';
 import { syncFilesAPI } from './api';
 
 // ============================================================================
@@ -138,6 +138,59 @@ export function cleanCursorAssistantText(raw: string): string {
   return cleaned.trim().length === 0 ? '' : cleaned;
 }
 
+// nfbe: Cursor wraps every user `text` block in an envelope. The human prompt
+// lives in `<user_query>…</user_query>`; injected context (rules, attached
+// files, manually attached skills, …) arrives as sibling top-level tagged
+// blocks. The user row must show ONLY the prompt — the tags must never render
+// literally. Mirrors the backend parseCursorUserPrompt (the backend discards
+// the sections; the frontend keeps them for the collapsible-context UI, 0rcv).
+//
+// `[s]` (dotAll) lets the body span newlines (queries are multi-line). The
+// matcher is anchored on each tag name so only well-formed (closed) blocks are
+// recognized; an unclosed tag is left in the fallback raw text, never dropped.
+const USER_QUERY_BLOCK = /<user_query>([\s\S]*?)<\/user_query>/g;
+const TAGGED_BLOCK = /<([a-z_][a-z0-9_]*)>([\s\S]*?)<\/\1>/g;
+
+/** Humanize an envelope tag name into a section heading
+ *  (`manually_attached_skills` → `Manually attached skills`). */
+function humanizeTag(tag: string): string {
+  const spaced = tag.replace(/_/g, ' ').trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+export interface ParsedCursorUserText {
+  /** The human prompt: concatenated, trimmed `<user_query>` content. Falls back
+   *  to the raw text (trimmed) when no well-formed `<user_query>` tag exists. */
+  prompt: string;
+  /** Every other recognized top-level tagged block (injected context), in order.
+   *  Empty when the input was a bare prompt or only `<user_query>` blocks. */
+  sections: CursorUserSection[];
+}
+
+/** Split a Cursor user `text` block into its human prompt and the injected
+ *  context sections. Never drops content: with no well-formed `<user_query>`
+ *  tag the whole raw text becomes the prompt. */
+export function parseCursorUserText(raw: string): ParsedCursorUserText {
+  const queries: string[] = [];
+  for (const m of raw.matchAll(USER_QUERY_BLOCK)) {
+    queries.push((m[1] ?? '').trim());
+  }
+
+  if (queries.length === 0) {
+    // No envelope (plain text or an unclosed tag) — keep everything as the prompt.
+    return { prompt: raw.trim(), sections: [] };
+  }
+
+  const sections: CursorUserSection[] = [];
+  for (const m of raw.matchAll(TAGGED_BLOCK)) {
+    const tag = m[1] ?? '';
+    if (tag === '' || tag === 'user_query') continue; // user_query is the prompt, captured above
+    sections.push({ tag, label: humanizeTag(tag), content: (m[2] ?? '').trim() });
+  }
+
+  return { prompt: queries.join('\n').trim(), sections };
+}
+
 /** Transform accumulated raw Cursor entries into the render-item stream. Pure +
  *  synchronous; safe inside `useMemo`. Cursor wire lines carry no stable id, so
  *  render-item ids are synthetic and line-derived: `${lineIndex}` for
@@ -162,7 +215,18 @@ export function normalizeCursorLines(rawLines: CursorRawEntry[]): CursorRenderIt
       .join('\n');
 
     if (role === 'user') {
-      if (text.length > 0) items.push({ kind: 'user', id: `${lineIndex}`, text });
+      // Unwrap the <user_query> envelope: the row shows only the human prompt;
+      // injected-context sections ride along for the collapsible-context UI
+      // (0rcv). An empty prompt (e.g. an empty/whitespace query) emits no row.
+      const { prompt, sections } = parseCursorUserText(text);
+      if (prompt.length > 0) {
+        items.push({
+          kind: 'user',
+          id: `${lineIndex}`,
+          text: prompt,
+          ...(sections.length > 0 ? { sections } : {}),
+        });
+      }
       return;
     }
 
