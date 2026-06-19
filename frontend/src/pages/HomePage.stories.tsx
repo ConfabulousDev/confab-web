@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import CTALinks from '@/components/CTALinks';
 import HeroCards from '@/components/HeroCards';
+import Quickstart from '@/components/Quickstart';
 import { PROVIDER_METADATA, PROVIDER_VALUES } from '@/utils/providers';
 import styles from './HomePage.module.css';
 
@@ -24,6 +25,7 @@ function HomePageLayout() {
             ))}
           </div>
         </div>
+        <Quickstart variant="landing" />
         <CTALinks />
         <HeroCards />
         <CTALinks />

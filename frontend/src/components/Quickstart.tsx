@@ -1,6 +1,18 @@
 import { useCopyToClipboard } from '@/hooks';
 import styles from './Quickstart.module.css';
 
+const INSTALL_CMD =
+  'curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash';
+const END_USER_DOCS = 'https://docs.confabulous.dev/getting-started/end-user-quickstart/';
+const GITHUB_INSTALL_DOCS =
+  'https://github.com/ConfabulousDev/confab?tab=readme-ov-file#installation';
+
+type QuickstartVariant = 'embedded' | 'landing';
+
+interface QuickstartProps {
+  variant?: QuickstartVariant;
+}
+
 function CopyableCode({ label, code }: { label: string; code: string }) {
   const { copy, copied } = useCopyToClipboard();
 
@@ -22,15 +34,17 @@ function CopyableCode({ label, code }: { label: string; code: string }) {
   );
 }
 
-function Quickstart() {
+function Quickstart({ variant = 'embedded' }: QuickstartProps) {
   const origin = window.location.origin;
+  const isLanding = variant === 'landing';
 
   return (
-    <div className={styles.container}>
+    <div className={isLanding ? styles.containerLanding : styles.container}>
       <div className={styles.icon}>🚀</div>
       <h2 className={styles.headline}>Quickstart</h2>
       <p className={styles.description}>
-        Install the CLI to automatically sync your <em>Claude Code, Codex, OpenCode, and Cursor</em> sessions.
+        Install the CLI to automatically sync your <em>Claude Code, Codex, OpenCode, and Cursor</em>{' '}
+        sessions.
       </p>
       <p className={styles.platformNote}>macOS, Linux & WSL</p>
 
@@ -38,7 +52,7 @@ function Quickstart() {
         <div className={styles.step}>
           <span className={styles.stepNumber}>1</span>
           <div className={styles.stepContent}>
-            <CopyableCode label="Install the CLI" code="curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash" />
+            <CopyableCode label="Install the CLI" code={INSTALL_CMD} />
           </div>
         </div>
 
@@ -52,22 +66,33 @@ function Quickstart() {
         <div className={styles.step}>
           <span className={styles.stepNumber}>3</span>
           <div className={styles.stepContent}>
-            <p className={styles.stepLabel}><em>Use Claude Code or Codex as usual</em></p>
-            <p className={styles.stepDescription}>
-              Your sessions will automatically sync here.
+            <p className={styles.stepLabel}>
+              <em>Use Claude Code or Codex as usual</em>
             </p>
+            <p className={styles.stepDescription}>Your sessions will automatically sync here.</p>
           </div>
         </div>
       </div>
 
-      <a
-        href="https://github.com/ConfabulousDev/confab?tab=readme-ov-file#installation"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={styles.docsLink}
-      >
-        View installation docs →
-      </a>
+      {isLanding ? (
+        <a
+          href={END_USER_DOCS}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.docsLinkSubtle}
+        >
+          Full quickstart guide →
+        </a>
+      ) : (
+        <a
+          href={GITHUB_INSTALL_DOCS}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.docsLink}
+        >
+          View installation docs →
+        </a>
+      )}
     </div>
   );
 }

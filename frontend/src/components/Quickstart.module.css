@@ -6,6 +6,18 @@
   text-align: center;
 }
 
+.containerLanding {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: var(--spacing-2xl);
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  text-align: left;
+}
+
 .icon {
   font-size: 2.5rem;
   margin-bottom: var(--spacing-lg);
@@ -131,5 +143,17 @@
 
 .docsLink:hover {
   color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+
+.docsLinkSubtle {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.docsLinkSubtle:hover {
+  color: var(--color-text-secondary);
   text-decoration: underline;
 }
