@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import QuickstartCTA from './QuickstartCTA';
 
@@ -71,7 +72,11 @@ describe('QuickstartCTA', () => {
 
   it('opens QuickstartModal when "Get started" button is clicked', async () => {
     const user = userEvent.setup();
-    render(<QuickstartCTA show={true} />);
+    render(
+      <MemoryRouter>
+        <QuickstartCTA show={true} />
+      </MemoryRouter>
+    );
 
     // Modal should not be visible initially
     expect(screen.queryByRole('dialog', { name: 'Quickstart' })).not.toBeInTheDocument();

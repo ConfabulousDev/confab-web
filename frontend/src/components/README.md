@@ -39,7 +39,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `PageSidebar.tsx` | Page-level sidebar for filters and navigation |
 | `Pagination.tsx` | Cursor-based pagination controls (prev/next) |
 | `ProtectedRoute.tsx` | Route wrapper that requires authentication |
-| `Quickstart.tsx` | Quickstart guide with copyable install/setup commands. `variant="landing"` (HomePage, full-width card above CTALinks, end-user docs link) or `variant="embedded"` (default — centered layout for Sessions empty state and `QuickstartModal`, GitHub install docs link). |
+| `Quickstart.tsx` | Quickstart guide with copyable install/setup commands. `variant="landing"` (HomePage, full-width card above CTALinks; compact heading row with 🚀 + `Quickstart` + macOS/Linux/WSL platform glyphs; step 3 links "here" to `/sessions`; no bottom docs link) or `variant="embedded"` (default — centered layout for Sessions empty state and `QuickstartModal`, with description, platform note, and GitHub install docs link). |
 | `QuickstartCTA.tsx` | Call-to-action directing users to quickstart |
 | `QuickstartModal.tsx` | Modal wrapping `Quickstart` (rendered by `QuickstartCTA` on the empty Sessions page) |
 | `ReadOnlyToast.tsx` | CF-483 toast that listens for the `confab:read-only` CustomEvent (dispatched by `services/api.ts` when an API call returns the `read_only_user` structured 403) and shows a transient "This is a read-only demo." message. Single toast at a time; re-firing while visible resets the dismiss timer (debounced replace). |

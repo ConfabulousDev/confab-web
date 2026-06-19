@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { MemoryRouter } from 'react-router-dom';
 import Quickstart from './Quickstart';
 
 const meta: Meta<typeof Quickstart> = {
@@ -7,6 +8,13 @@ const meta: Meta<typeof Quickstart> = {
   parameters: {
     layout: 'padded',
   },
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export default meta;

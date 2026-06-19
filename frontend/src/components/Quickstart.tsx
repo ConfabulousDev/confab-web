@@ -1,9 +1,10 @@
+import { Link } from 'react-router-dom';
 import { useCopyToClipboard } from '@/hooks';
+import { AppleIcon, LinuxIcon, WindowsIcon } from './icons';
 import styles from './Quickstart.module.css';
 
 const INSTALL_CMD =
   'curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh | bash';
-const END_USER_DOCS = 'https://docs.confabulous.dev/getting-started/end-user-quickstart/';
 const GITHUB_INSTALL_DOCS =
   'https://github.com/ConfabulousDev/confab?tab=readme-ov-file#installation';
 
@@ -40,13 +41,31 @@ function Quickstart({ variant = 'embedded' }: QuickstartProps) {
 
   return (
     <div className={isLanding ? styles.containerLanding : styles.container}>
-      <div className={styles.icon}>🚀</div>
-      <h2 className={styles.headline}>Quickstart</h2>
-      <p className={styles.description}>
-        Install the CLI to automatically sync your <em>Claude Code, Codex, OpenCode, and Cursor</em>{' '}
-        sessions.
-      </p>
-      <p className={styles.platformNote}>macOS, Linux & WSL</p>
+      {isLanding ? (
+        <div className={styles.landingHeader}>
+          <span className={styles.iconInline}>🚀</span>
+          <h2 className={styles.headline}>Quickstart</h2>
+          <span
+            className={styles.platformIcons}
+            role="img"
+            aria-label="Supported platforms: macOS, Linux, and WSL"
+          >
+            {AppleIcon}
+            {LinuxIcon}
+            {WindowsIcon}
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className={styles.icon}>🚀</div>
+          <h2 className={styles.headline}>Quickstart</h2>
+          <p className={styles.description}>
+            Install the CLI to automatically sync your{' '}
+            <em>Claude Code, Codex, OpenCode, and Cursor</em> sessions.
+          </p>
+          <p className={styles.platformNote}>macOS, Linux & WSL</p>
+        </>
+      )}
 
       <div className={styles.steps}>
         <div className={styles.step}>
@@ -67,23 +86,20 @@ function Quickstart({ variant = 'embedded' }: QuickstartProps) {
           <span className={styles.stepNumber}>3</span>
           <div className={styles.stepContent}>
             <p className={styles.stepLabel}>
-              <em>Use Claude Code or Codex as usual</em>
+              <em>Work in your coding sessions as usual</em>
             </p>
-            <p className={styles.stepDescription}>Your sessions will automatically sync here.</p>
+            <p className={styles.stepDescription}>
+              Your sessions will automatically sync{' '}
+              <Link to="/sessions" className={styles.inlineLink}>
+                here
+              </Link>
+              .
+            </p>
           </div>
         </div>
       </div>
 
-      {isLanding ? (
-        <a
-          href={END_USER_DOCS}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.docsLinkSubtle}
-        >
-          Full quickstart guide →
-        </a>
-      ) : (
+      {!isLanding && (
         <a
           href={GITHUB_INSTALL_DOCS}
           target="_blank"
