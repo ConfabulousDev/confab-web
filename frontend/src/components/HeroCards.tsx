@@ -19,12 +19,6 @@ const DEMO_SESSION = `${DEMO}/sessions/e8b54496-44f2-40f5-94c1-d786b5443901`;
 
 const cards: HeroCard[] = [
   {
-    icon: '🚀',
-    title: 'Quickstart',
-    description: 'Get up and running in under a minute with our simple CLI installer.',
-    docsLinks: [{ label: 'Docs', href: `${DOCS}/getting-started/admin-quickstart/` }],
-  },
-  {
     icon: '📊',
     title: 'Analytics',
     description: 'Track token usage, costs, and productivity metrics across all your sessions.',

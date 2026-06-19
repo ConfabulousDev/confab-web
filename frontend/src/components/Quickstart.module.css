@@ -6,6 +6,55 @@
   text-align: center;
 }
 
+.containerLanding {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: var(--spacing-xl);
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  text-align: left;
+}
+
+.landingHeader {
+  display: flex;
+  align-items: baseline;
+  align-self: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.landingHeader .headline {
+  margin: 0;
+}
+
+.iconInline {
+  font-size: var(--font-xl);
+  line-height: 1;
+}
+
+.platformIcons {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-muted);
+}
+
+.platformIcons svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+/* Landing card is full-width, so let the steps + command boxes span it
+   (card padding supplies the side margins). Avoids horizontal scrolling
+   for the long install command on reasonable screens. */
+.containerLanding .steps {
+  max-width: none;
+}
+
 .icon {
   font-size: 2.5rem;
   margin-bottom: var(--spacing-lg);
@@ -34,7 +83,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   text-align: left;
   width: 100%;
   max-width: 540px;
@@ -130,6 +179,17 @@
 }
 
 .docsLink:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+
+.inlineLink {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.inlineLink:hover {
   color: var(--color-accent-hover);
   text-decoration: underline;
 }

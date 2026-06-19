@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import HeroCards from './HeroCards';
 
 const ALL_TITLES = [
-  'Quickstart',
   'Analytics',
   'Org cost metrics',
   'Smart Recap',
@@ -16,7 +15,7 @@ const ALL_TITLES = [
   'How it works',
 ] as const;
 
-const NO_DEMO_TITLES = ['Quickstart', 'Retro', 'Share', 'Self-Hosted', 'How it works'] as const;
+const NO_DEMO_TITLES = ['Retro', 'Share', 'Self-Hosted', 'How it works'] as const;
 
 function linkPosition(ariaLabel: string): number {
   const all = screen.getAllByRole('link');
@@ -26,7 +25,7 @@ function linkPosition(ariaLabel: string): number {
 }
 
 describe('HeroCards', () => {
-  it('renders all 11 cards as h3 headings', () => {
+  it('renders all 10 cards as h3 headings', () => {
     render(<HeroCards />);
     for (const title of ALL_TITLES) {
       expect(screen.getByRole('heading', { name: title, level: 3 })).toBeInTheDocument();

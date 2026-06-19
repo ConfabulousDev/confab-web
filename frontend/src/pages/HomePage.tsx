@@ -5,6 +5,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { isDemoViewer } from '@/utils/demoIdentity';
 import CTALinks from '@/components/CTALinks';
 import HeroCards from '@/components/HeroCards';
+import Quickstart from '@/components/Quickstart';
 import { PROVIDER_METADATA, PROVIDER_VALUES } from '@/utils/providers';
 import styles from './HomePage.module.css';
 
@@ -49,6 +50,7 @@ function HomePage() {
           </div>
         </div>
 
+        <Quickstart variant="landing" />
         <CTALinks />
         <HeroCards />
         <CTALinks />

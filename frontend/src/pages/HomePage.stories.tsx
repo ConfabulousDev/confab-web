@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { MemoryRouter } from 'react-router-dom';
 import CTALinks from '@/components/CTALinks';
 import HeroCards from '@/components/HeroCards';
+import Quickstart from '@/components/Quickstart';
 import { PROVIDER_METADATA, PROVIDER_VALUES } from '@/utils/providers';
 import styles from './HomePage.module.css';
 
@@ -24,6 +26,7 @@ function HomePageLayout() {
             ))}
           </div>
         </div>
+        <Quickstart variant="landing" />
         <CTALinks />
         <HeroCards />
         <CTALinks />
@@ -38,6 +41,13 @@ const meta: Meta<typeof HomePageLayout> = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export default meta;
