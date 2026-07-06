@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -17,8 +18,9 @@ import (
 //     Reasoning bills at the output rate implicitly.
 //   - CacheCreationTokens stays 0; OpenAI doesn't charge for cache writes.
 //
-// Pricing uses the main rollout's model.
-func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.ParsedRollout) {
+// Pricing uses the main rollout's model. sessionAt is forwarded to pricingForModel
+// for date-aware pricing; zero value routes to introductory rates (before Sep 1 2026).
+func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.ParsedRollout, sessionAt time.Time) {
 	var totalUncached, totalCached, totalOutput int64
 
 	// Per-model accumulation for tokens_v2, grouped by model family with
@@ -43,7 +45,7 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 		family := getModelFamily(r.Model)
 		pricing, ok := pricingByFamily[family]
 		if !ok {
-			pricing = pricingForModel(log, r.Model)
+			pricing = pricingForModel(log, r.Model, sessionAt)
 			pricingByFamily[family] = pricing
 		}
 		agg := byModel[family]
@@ -69,7 +71,7 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 	if len(rollouts) > 0 && rollouts[0] != nil {
 		pricingModel = rollouts[0].Model
 	}
-	pricing := pricingForModel(log, pricingModel)
+	pricing := pricingForModel(log, pricingModel, sessionAt)
 	out.EstimatedCostUSD = CalculateCost(
 		pricing,
 		out.InputTokens,

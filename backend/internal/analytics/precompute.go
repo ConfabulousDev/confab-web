@@ -33,6 +33,9 @@ type StaleSession struct {
 	//   2. ProviderFor registry lookup — routes to the right per-provider parser.
 	Provider   string
 	TotalLines int64
+	// CreatedAt is the session's first_seen timestamp, forwarded into ParseInput and
+	// threaded to pricingForModel for date-aware pricing (e.g. Sonnet 5 intro rates).
+	CreatedAt  time.Time
 	// RegenRequestedAt is non-nil when this session was surfaced due to an
 	// admin-triggered bulk regeneration (staleness category 4). When set,
 	// the precomputer bypasses quota checks and does not increment quota.
@@ -245,7 +248,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 				END AS staleness_category
 			FROM card_status cs
 		)
-		SELECT session_id, user_id, external_id, session_type, total_lines
+		SELECT session_id, user_id, external_id, session_type, total_lines, first_seen
 		FROM stale_sessions
 		WHERE
 			-- Case 1: New session (missing cards) with enough content OR old enough
@@ -297,7 +300,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 	for rows.Next() {
 		var s StaleSession
 		var rawProvider string
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines); err != nil {
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines, &s.CreatedAt); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
@@ -381,6 +384,7 @@ func (p *Precomputer) parseInput(session StaleSession) ParseInput {
 		UserID:     session.UserID,
 		Provider:   session.Provider,
 		ExternalID: session.ExternalID,
+		CreatedAt:  session.CreatedAt,
 	}
 }
 
@@ -589,7 +593,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 						AND (sr.session_id IS NULL OR sr.computed_at < ai.last_invalidated_at))
 				)
 		)
-		SELECT session_id, user_id, external_id, session_type, total_lines,
+		SELECT session_id, user_id, external_id, session_type, total_lines, first_seen,
 			CASE WHEN needs_admin_regen THEN regen_requested_at ELSE NULL END AS regen_requested_at
 		FROM recap_status
 		WHERE
@@ -645,7 +649,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	for rows.Next() {
 		var s StaleSession
 		var rawProvider string
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines, &s.RegenRequestedAt); err != nil {
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines, &s.CreatedAt, &s.RegenRequestedAt); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
@@ -684,7 +688,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 			GROUP BY session_id
 			HAVING SUM(last_synced_line) > 0
 		)
-		SELECT sl.session_id, s.user_id, s.external_id, s.session_type, sl.total_lines
+		SELECT sl.session_id, s.user_id, s.external_id, s.session_type, sl.total_lines, s.first_seen
 		FROM session_lines sl
 		JOIN sessions s ON sl.session_id = s.id
 		-- All 7 regular cards must be current
@@ -748,7 +752,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 	for rows.Next() {
 		var s StaleSession
 		var rawProvider string
-		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines); err != nil {
+		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines, &s.CreatedAt); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err

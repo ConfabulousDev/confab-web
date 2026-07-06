@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
@@ -21,6 +22,9 @@ type claudeRollout struct {
 	journalInfo  []WorkflowJournalInfo
 	downloader   AgentDownloader
 	cachedAgents []*TranscriptFile
+	// createdAt is the session's first_seen timestamp, forwarded to ComputeStreaming
+	// for date-aware pricing (e.g. Sonnet 5 introductory rates).
+	createdAt    time.Time
 }
 
 // WorkflowJournalInfo describes a workflow run journal file to download.
@@ -49,12 +53,13 @@ func (p *claudeProvider) Parse(ctx context.Context, input ParseInput) (Rollout, 
 		agentInfo:   agentInfo,
 		journalInfo: journalInfo,
 		downloader:  downloader,
+		createdAt:   input.CreatedAt,
 	}, nil
 }
 
 func (p *claudeProvider) ComputeCards(ctx context.Context, rollout Rollout) *ComputeResult {
 	r := rollout.(*claudeRollout)
-	computed, err := ComputeStreaming(ctx, r.main, r.agentProvider(ctx), r.buildWorkflowInputs(ctx))
+	computed, err := ComputeStreaming(ctx, r.main, r.agentProvider(ctx), r.buildWorkflowInputs(ctx), r.createdAt)
 	if err != nil {
 		return &ComputeResult{CardErrors: map[string]string{"compute": err.Error()}}
 	}

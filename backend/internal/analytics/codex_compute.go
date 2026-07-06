@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -52,7 +53,10 @@ func ComputeFromCodexRollout(ctx context.Context, rollouts []*codex.ParsedRollou
 	}
 
 	// Tokens and Session aggregate across all rollouts internally.
-	computeCodexTokens(logger.Ctx(ctx), result, rollouts)
+	// Pass time.Time{} (zero value, before Sep 1 2026) — callers without a real
+	// session timestamp get introductory pricing for Sonnet 5, which is acceptable.
+	// The codex provider uses computeFromCodexRolloutAt to pass the actual session date.
+	computeCodexTokens(logger.Ctx(ctx), result, rollouts, time.Time{})
 	computeCodexSession(result, rollouts)
 
 	// Conversation stays main-only: turn counts + timing reflect user-perceived
@@ -61,6 +65,40 @@ func ComputeFromCodexRollout(ctx context.Context, rollouts []*codex.ParsedRollou
 
 	// Remaining analyzers accumulate via += on result fields, so per-rollout
 	// dispatch produces the cross-rollout total.
+	for _, r := range rollouts {
+		if r == nil {
+			continue
+		}
+		computeCodexTools(result, r)
+		computeCodexCodeActivity(result, r)
+		computeCodexAgentsAndSkills(result, r)
+		computeCodexRedactions(result, r)
+		result.ValidationErrorCount += len(r.ValidationErrors)
+	}
+
+	return result
+}
+
+// computeFromCodexRolloutAt is the date-aware variant of ComputeFromCodexRollout.
+// It accepts a sessionAt timestamp for accurate Sonnet 5 introductory-rate routing.
+// Called by codexProvider.ComputeCards which has the actual session first_seen date.
+func computeFromCodexRolloutAt(ctx context.Context, rollouts []*codex.ParsedRollout, sessionAt time.Time) *ComputeResult {
+	if len(rollouts) == 0 || rollouts[0] == nil {
+		return &ComputeResult{}
+	}
+
+	result := &ComputeResult{
+		ToolStats:         make(map[string]*ToolStats),
+		LanguageBreakdown: make(map[string]int),
+		AgentStats:        make(map[string]*AgentStats),
+		SkillStats:        make(map[string]*SkillStats),
+		RedactionCounts:   make(map[string]int),
+	}
+
+	computeCodexTokens(logger.Ctx(ctx), result, rollouts, sessionAt)
+	computeCodexSession(result, rollouts)
+	computeCodexConversation(result, rollouts[0])
+
 	for _, r := range rollouts {
 		if r == nil {
 			continue

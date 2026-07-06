@@ -104,12 +104,28 @@ export function getModelFamily(provider: ProviderId, modelName: string): string 
   return match ? `${match[1]}-${match[2]}` : name;
 }
 
-function getPricing(provider: ProviderId, modelName: string): ModelPricing {
+// sonnet5Sep1 is the boundary between Sonnet 5 introductory and standard pricing.
+// Sessions whose first_seen is before this instant use the "sonnet-5-intro" rates
+// ($2 input, $10 output); sessions on or after use the "sonnet-5" standard rates
+// ($3 input, $15 output). The introductory period runs through Aug 31, 2026.
+const SONNET5_SEP1 = new Date('2026-09-01T00:00:00Z');
+
+function getPricing(provider: ProviderId, modelName: string, sessionAt?: Date): ModelPricing {
   // `getModelFamily` performs the unknown-provider check.
   const family = getModelFamily(provider, modelName);
-  const pricing = activePricing[provider]?.[family];
+
+  // Sonnet 5 date-aware routing: sessions starting before 2026-09-01 use the
+  // introductory rates stored under "sonnet-5-intro"; on or after that date they
+  // use the standard "sonnet-5" rates. When sessionAt is omitted, new Date() is
+  // used — correct for newly-computed sessions displayed at their session time.
+  const effectiveFamily =
+    family === 'sonnet-5' && (sessionAt ?? new Date()) < SONNET5_SEP1
+      ? 'sonnet-5-intro'
+      : family;
+
+  const pricing = activePricing[provider]?.[effectiveFamily];
   if (!pricing) {
-    console.warn(`Unknown model for pricing: ${modelName} (provider: ${provider}, family: ${family})`);
+    console.warn(`Unknown model for pricing: ${modelName} (provider: ${provider}, family: ${effectiveFamily})`);
     return ZERO_PRICING;
   }
   return pricing;
@@ -120,13 +136,19 @@ function getPricing(provider: ProviderId, modelName: string): ModelPricing {
  * those are Claude-specific and live on the provider adapter.
  *
  * Unknown provider throws; unknown model warns and returns 0.
+ *
+ * `sessionAt` is the session's `first_seen` date. When supplied, it is
+ * forwarded to `getPricing` for date-aware routing (e.g. Sonnet 5 intro
+ * rates through Aug 31, 2026). When omitted, `new Date()` is used — correct
+ * for newly-computed sessions where `sessionAt ≈ now`.
  */
 export function calculateCost(
   provider: ProviderId,
   model: string,
   usage: TokenUsage,
+  sessionAt?: Date,
 ): number {
-  const pricing = getPricing(provider, model);
+  const pricing = getPricing(provider, model, sessionAt);
   // 1h cache writes fall back to the 5m rate when cacheWrite1h is missing/0
   // (e.g. a stale remote pricing doc) so they never bill $0 (rd9v).
   const effective1hRate = pricing.cacheWrite1h || pricing.cacheWrite;

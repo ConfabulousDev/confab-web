@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 )
@@ -35,6 +36,10 @@ type ParseInput struct {
 	UserID     int64
 	Provider   string
 	ExternalID string
+	// CreatedAt is the session's first_seen timestamp, used for date-aware pricing
+	// (e.g. Sonnet 5 introductory rates through Aug 31, 2026). Zero value is safe
+	// and routes to the introductory tier (before Sep 1 2026).
+	CreatedAt  time.Time
 }
 
 // Rollout is a provider-specific parsed session representation.

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/shopspring/decimal"
@@ -143,21 +144,45 @@ func LookupPricing(modelName string) (ModelPricing, bool) {
 	return zeroPricing, false
 }
 
+// sonnet5Sep1 is the boundary between Sonnet 5 introductory and standard pricing.
+// Sessions whose first_seen is before this instant use the "sonnet-5-intro" rates
+// ($2 input, $10 output); sessions on or after use the "sonnet-5" standard rates
+// ($3 input, $15 output). The introductory period runs through Aug 31, 2026.
+var sonnet5Sep1 = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
 // pricingForModel resolves pricing and applies the project's logging policy for
 // misses, attributing them to the given logger (which upstream enriches with
 // session_id + provider so a warning is traceable):
-//   - known model  → its pricing.
+//   - known model  → its pricing (with Sonnet 5 date-routing, see below).
 //   - empty model   → zero pricing, DEBUG only. Empty is an expected sentinel, not
 //     an anomaly, so it must never spam WARN during precompute.
 //   - non-empty but unknown → zero pricing, WARN. This is a genuine gap in
 //     pricing.json worth surfacing loudly (carries model + family + context).
 //
+// sessionAt is the session's first_seen timestamp, used to route Sonnet 5 sessions
+// to the correct introductory or standard pricing tier. A zero time.Time (year 0001)
+// is before Sep 1 2026, so callers without a real timestamp correctly route to
+// intro rates — acceptable for test paths and convenience wrappers.
+//
 // A nil logger falls back to the default logger (test/Analyze paths that don't
 // thread a session-scoped logger).
-func pricingForModel(log *slog.Logger, modelName string) ModelPricing {
+func pricingForModel(log *slog.Logger, modelName string, sessionAt time.Time) ModelPricing {
 	if log == nil {
 		log = slog.Default()
 	}
+
+	// Sonnet 5 date-aware routing: sessions starting before 2026-09-01 use the
+	// introductory rates stored under "sonnet-5-intro"; on or after that date they
+	// use the standard "sonnet-5" rates. getModelFamily is called once here to avoid
+	// a second call in LookupPricing below.
+	family := getModelFamily(modelName)
+	if family == "sonnet-5" && sessionAt.Before(sonnet5Sep1) {
+		table := *activePricing.Load()
+		if p, ok := table["sonnet-5-intro"]; ok {
+			return p
+		}
+	}
+
 	pricing, ok := LookupPricing(modelName)
 	if ok {
 		return pricing
@@ -166,7 +191,7 @@ func pricingForModel(log *slog.Logger, modelName string) ModelPricing {
 		log.Debug("skipping pricing lookup: empty model")
 		return zeroPricing
 	}
-	log.Warn("unknown model for pricing", "model", modelName, "family", getModelFamily(modelName))
+	log.Warn("unknown model for pricing", "model", modelName, "family", family)
 	return zeroPricing
 }
 
