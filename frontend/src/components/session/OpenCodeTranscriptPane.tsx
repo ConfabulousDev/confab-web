@@ -14,6 +14,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { CostAmount } from '@/components/CostAmount';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import { TimeSeparator } from '@/components/transcript/TimeSeparator';
 import TimelineBar from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
@@ -24,6 +25,7 @@ import type { TokenUsage } from '@/utils/tokenStats';
 import type { OpenCodeRenderItem } from './opencodeCategories';
 import { extractOpenCodeItemText } from './extractOpenCodeItemText';
 import { useOpenCodeSegmentLayout } from './opencodeTimelineSegments';
+import { buildVirtualItems } from './opencodeVirtualItems';
 import OpenCodeUnknownItem from './OpenCodeUnknownItem';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './OpenCodeTranscriptPane.module.css';
@@ -43,6 +45,8 @@ export interface OpenCodeTranscriptPaneProps {
 }
 
 const ESTIMATED_ROW_HEIGHT = 120;
+// 6h7m: initial size estimate for an injected divider row, before measurement.
+const ESTIMATED_SEPARATOR_HEIGHT = 40;
 
 // Zero-cost usage shim for assistant items that carry no `usage` — keeps the
 // adapter's `calculateMessageCost` total-type happy; resolves to $0, skipped.
@@ -219,18 +223,33 @@ export default function OpenCodeTranscriptPane({
 
   // 5p9j: Cmd-F transcript search, parameterized over `filteredItems` so
   // matches respect the active filter (a natural consequence of indexing the
-  // filtered list). OpenCode has no separator/divider rows, so the filtered
-  // index IS the virtual index — no itemIndex→virtualIndex indirection.
-  // `extractOpenCodeItemText` is a stable module-level fn (see its file note),
-  // so the hook's search index doesn't churn every render.
+  // filtered list). `extractOpenCodeItemText` is a stable module-level fn
+  // (see its file note), so the hook's search index doesn't churn every
+  // render.
   const search = useTranscriptSearch(filteredItems, extractOpenCodeItemText);
   useEffect(() => addCmdFListener(search.open), [search.open]);
 
+  // 6h7m: virtual-list layer — filtered rows + injected day/idle-gap
+  // dividers. OpenCode previously had NO separator rows at all, so the
+  // filtered index WAS the virtual index everywhere; now that a divider can
+  // precede any row, every consumer that used to scroll to (or report) a raw
+  // filtered index must go through `filteredIndexToVirtualIndex` below.
+  const virtualItems = useMemo(() => buildVirtualItems(filteredItems), [filteredItems]);
+
+  const filteredIndexToVirtualIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    virtualItems.forEach((vi, virtualIndex) => {
+      if (vi.type === 'item') map.set(vi.index, virtualIndex);
+    });
+    return map;
+  }, [virtualItems]);
+
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
-    count: filteredItems.length,
+    count: virtualItems.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    estimateSize: (index) =>
+      virtualItems[index]?.type === 'separator' ? ESTIMATED_SEPARATOR_HEIGHT : ESTIMATED_ROW_HEIGHT,
     overscan: 8,
   });
 
@@ -241,9 +260,7 @@ export default function OpenCodeTranscriptPane({
 
   // The timeline bar's segments index into the unfiltered `items` array, so we
   // translate between the filtered-list index the pane holds internally and
-  // the unfiltered index the bar speaks. OpenCode has no separator rows, so a
-  // filtered index IS the virtual index — the only translation is filtered↔
-  // unfiltered, keyed by the stable render-item `id`.
+  // the unfiltered index the bar speaks, keyed by the stable render-item `id`.
   const idToUnfilteredIndex = useMemo(() => {
     const map = new Map<string, number>();
     items.forEach((item, idx) => map.set(item.id, idx));
@@ -322,12 +339,19 @@ export default function OpenCodeTranscriptPane({
   }, [isCostMode, segmentLayout.segments, items]);
 
   // Track the first visible row so the bar indicator has something to point at
-  // when the user hasn't hovered a row.
+  // when the user hasn't hovered a row. 6h7m: skip divider rows and report
+  // the first visible ITEM's filtered index (mirrors ClaudeMessageTimeline's
+  // updateFirstVisible / CursorTranscriptPane's equivalent).
   const updateFirstVisible = useCallback(() => {
     const visible = virtualizer.getVirtualItems();
-    const first = visible[0];
-    if (first) setFirstVisibleIndex(first.index);
-  }, [virtualizer]);
+    for (const vItem of visible) {
+      const vi = virtualItems[vItem.index];
+      if (vi && vi.type === 'item') {
+        setFirstVisibleIndex(vi.index);
+        return;
+      }
+    }
+  }, [virtualizer, virtualItems]);
 
   useEffect(() => {
     const el = parentRef.current;
@@ -337,15 +361,21 @@ export default function OpenCodeTranscriptPane({
     return () => el.removeEventListener('scroll', updateFirstVisible);
   }, [updateFirstVisible]);
 
+  // 6h7m: `filteredIdx` is the FILTERED index (the axis skip-nav/deep-
+  // link/bar-seek all speak) — translate through `filteredIndexToVirtualIndex`
+  // before scrolling, so a divider preceding the target row doesn't throw off
+  // the landing position.
   const scrollToItem = useCallback(
     (filteredIdx: number) => {
+      const virtualIndex = filteredIndexToVirtualIndex.get(filteredIdx);
+      if (virtualIndex === undefined) return;
       retryOnAnimationFrame(
-        () => virtualizer.scrollToIndex(filteredIdx, { align: 'start' }),
+        () => virtualizer.scrollToIndex(virtualIndex, { align: 'start' }),
         () => false,
       );
       setSelectedIndex(filteredIdx);
     },
-    [virtualizer],
+    [filteredIndexToVirtualIndex, virtualizer],
   );
 
   // Bar click → scroll to the first visible item at or after `unfilteredStart`.
@@ -377,28 +407,35 @@ export default function OpenCodeTranscriptPane({
   // Scroll to the deep-link target once, after it resolves (items may stream in).
   // Retry across frames: a row's real height isn't measured until after first
   // paint, so a single scrollToIndex can land at the estimate-based offset.
+  // 6h7m: translate the target's filtered index through
+  // `filteredIndexToVirtualIndex` — a divider may now precede it.
   useEffect(() => {
     if (targetIndex < 0 || hasScrolledToTarget.current) return;
+    const virtualIndex = filteredIndexToVirtualIndex.get(targetIndex);
+    if (virtualIndex === undefined) return;
     retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(targetIndex, { align: 'start' }),
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'start' }),
       () => false,
     );
     hasScrolledToTarget.current = true;
-  }, [targetIndex, virtualizer]);
+  }, [targetIndex, filteredIndexToVirtualIndex, virtualizer]);
 
   // 5p9j: scroll to the current search match, then bring its first <mark> into
-  // view inside the row. The match's filtered index IS its virtual index, so we
-  // use it directly — no itemIndex→virtualIndex map (cf. Codex). Structurally
-  // mirrors `CodexMessageTimeline.tsx`: scrollToIndex retries across frames as
+  // view inside the row. 6h7m: the match's filtered index is no longer its
+  // virtual index once dividers can be injected, so translate through
+  // `filteredIndexToVirtualIndex` first. Structurally mirrors
+  // `CodexMessageTimeline.tsx`: scrollToIndex retries across frames as
   // measurements settle, so we wait a few frames before locating the <mark> to
   // avoid the bring-into-view being clobbered by a retry. This is what surfaces
   // matches that live in rows the virtualizer hasn't mounted yet.
   useEffect(() => {
     if (search.currentMatchFilteredIndex === null) return;
     const idx = search.currentMatchFilteredIndex;
+    const virtualIndex = filteredIndexToVirtualIndex.get(idx);
+    if (virtualIndex === undefined) return;
 
     retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(idx, { align: 'center' }),
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
       () => false,
     );
     setSelectedIndex(idx);
@@ -410,7 +447,7 @@ export default function OpenCodeTranscriptPane({
       if (cancelled || attempt >= maxMarkRetries) return;
       const scrollEl = parentRef.current;
       if (!scrollEl) return;
-      const rowEl = scrollEl.querySelector(`[data-index="${idx}"]`);
+      const rowEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
       if (!rowEl) {
         requestAnimationFrame(() => scrollToMark(attempt + 1));
         return;
@@ -435,7 +472,7 @@ export default function OpenCodeTranscriptPane({
     return () => {
       cancelled = true;
     };
-  }, [search.currentMatchFilteredIndex, virtualizer]);
+  }, [search.currentMatchFilteredIndex, filteredIndexToVirtualIndex, virtualizer]);
 
   if (loading || error) {
     return <TranscriptPaneStatus loading={loading} error={error} />;
@@ -464,8 +501,28 @@ export default function OpenCodeTranscriptPane({
       <div ref={parentRef} className={styles.scroll}>
         <div className={styles.virtualizer} style={{ height: `${virtualizer.getTotalSize()}px` }}>
           {virtualizer.getVirtualItems().map((virtualItem) => {
-            const item = filteredItems[virtualItem.index];
-            if (!item) return null;
+            const vi = virtualItems[virtualItem.index];
+            if (!vi) return null;
+
+            const slotStyle = { transform: `translateY(${virtualItem.start}px)` };
+
+            // 6h7m: injected day/idle-gap divider.
+            if (vi.type === 'separator') {
+              return (
+                <div
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  className={styles.slot}
+                  style={slotStyle}
+                >
+                  <TimeSeparator label={vi.label} />
+                </div>
+              );
+            }
+
+            const item = vi.item;
+            const filteredIndex = vi.index;
             const isTarget = targetId !== undefined && item.id === targetId;
             // hfk7: cost badges read the SAME unfiltered-keyed map the rail
             // uses, so badge and rail always agree.
@@ -474,9 +531,7 @@ export default function OpenCodeTranscriptPane({
               isCostMode && unfilteredIdx !== undefined
                 ? costByIndex.get(unfilteredIdx)
                 : undefined;
-            // 5p9j: the filtered index IS the virtual index (no divider rows).
-            const isCurrentSearchMatch =
-              search.currentMatchFilteredIndex === virtualItem.index;
+            const isCurrentSearchMatch = search.currentMatchFilteredIndex === filteredIndex;
             const searchQuery = search.isOpen ? search.highlightQuery : undefined;
             return (
               <div
@@ -484,8 +539,8 @@ export default function OpenCodeTranscriptPane({
                 ref={virtualizer.measureElement}
                 data-index={virtualItem.index}
                 className={cx(styles.slot, isTarget ? styles.slotTarget : undefined)}
-                onMouseEnter={() => setSelectedIndex(virtualItem.index)}
-                style={{ transform: `translateY(${virtualItem.start}px)` }}
+                onMouseEnter={() => setSelectedIndex(filteredIndex)}
+                style={slotStyle}
               >
                 <Row
                   item={item}

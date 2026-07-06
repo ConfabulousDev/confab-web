@@ -15,11 +15,12 @@ import { TimelineBar } from '@/components/transcript/claude/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
 import {
   addCmdFListener,
-  formatTimeSeparator,
   retryOnAnimationFrame,
   SCROLL_NAV_COST_MODE_RIGHT,
 } from '@/components/transcript/timelineUtils';
+import { TimeSeparator } from '@/components/transcript/TimeSeparator';
 import { useSegmentLayout } from '@/components/transcript/timelineSegments';
+import { buildVirtualItems, type VirtualItem } from './claudeVirtualItems';
 import styles from './ClaudeMessageTimeline.module.css';
 
 interface ClaudeMessageTimelineProps {
@@ -28,27 +29,6 @@ interface ClaudeMessageTimelineProps {
   targetMessageUuid?: string; // Deep-link target message UUID
   sessionId?: string; // Session ID for copy-link URLs
   isCostMode?: boolean; // When true, show cost heatmap and per-message cost badges
-}
-
-// Item types for virtual list
-type VirtualItem =
-  | { type: 'message'; message: TranscriptLine; index: number; filteredIndex: number }
-  | { type: 'separator'; timestamp: string };
-
-/**
- * Check if we should show a time separator between messages
- */
-function shouldShowTimeSeparator(current: TranscriptLine, previous: TranscriptLine | undefined): boolean {
-  if (!previous) return false;
-
-  const currentTime = 'timestamp' in current && typeof current.timestamp === 'string' ? new Date(current.timestamp) : null;
-  const previousTime = 'timestamp' in previous && typeof previous.timestamp === 'string' ? new Date(previous.timestamp) : null;
-
-  if (!currentTime || !previousTime) return false;
-
-  // Show separator if more than 5 minutes between messages
-  const diff = currentTime.getTime() - previousTime.getTime();
-  return diff > 5 * 60 * 1000;
 }
 
 /**
@@ -197,29 +177,14 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
     return set;
   }, [messages, messageToAllIndex]);
 
-  // Build virtual items list with time separators
+  // Build virtual items list with time/day separators (extracted to
+  // claudeVirtualItems.ts — 6h7m).
   // Note: item.index is the index in allMessages (for TimelineBar compatibility)
   // item.filteredIndex is the index in the filtered messages array
-  const virtualItems = useMemo<VirtualItem[]>(() => {
-    const items: VirtualItem[] = [];
-
-    messages.forEach((message, filteredIndex) => {
-      const prevMessage = filteredIndex > 0 ? messages[filteredIndex - 1] : undefined;
-
-      // Add time separator if needed
-      if (shouldShowTimeSeparator(message, prevMessage)) {
-        if ('timestamp' in message && typeof message.timestamp === 'string') {
-          items.push({ type: 'separator', timestamp: message.timestamp });
-        }
-      }
-
-      // Use allMessages index for TimelineBar compatibility
-      const allIndex = messageToAllIndex.get(message) ?? filteredIndex;
-      items.push({ type: 'message', message, index: allIndex, filteredIndex });
-    });
-
-    return items;
-  }, [messages, messageToAllIndex]);
+  const virtualItems = useMemo<VirtualItem[]>(
+    () => buildVirtualItems(messages, messageToAllIndex),
+    [messages, messageToAllIndex],
+  );
 
   // Precompute next/prev same-role indices for skip navigation
   const { nextOfSameRole, prevOfSameRole } = useMemo(() => {
@@ -497,11 +462,7 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
                 onMouseEnter={isMessage ? () => handleMessageHover(item.index) : undefined}
               >
                 {item.type === 'separator' ? (
-                  <div className={styles.timeSeparator}>
-                    <span className={styles.separatorLine} />
-                    <span className={styles.separatorText}>{formatTimeSeparator(item.timestamp)}</span>
-                    <span className={styles.separatorLine} />
-                  </div>
+                  <TimeSeparator label={item.label} />
                 ) : (
                   <ClaudeTimelineMessage
                     message={item.message}

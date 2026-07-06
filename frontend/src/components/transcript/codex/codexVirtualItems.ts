@@ -8,25 +8,17 @@
 // here for testability.
 
 import type { CodexRenderItem } from '@/types/codexRenderItem';
+import { shouldShowDivider, formatDividerLabel } from '@/components/transcript/timelineUtils';
 
-/** Virtual-list item layer: real Codex items + injected time separators. */
+/** Virtual-list item layer: real Codex items + injected time/day separators. */
 export type VirtualItem =
   | { type: 'item'; item: CodexRenderItem; index: number; isNewSpeaker: boolean }
-  | { type: 'separator'; timestamp: string };
+  | { type: 'separator'; label: string };
 
-/** Mirrors MessageTimeline.tsx's 5-min threshold for time-gap dividers. */
-const TIME_GAP_THRESHOLD_MS = 5 * 60 * 1000;
-
-/** True iff `>5 min` between consecutive items' timestamps. */
-function shouldShowTimeSeparator(
-  current: CodexRenderItem,
-  previous: CodexRenderItem | undefined,
-): boolean {
-  if (!previous) return false;
-  const currentTime = new Date(current.timestamp);
-  const previousTime = new Date(previous.timestamp);
-  if (Number.isNaN(currentTime.getTime()) || Number.isNaN(previousTime.getTime())) return false;
-  return currentTime.getTime() - previousTime.getTime() > TIME_GAP_THRESHOLD_MS;
+/** Epoch ms for a Codex item's timestamp, or `undefined` if unparseable. */
+function timestampMs(item: CodexRenderItem): number | undefined {
+  const ms = new Date(item.timestamp).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
 }
 
 /**
@@ -76,9 +68,17 @@ export function skipNavLabel(item: CodexRenderItem): string {
 
 /**
  * Build the virtual-list layer from a render-item stream:
- *   - inject a time separator before any item whose timestamp is >5min after
- *     the previous item's,
+ *   - inject a divider before any item whose timestamp crossed a calendar
+ *     day OR is >5min after the last item's (6h7m unifies the day-boundary
+ *     and idle-gap dividers into one — see `shouldShowDivider`),
  *   - tag every item with `isNewSpeaker` per the speaker-continuity rule.
+ *
+ * The divider check compares against the last item that had a PARSEABLE
+ * timestamp, not strictly the immediately-previous array element, so a
+ * malformed timestamp doesn't silently swallow a real boundary (mirrors
+ * Claude's last-known-timestamp fix for its timestamp-less `summary` lines —
+ * Codex has no such lines today, but the same defensive comparison costs
+ * nothing here).
  *
  * Speaker rule: track the last user/assistant kind seen. Mark the current
  * item as newSpeaker iff its kind is user|assistant AND a previous speaker
@@ -91,11 +91,16 @@ export function skipNavLabel(item: CodexRenderItem): string {
 export function buildVirtualItems(items: CodexRenderItem[]): VirtualItem[] {
   const out: VirtualItem[] = [];
   let lastSpeaker: 'user' | 'assistant' | null = null;
-  let prev: CodexRenderItem | undefined;
+  let lastKnownMs: number | undefined;
 
   items.forEach((item, index) => {
-    if (shouldShowTimeSeparator(item, prev)) {
-      out.push({ type: 'separator', timestamp: item.timestamp });
+    const currentMs = timestampMs(item);
+    if (currentMs !== undefined) {
+      const { show, dayChanged } = shouldShowDivider(currentMs, lastKnownMs);
+      if (show) {
+        out.push({ type: 'separator', label: formatDividerLabel(currentMs, dayChanged) });
+      }
+      lastKnownMs = currentMs;
     }
 
     const isNewSpeaker =
@@ -108,7 +113,6 @@ export function buildVirtualItems(items: CodexRenderItem[]): VirtualItem[] {
     }
 
     out.push({ type: 'item', item, index, isNewSpeaker });
-    prev = item;
   });
 
   return out;

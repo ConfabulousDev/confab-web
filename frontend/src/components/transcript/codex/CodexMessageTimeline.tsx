@@ -3,7 +3,8 @@
 //   - vertical turn-based timeline bar (click-to-seek + position indicator)
 //   - floating scroll-to-top / scroll-to-bottom buttons
 //   - row hover → selection state, fed back into the bar
-//   - >5min idle gaps render a horizontal time-separator divider
+//   - >5min idle gaps AND calendar-day changes render a shared `TimeSeparator`
+//     divider (6h7m unifies the two into one divider type)
 //   - CF-360: deep-link to a row by `lineId`, copy-text/copy-link/skip-nav
 //     chrome on every row.
 //
@@ -20,11 +21,11 @@ import { codexAdapter } from '@/providers/codexAdapter';
 import { cx } from '@/utils/utils';
 import {
   addCmdFListener,
-  formatTimeSeparator,
   retryOnAnimationFrame,
   SCROLL_NAV_COST_MODE_RIGHT,
 } from '../timelineUtils';
 import { CostBar } from '../CostBar';
+import { TimeSeparator } from '../TimeSeparator';
 import CodexUserMessage from './CodexUserMessage';
 import CodexAssistantMessage from './CodexAssistantMessage';
 import CodexToolCallBlock from './CodexToolCallBlock';
@@ -416,14 +417,10 @@ export default function CodexMessageTimeline({
                   key={virtualItem.key}
                   ref={virtualizer.measureElement}
                   data-index={virtualItem.index}
-                  className={cx(styles.slot, styles.timeSeparator)}
+                  className={styles.slot}
                   style={slotStyle}
                 >
-                  <span className={styles.separatorLine} />
-                  <span className={styles.separatorText}>
-                    {formatTimeSeparator(vi.timestamp)}
-                  </span>
-                  <span className={styles.separatorLine} />
+                  <TimeSeparator label={vi.label} />
                 </div>
               );
             }

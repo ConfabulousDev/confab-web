@@ -515,3 +515,59 @@ describe('OpenCodeTranscriptPane search (5p9j)', () => {
     expect(details!.querySelector('mark')).not.toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6h7m — day/idle-gap divider virtualizer-wiring regression coverage.
+//
+// OpenCode previously had NO separator/divider rows at all, so the filtered
+// index WAS the virtual index everywhere. Once a divider can be injected,
+// those two indices diverge whenever a divider precedes the target row —
+// this locks down that the pane routes scrollToIndex through the new
+// filteredIndex -> virtualIndex map instead of the raw filtered index.
+// ---------------------------------------------------------------------------
+
+describe('OpenCodeTranscriptPane day-boundary divider wiring (6h7m)', () => {
+  const may13_2359 = new Date(2026, 4, 13, 23, 59, 0).getTime();
+  const may14_0001 = new Date(2026, 4, 14, 0, 1, 0).getTime();
+  const dayBoundaryItems: OpenCodeRenderItem[] = [
+    user('u1', may13_2359),
+    assistant('a1', may14_0001),
+  ];
+
+  it('renders a divider row between items on different calendar days', () => {
+    const { container } = render(
+      <OpenCodeTranscriptPane
+        sessionId="s"
+        items={dayBoundaryItems}
+        filteredItems={dayBoundaryItems}
+        loading={false}
+        error={null}
+      />,
+    );
+    expect(container.textContent).toMatch(/\w+day, May/);
+  });
+
+  it('deep-link scroll lands on the target row, not the divider, when a separator precedes it', () => {
+    render(
+      <OpenCodeTranscriptPane
+        sessionId="s"
+        items={dayBoundaryItems}
+        filteredItems={dayBoundaryItems}
+        loading={false}
+        error={null}
+        targetId="a1"
+      />,
+    );
+    // Virtual layout: [item(u1)=0, separator=1, item(a1)=2]. Without the
+    // filteredIndex->virtualIndex fix this would incorrectly fire with 1
+    // (a1's filtered index), landing on the divider instead of the row.
+    expect(scrollToIndex).toHaveBeenCalledWith(2, expect.objectContaining({ align: 'start' }));
+  });
+
+  it('does not inject a divider for the default same-session fixture (all within seconds)', () => {
+    const { container } = render(
+      <OpenCodeTranscriptPane sessionId="s" items={session} filteredItems={session} loading={false} error={null} />,
+    );
+    expect(container.textContent).not.toMatch(/\w+day, /);
+  });
+});

@@ -182,6 +182,48 @@ describe('buildVirtualItems', () => {
     });
   });
 
+  // 6h7m: day-boundary divider — merged into the same separator entry as the
+  // idle-gap divider (Decision 2). Fixtures use local-time Date construction
+  // (not hardcoded 'Z' literals) for the boundary-crossing cases so the test
+  // is deterministic regardless of the runner's timezone.
+  describe('day-boundary divider (6h7m)', () => {
+    it('injects a separator across a calendar-day change even with a <5min gap', () => {
+      const items: CodexRenderItem[] = [
+        user(new Date(2026, 4, 13, 23, 59, 0).toISOString(), 'first'),
+        user(new Date(2026, 4, 14, 0, 1, 0).toISOString(), 'second'), // 2min gap, crosses midnight
+      ];
+      const result = buildVirtualItems(items);
+      expect(result).toHaveLength(3);
+      expect(result[1]?.type).toBe('separator');
+    });
+
+    it('does not inject a separator for a same-day gap under 5min, even late at night', () => {
+      const items: CodexRenderItem[] = [
+        user(new Date(2026, 4, 13, 23, 50, 0).toISOString(), 'first'),
+        user(new Date(2026, 4, 13, 23, 54, 0).toISOString(), 'second'), // 4min gap, same day
+      ];
+      const result = buildVirtualItems(items);
+      expect(result).toHaveLength(2);
+      expect(result.every((v) => v.type === 'item')).toBe(true);
+    });
+
+    it('separator label is the full weekday/month/day text on a day-boundary crossing', () => {
+      const items: CodexRenderItem[] = [
+        user(new Date(2026, 4, 13, 23, 59, 0).toISOString(), 'first'),
+        user(new Date(2026, 4, 14, 0, 1, 0).toISOString(), 'second'),
+      ];
+      const result = buildVirtualItems(items);
+      const separator = result.find((v) => v.type === 'separator');
+      expect(separator).toBeDefined();
+      expect(separator).toMatchObject({ type: 'separator' });
+      if (separator?.type === 'separator') {
+        expect(separator.label).toMatch(/\w+day/); // weekday name present
+        expect(separator.label).toContain('May');
+        expect(separator.label).toContain('14');
+      }
+    });
+  });
+
   describe('isNewSpeaker computation', () => {
     function newSpeakerFlags(items: CodexRenderItem[]): boolean[] {
       return buildVirtualItems(items)
