@@ -67,25 +67,3 @@
   opacity: 0.7;
 }
 
-/* Time separator (>5min idle gap) — mirrors MessageTimeline. */
-.timeSeparator {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md) 0;
-}
-
-.separatorLine {
-  flex: 1;
-  height: 1px;
-  background: var(--color-border);
-}
-
-.separatorText {
-  font-size: var(--font-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-md);
-}

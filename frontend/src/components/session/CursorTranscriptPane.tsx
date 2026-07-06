@@ -19,6 +19,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { cx } from '@/utils/utils';
 import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
 import { formatCodexTimestamp } from '@/components/transcript/codex/codexFormat';
+import { TimeSeparator, ESTIMATED_TIME_TOOLTIP } from '@/components/transcript/TimeSeparator';
 import TimelineBar from '@/components/transcript/TimelineBar';
 import { useCursorSegmentLayout } from './cursorTimelineSegments';
 import TranscriptSearchBar from '@/components/session/TranscriptSearchBar';
@@ -27,6 +28,7 @@ import { renderTextWithHighlight } from '@/utils/renderHighlight';
 import RowActions from '@/components/transcript/RowActions';
 import type { CursorRenderItem } from './cursorCategories';
 import { attachCursorTimestamps } from '@/services/cursorTranscriptService';
+import { buildVirtualItems } from './cursorVirtualItems';
 import {
   buildCursorRowNav,
   cursorRowKindLabel,
@@ -37,11 +39,6 @@ import CursorMessageBody from './CursorMessageBody';
 import { extractCursorItemText } from './extractCursorItemText';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './CursorTranscriptPane.module.css';
-
-// Tooltip shown on every estimated row time — Cursor transcripts have no
-// per-message timestamps, so these are interpolated, not real (ce79).
-const ESTIMATED_TIME_TOOLTIP =
-  'Estimated — Cursor transcripts have no per-message timestamps.';
 
 // zztp: disclaimer appended to every TimelineBar segment tooltip — the segment
 // durations come from the same estimated per-row times, so they are
@@ -79,6 +76,8 @@ export interface CursorTranscriptPaneProps {
 }
 
 const ESTIMATED_ROW_HEIGHT = 120;
+// 6h7m: initial size estimate for an injected divider row, before measurement.
+const ESTIMATED_SEPARATOR_HEIGHT = 40;
 
 function ToolRow({
   item,
@@ -195,8 +194,33 @@ export default function CursorTranscriptPane({
     [stampedItems],
   );
 
-  // Cmd-F transcript search over the filtered list. Cursor has no separator
-  // rows, so the filtered index IS the virtual index — no indirection.
+  // 6h7m: filtered rows stamped with their estimated timestamp — the input
+  // the divider-injection builder needs. Same length/order as `filteredItems`,
+  // so a filtered index into either array refers to the same row.
+  const stampedFilteredItems = useMemo(
+    () => filteredItems.map((it) => ({ ...it, timestamp: timestampById.get(it.id) })),
+    [filteredItems, timestampById],
+  );
+
+  // 6h7m: virtual-list layer — filtered rows + injected day/idle-gap dividers
+  // (always `estimated`, since Cursor's timestamps are interpolated —
+  // Decision 8). Cursor previously had NO separator rows at all, so the
+  // filtered index WAS the virtual index everywhere; now that a divider can
+  // precede any row, every consumer that used to scroll to (or report) a raw
+  // filtered index must go through `filteredIndexToVirtualIndex` below.
+  const virtualItems = useMemo(() => buildVirtualItems(stampedFilteredItems), [stampedFilteredItems]);
+
+  const filteredIndexToVirtualIndex = useMemo(() => {
+    const map = new Map<number, number>();
+    virtualItems.forEach((vi, virtualIndex) => {
+      if (vi.type === 'item') map.set(vi.index, virtualIndex);
+    });
+    return map;
+  }, [virtualItems]);
+
+  // Cmd-F transcript search over the filtered list. Search itself still
+  // operates on plain filtered indices (see `filteredIndexToVirtualIndex`
+  // above for the translation into virtualizer-space).
   // `extractCursorItemText` is a stable module-level fn so the search index
   // doesn't churn every render.
   const search = useTranscriptSearch(filteredItems, extractCursorItemText);
@@ -204,9 +228,10 @@ export default function CursorTranscriptPane({
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual is the best option for virtualization; the warning is a known limitation
   const virtualizer = useVirtualizer({
-    count: filteredItems.length,
+    count: virtualItems.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    estimateSize: (index) =>
+      virtualItems[index]?.type === 'separator' ? ESTIMATED_SEPARATOR_HEIGHT : ESTIMATED_ROW_HEIGHT,
     overscan: 8,
   });
 
@@ -216,21 +241,28 @@ export default function CursorTranscriptPane({
   }, [filteredItems, targetId]);
 
   // a9gr: same-kind skip-nav neighbor maps over the FILTERED items (so skip
-  // jumps between visible rows only). The filtered index IS the virtual index
-  // for Cursor — no separator rows — so we scroll straight to it.
+  // jumps between visible rows only). Keyed by filtered index; `scrollToRow`
+  // translates into virtualizer-space (6h7m: no longer 1:1 once dividers can
+  // be injected).
   const { nextOfSameKind, prevOfSameKind } = useMemo(
     () => buildCursorRowNav(filteredItems),
     [filteredItems],
   );
 
+  // 6h7m: takes a FILTERED index (the axis skip-nav/deep-link/bar-seek all
+  // speak) and translates through `filteredIndexToVirtualIndex` before
+  // scrolling, so a divider preceding the target row doesn't throw off the
+  // landing position.
   const scrollToRow = useCallback(
-    (index: number) => {
+    (filteredIndex: number) => {
+      const virtualIndex = filteredIndexToVirtualIndex.get(filteredIndex);
+      if (virtualIndex === undefined) return;
       retryOnAnimationFrame(
-        () => virtualizer.scrollToIndex(index, { align: 'start' }),
+        () => virtualizer.scrollToIndex(virtualIndex, { align: 'start' }),
         () => false,
       );
     },
-    [virtualizer],
+    [filteredIndexToVirtualIndex, virtualizer],
   );
 
   // Map each item id to its index in the UNFILTERED stream — the axis both the
@@ -270,12 +302,19 @@ export default function CursorTranscriptPane({
   const segmentLayout = useCursorSegmentLayout(stampedItems, selectedUnfilteredIndex);
 
   // Track the topmost visible row so the bar indicator has something to point at
-  // when the user hasn't hovered a row.
+  // when the user hasn't hovered a row. 6h7m: skip divider rows and report the
+  // first visible MESSAGE's filtered index (mirrors ClaudeMessageTimeline's
+  // updateFirstVisible).
   const updateFirstVisible = useCallback(() => {
     const visible = virtualizer.getVirtualItems();
-    const first = visible[0];
-    if (first) setFirstVisibleIndex(first.index);
-  }, [virtualizer]);
+    for (const vItem of visible) {
+      const vi = virtualItems[vItem.index];
+      if (vi && vi.type === 'item') {
+        setFirstVisibleIndex(vi.index);
+        return;
+      }
+    }
+  }, [virtualizer, virtualItems]);
 
   useEffect(() => {
     const el = parentRef.current;
@@ -318,15 +357,17 @@ export default function CursorTranscriptPane({
   }, [targetIndex, scrollToRow]);
 
   // Scroll to the current search match, then bring its first <mark> into view.
-  // The match's filtered index IS its virtual index (no divider rows). Mirrors
-  // the OpenCode pane's settle-then-locate sequence so matches in unmounted
-  // rows still surface.
+  // 6h7m: the match's filtered index is no longer its virtual index once
+  // dividers can be injected, so translate through `filteredIndexToVirtualIndex`
+  // first. Mirrors the OpenCode pane's settle-then-locate sequence so matches
+  // in unmounted rows still surface.
   useEffect(() => {
     if (search.currentMatchFilteredIndex === null) return;
-    const idx = search.currentMatchFilteredIndex;
+    const virtualIndex = filteredIndexToVirtualIndex.get(search.currentMatchFilteredIndex);
+    if (virtualIndex === undefined) return;
 
     retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(idx, { align: 'center' }),
+      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
       () => false,
     );
 
@@ -337,7 +378,7 @@ export default function CursorTranscriptPane({
       if (cancelled || attempt >= maxMarkRetries) return;
       const scrollEl = parentRef.current;
       if (!scrollEl) return;
-      const rowEl = scrollEl.querySelector(`[data-index="${idx}"]`);
+      const rowEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
       if (!rowEl) {
         requestAnimationFrame(() => scrollToMark(attempt + 1));
         return;
@@ -362,7 +403,7 @@ export default function CursorTranscriptPane({
     return () => {
       cancelled = true;
     };
-  }, [search.currentMatchFilteredIndex, virtualizer]);
+  }, [search.currentMatchFilteredIndex, filteredIndexToVirtualIndex, virtualizer]);
 
   if (loading || error) {
     return <TranscriptPaneStatus loading={loading} error={error} />;
@@ -391,20 +432,38 @@ export default function CursorTranscriptPane({
       <div ref={parentRef} className={styles.scroll}>
         <div className={styles.virtualizer} style={{ height: `${virtualizer.getTotalSize()}px` }}>
           {virtualizer.getVirtualItems().map((virtualItem) => {
-            const rawItem = filteredItems[virtualItem.index];
-            if (!rawItem) return null;
-            // Overlay the estimated timestamp (looked up by id from the full
-            // stream) onto the filtered render item for this row.
-            const item: CursorRenderItem = { ...rawItem, timestamp: timestampById.get(rawItem.id) };
+            const vi = virtualItems[virtualItem.index];
+            if (!vi) return null;
+
+            const slotStyle = { transform: `translateY(${virtualItem.start}px)` };
+
+            // 6h7m: injected day/idle-gap divider — always `estimated` since
+            // Cursor's timestamps are interpolated, never real (Decision 8).
+            if (vi.type === 'separator') {
+              return (
+                <div
+                  key={virtualItem.key}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  className={styles.slot}
+                  style={slotStyle}
+                >
+                  <TimeSeparator label={vi.label} estimated={vi.estimated} />
+                </div>
+              );
+            }
+
+            const item = vi.item;
+            const filteredIndex = vi.index;
             const isTarget = targetId !== undefined && item.id === targetId;
-            const isCurrentSearchMatch = search.currentMatchFilteredIndex === virtualItem.index;
+            const isCurrentSearchMatch = search.currentMatchFilteredIndex === filteredIndex;
             const searchQuery = search.isOpen ? search.highlightQuery : undefined;
             // a9gr: per-row action cluster. Deep-link uses the synthetic stable
             // `item.id` (estimated timestamps collide/shift — the existing
             // resolver matches `item.id` directly); copy-text is the raw row
             // payload; skip jumps to the next/prev same-kind row.
-            const nextIdx = nextOfSameKind.get(virtualItem.index);
-            const prevIdx = prevOfSameKind.get(virtualItem.index);
+            const nextIdx = nextOfSameKind.get(filteredIndex);
+            const prevIdx = prevOfSameKind.get(filteredIndex);
             const rowActions = (
               <RowActions
                 sessionId={sessionId}
@@ -421,7 +480,7 @@ export default function CursorTranscriptPane({
                 ref={virtualizer.measureElement}
                 data-index={virtualItem.index}
                 className={cx(styles.slot, isTarget ? styles.slotTarget : undefined)}
-                style={{ transform: `translateY(${virtualItem.start}px)` }}
+                style={slotStyle}
               >
                 <Row
                   item={item}
