@@ -467,3 +467,73 @@ func TestSetActivePricingSwapsRates(t *testing.T) {
 		t.Errorf("after restore LookupPricing(gpt-5).Input = %s, want embedded 1.25", got.Input)
 	}
 }
+
+// TestPricingForModel_Sonnet5_DateRouting covers the introductory-pricing
+// period for Sonnet 5. Sessions starting before 2026-09-01 use the intro
+// rates ($2 input); sessions on or after that date use the standard rates
+// ($3 input). Other model families are unaffected by the routing.
+func TestPricingForModel_Sonnet5_DateRouting(t *testing.T) {
+	julySess := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	septSess := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
+	aug31 := time.Date(2026, 8, 31, 23, 59, 59, 0, time.UTC) // last second of intro period
+	sep1 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)     // first second of standard period
+
+	t.Run("intro_rate_before_sep1", func(t *testing.T) {
+		p := pricingForModel(nil, "claude-sonnet-5", julySess)
+		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
+			t.Errorf("sonnet-5 july sess Input = %s, want %s (intro rate)", p.Input, want)
+		}
+		if want := decimal.NewFromFloat(10); !p.Output.Equal(want) {
+			t.Errorf("sonnet-5 july sess Output = %s, want %s (intro rate)", p.Output, want)
+		}
+	})
+
+	t.Run("intro_rate_on_aug31", func(t *testing.T) {
+		p := pricingForModel(nil, "claude-sonnet-5", aug31)
+		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
+			t.Errorf("sonnet-5 aug31 Input = %s, want %s (still intro rate)", p.Input, want)
+		}
+	})
+
+	t.Run("standard_rate_on_sep1", func(t *testing.T) {
+		p := pricingForModel(nil, "claude-sonnet-5", sep1)
+		if want := decimal.NewFromFloat(3); !p.Input.Equal(want) {
+			t.Errorf("sonnet-5 sep1 Input = %s, want %s (standard rate)", p.Input, want)
+		}
+		if want := decimal.NewFromFloat(15); !p.Output.Equal(want) {
+			t.Errorf("sonnet-5 sep1 Output = %s, want %s (standard rate)", p.Output, want)
+		}
+	})
+
+	t.Run("standard_rate_after_sep1", func(t *testing.T) {
+		p := pricingForModel(nil, "claude-sonnet-5", septSess)
+		if want := decimal.NewFromFloat(3); !p.Input.Equal(want) {
+			t.Errorf("sonnet-5 sept sess Input = %s, want %s (standard rate)", p.Input, want)
+		}
+	})
+
+	t.Run("dated_variant_routes_correctly_intro", func(t *testing.T) {
+		// "claude-sonnet-5-20260701" → getModelFamily → "sonnet-5" → routes to intro
+		p := pricingForModel(nil, "claude-sonnet-5-20260701", julySess)
+		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
+			t.Errorf("claude-sonnet-5-20260701 july sess Input = %s, want %s (intro)", p.Input, want)
+		}
+	})
+
+	t.Run("other_model_unaffected", func(t *testing.T) {
+		// sonnet-4-6 is unaffected by the routing, rate is $3 regardless of date
+		p := pricingForModel(nil, "claude-sonnet-4-6", julySess)
+		if want := decimal.NewFromFloat(3); !p.Input.Equal(want) {
+			t.Errorf("sonnet-4-6 july sess Input = %s, want %s (should be unchanged)", p.Input, want)
+		}
+	})
+
+	t.Run("zero_sessionAt_routes_to_intro", func(t *testing.T) {
+		// Zero time.Time (year 0001) is before Sep 1 2026 → intro rates.
+		// This is the expected behavior for callers without a session timestamp.
+		p := pricingForModel(nil, "claude-sonnet-5", time.Time{})
+		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
+			t.Errorf("sonnet-5 zero sessionAt Input = %s, want %s (intro rate)", p.Input, want)
+		}
+	})
+}

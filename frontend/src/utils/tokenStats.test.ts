@@ -372,6 +372,48 @@ describe('calculateCost', () => {
 });
 
 // ---------------------------------------------------------------------------
+// calculateCost — Sonnet 5 date-aware pricing
+// Sessions before 2026-09-01 use the intro rates ($2 input, $10 output);
+// sessions on or after use standard rates ($3 input, $15 output).
+// ---------------------------------------------------------------------------
+
+describe('calculateCost — Sonnet 5 date routing', () => {
+  const u = usage({ input: 1_000_000, output: 1_000_000 });
+  const julySess = new Date('2026-07-01T00:00:00Z');
+  const aug31 = new Date('2026-08-31T23:59:59Z');
+  const sep1 = new Date('2026-09-01T00:00:00Z');
+  const sep2 = new Date('2026-09-02T00:00:00Z');
+
+  it('uses intro rate ($2 input, $10 output) before Sep 1', () => {
+    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, julySess);
+    // 1M input × $2/M + 1M output × $10/M = $12
+    expect(cost).toBeCloseTo(12, 4);
+  });
+
+  it('still uses intro rate on the last second of Aug 31', () => {
+    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, aug31);
+    expect(cost).toBeCloseTo(12, 4);
+  });
+
+  it('switches to standard rate ($3 input, $15 output) exactly on Sep 1', () => {
+    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, sep1);
+    // 1M input × $3/M + 1M output × $15/M = $18
+    expect(cost).toBeCloseTo(18, 4);
+  });
+
+  it('uses standard rate after Sep 1', () => {
+    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, sep2);
+    expect(cost).toBeCloseTo(18, 4);
+  });
+
+  it('does not affect other model families regardless of date', () => {
+    // sonnet-4-6 at $3 input / $15 output is unaffected by Sonnet 5 routing
+    const cost = calculateCost('claude-code', 'claude-sonnet-4-6-20260101', u, julySess);
+    expect(cost).toBeCloseTo(18, 4);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // normalizeClaudeUsage — Claude wire shape → canonical TokenUsage, splitting
 // cache-creation into 5m (cacheWrite) and 1h (cacheWrite1h) counts (rd9v).
 // ---------------------------------------------------------------------------

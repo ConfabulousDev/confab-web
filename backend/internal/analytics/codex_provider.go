@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -22,6 +23,9 @@ type codexRollout struct {
 	agentFileInfo []codexAgentFileInfo
 	downloader    codexAgentDownloader
 	cachedAgents  []*codex.ParsedRollout
+	// createdAt is the session's first_seen timestamp, forwarded to
+	// computeFromCodexRolloutAt for date-aware pricing (e.g. Sonnet 5 intro rates).
+	createdAt     time.Time
 }
 
 type codexAgentFileInfo struct {
@@ -49,12 +53,13 @@ func (p *codexProvider) Parse(ctx context.Context, input ParseInput) (Rollout, e
 		main:          main,
 		agentFileInfo: agentFileInfo,
 		downloader:    downloader,
+		createdAt:     input.CreatedAt,
 	}, nil
 }
 
 func (p *codexProvider) ComputeCards(ctx context.Context, rollout Rollout) *ComputeResult {
 	r := rollout.(*codexRollout)
-	return ComputeFromCodexRollout(ctx, r.materialize(ctx))
+	return computeFromCodexRolloutAt(ctx, r.materialize(ctx), r.createdAt)
 }
 
 func (p *codexProvider) SearchText(ctx context.Context, rollout Rollout) string {
