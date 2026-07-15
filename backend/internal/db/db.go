@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -39,8 +40,32 @@ func Connect(dsn string) (*DB, error) {
 	conn.SetMaxIdleConns(100)
 	// ConnMaxLifetime: Recycle connections periodically to avoid stale connections
 	conn.SetConnMaxLifetime(20 * time.Minute)
+	// ConnMaxIdleTime: unset by default (Go's zero-value: idle connections
+	// live forever). Opt in via DB_CONN_MAX_IDLE_TIME to let managed Postgres
+	// providers with autosuspend (e.g. Neon) actually suspend compute between
+	// bursts of activity.
+	if d, ok := parseConnMaxIdleTime(); ok {
+		conn.SetConnMaxIdleTime(d)
+		logger.Info("db connection pool: idle timeout configured", "conn_max_idle_time", d)
+	}
 
 	return &DB{conn: conn}, nil
+}
+
+// parseConnMaxIdleTime reads DB_CONN_MAX_IDLE_TIME and parses it as a
+// duration. ok=false when unset or unparseable; callers should leave the
+// pool's idle-time behavior untouched in that case (Go's zero-value default:
+// connections are never closed for being idle).
+func parseConnMaxIdleTime() (time.Duration, bool) {
+	v := os.Getenv("DB_CONN_MAX_IDLE_TIME")
+	if v == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, false
+	}
+	return d, true
 }
 
 // ConnectWithRetry attempts to connect to the database with exponential backoff.

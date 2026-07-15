@@ -67,13 +67,13 @@ Each sub-package depends on the root `db` package for the `DB` handle, shared ty
 
 - **Modular sub-packages over monolith**: The DB layer was split from a single large package into domain-focused sub-packages to improve code organization and reduce coupling.
 - **`*sql.DB` exposed via `Conn()`**: Sub-packages need the raw connection for `QueryContext`/`ExecContext`. The `DB` wrapper adds pool config and the `ShareAllSessions` flag but otherwise stays thin.
-- **Connection pool tuning**: 500 max open / 100 max idle / 20-minute max lifetime. Tuned for a multi-tenant web backend with bursty sync traffic.
+- **Connection pool tuning**: 500 max open / 100 max idle / 20-minute max lifetime. Tuned for a multi-tenant web backend with bursty sync traffic. Idle-time closing is opt-in via `DB_CONN_MAX_IDLE_TIME` (unset by default — connections never close for being idle, matching Go's zero-value behavior). Setting it lets managed Postgres providers with autosuspend (e.g. Neon) actually suspend compute between bursts; self-hosted plain Postgres has no reason to set it (8e09).
 - **`ConnectWithRetry` with exponential backoff**: Allows the server to start before the database is fully ready (useful in container orchestration).
 - **pgx stdlib driver**: Uses `pgx/v5/stdlib` for compatibility with `database/sql` while getting pgx performance.
 
 ## Testing
 
-- Unit tests: `helpers_test.go` (`ExtractRepoName`, `IsInvalidUUIDError`, `IsUniqueViolation`, `UnmarshalSessionGitInfo`), `redaction_test.go` (`SessionDetail.RedactForSharing` field completeness + the `interface{}`/JSONB classification guard, via reflection), `git_info_redact_test.go` (`SanitizeGitInfoForSharing` whitelist + credential/host stripping across URL forms).
+- Unit tests: `helpers_test.go` (`ExtractRepoName`, `IsInvalidUUIDError`, `IsUniqueViolation`, `UnmarshalSessionGitInfo`), `redaction_test.go` (`SessionDetail.RedactForSharing` field completeness + the `interface{}`/JSONB classification guard, via reflection), `git_info_redact_test.go` (`SanitizeGitInfoForSharing` whitelist + credential/host stripping across URL forms), `db_test.go` (`parseConnMaxIdleTime` unset/valid/invalid).
 - Integration tests: `helpers_integration_test.go` (`LoadSessionSyncFiles` happy path + todo exclusion + empty result, plus a `Connect`/`Exec`/`QueryRow`/`Conn` lifecycle check) and `connect_test.go` (`ConnectWithRetry` context cancellation). All integration tests use `testutil.SetupTestEnvironment(t)`, which spins up containerized Postgres and MinIO via Docker/Orbstack.
 
 ## Dependencies

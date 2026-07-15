@@ -29,6 +29,7 @@ See [`backend/.env.example`](backend/.env.example) for a copy-paste-ready templa
 |----------|---------|----------|-------------|
 | `DATABASE_URL` | *(none)* | Yes | PostgreSQL connection string (e.g. `postgres://user:pass@host:5432/confab?sslmode=disable`) |
 | `MIGRATE_DATABASE_URL` | Falls back to `DATABASE_URL` | No | Separate connection string for running migrations with an elevated database user |
+| `DB_CONN_MAX_IDLE_TIME` | *(unset — no limit)* | No | Maximum time a pooled connection may sit idle before being closed. Setting this (e.g. `1m`) lets managed Postgres providers with autosuspend (e.g. Neon) actually suspend compute between bursts of activity. Leave unset for self-hosted plain Postgres, which has no autosuspend to earn back. |
 
 ## Storage
 
