@@ -87,14 +87,14 @@ primary_region = 'sjc'
   processes = ['app']
 
 [[vm]]
-  memory = '1024mb'
+  memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
   processes = ['app']
 
 # Worker VM - always running singleton for background precompute
 [[vm]]
-  memory = '1024mb'
+  memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
   processes = ['worker']
