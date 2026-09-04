@@ -67,8 +67,13 @@ families fall back to zero pricing with a warning.
 **Server tool pricing**: `WEB_SEARCH_COST_PER_REQUEST = $0.01`, applied by
 the Claude adapter's `calculateMessageCost`. Not multiplied by fast mode.
 
-**Fast mode**: `FAST_MODE_MULTIPLIER = 6` applied by the Claude adapter when
-`message.message.usage.speed === 'fast'`. Codex has no equivalent toggle.
+**Fast mode**: `FAST_MODE_MULTIPLIER = 2` applied by the Claude adapter when
+`message.message.usage.speed === 'fast'`. Anthropic publishes fast mode at
+$10/$50 per million against the $5/$25 standard rate on the models that offer
+it (Opus 5, Opus 4.8) — a flat 2x, with the caching multipliers stacking on top
+of the fast base price. Mirrors the backend's `fastModeMultiplier`
+(`analytics/pricing.go`); the two must move together. Codex has no equivalent
+toggle.
 
 ### sessionMeta.ts
 

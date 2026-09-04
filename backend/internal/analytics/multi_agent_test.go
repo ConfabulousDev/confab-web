@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 )
 
 // buildMultiAgentFixture creates a FileCollection with a main transcript and multiple agent files.
@@ -787,7 +786,7 @@ func TestComputeStreaming_MatchesFileCollection(t *testing.T) {
 		idx++
 		return agent, nil
 	}
-	streamResult, err := ComputeStreaming(context.Background(), fc.Main, provider, nil, time.Time{})
+	streamResult, err := ComputeStreaming(context.Background(), fc.Main, provider, nil)
 	if err != nil {
 		t.Fatalf("ComputeStreaming failed: %v", err)
 	}
@@ -858,7 +857,7 @@ func TestComputeStreaming_ProviderErrors(t *testing.T) {
 		}
 	}
 
-	result, err := ComputeStreaming(context.Background(), main, provider, nil, time.Time{})
+	result, err := ComputeStreaming(context.Background(), main, provider, nil)
 	if err != nil {
 		t.Fatalf("ComputeStreaming failed: %v", err)
 	}
@@ -888,7 +887,7 @@ func TestComputeStreaming_NoAgents(t *testing.T) {
 		return nil, io.EOF
 	}
 
-	result, err := ComputeStreaming(context.Background(), main, provider, nil, time.Time{})
+	result, err := ComputeStreaming(context.Background(), main, provider, nil)
 	if err != nil {
 		t.Fatalf("ComputeStreaming failed: %v", err)
 	}

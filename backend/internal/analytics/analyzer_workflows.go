@@ -24,9 +24,6 @@ type WorkflowsAnalyzer struct {
 	// log is the session-scoped logger (enriched upstream with session_id +
 	// provider) used to attribute unknown-model pricing warnings. May be nil.
 	log *slog.Logger
-	// sessionAt is the session's first_seen timestamp for date-aware pricing.
-	// Zero value (year 0001) is safe and routes to introductory pricing.
-	sessionAt time.Time
 }
 
 type workflowRunAccum struct {
@@ -79,7 +76,7 @@ func (a *WorkflowsAnalyzer) ProcessAgent(file *TranscriptFile, runID string) {
 		acc.output += usage.OutputTokens
 		acc.cacheCreation += usage.CacheCreationInputTokens
 		acc.cacheRead += usage.CacheReadInputTokens
-		acc.cost = acc.cost.Add(CalculateTotalCost(pricingForModel(a.log, group.Model, a.sessionAt), usage))
+		acc.cost = acc.cost.Add(CalculateTotalCost(pricingForModel(a.log, group.Model), usage))
 	}
 
 	// Track the run's activity span from line timestamps.

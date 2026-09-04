@@ -2,7 +2,6 @@ package analytics
 
 import (
 	"log/slog"
-	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/shopspring/decimal"
@@ -40,9 +39,6 @@ type TokensAnalyzer struct {
 	// provider) used to attribute unknown-model warnings. Nil on test/Analyze
 	// paths; pricingForModel falls back to the default logger.
 	log *slog.Logger
-	// sessionAt is the session's first_seen timestamp for date-aware pricing.
-	// Zero value (year 0001) is safe and routes to introductory pricing.
-	sessionAt time.Time
 	// byModel accumulates the per-model tokens_v2 breakdown alongside the flat
 	// totals, keyed by getModelFamily() family (fast turns under "<family> · fast").
 	// Lazily initialized so a zero-value analyzer needs no constructor.
@@ -152,7 +148,7 @@ func (a *TokensAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 		a.result.CacheCreationTokens += usage.CacheCreationInputTokens
 		a.result.CacheReadTokens += usage.CacheReadInputTokens
 
-		pricing := pricingForModel(a.log, group.Model, a.sessionAt)
+		pricing := pricingForModel(a.log, group.Model)
 		cost := CalculateTotalCost(pricing, usage)
 		a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
 		a.accumulateV2(group.Model, group.IsFastMode, usage, cost)
@@ -188,7 +184,7 @@ func (a *TokensAnalyzer) Finalize(hasAgentFile func(string) bool) {
 			// them at the main session model they were spawned under. If the main
 			// session itself has no resolvable model, pricingForModel treats the
 			// empty name as an expected sentinel (zero cost, DEBUG, no WARN).
-			pricing := pricingForModel(a.log, a.mainModel, a.sessionAt)
+			pricing := pricingForModel(a.log, a.mainModel)
 			cost := CalculateTotalCost(pricing, usage)
 			a.result.EstimatedCostUSD = a.result.EstimatedCostUSD.Add(cost)
 			a.accumulateV2(a.mainModel, usage.Speed == SpeedFast, usage, cost)

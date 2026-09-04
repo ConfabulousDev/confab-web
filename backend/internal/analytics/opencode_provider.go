@@ -40,7 +40,6 @@ func (p *opencodeProvider) Parse(ctx context.Context, input ParseInput) (Rollout
 		agentFileInfo:    agentFileInfo,
 		downloader:       downloader,
 		validationErrors: mainErrors,
-		createdAt:        input.CreatedAt,
 	}, nil
 }
 
@@ -50,7 +49,7 @@ func (p *opencodeProvider) ComputeCards(ctx context.Context, rollout Rollout) *C
 		return &ComputeResult{}
 	}
 	rollouts := r.materialize(ctx)
-	result := computeFromOpenCodeRolloutAt(ctx, rollouts, r.createdAt)
+	result := ComputeFromOpenCodeRollout(ctx, rollouts)
 	result.ValidationErrorCount = len(r.validationErrors)
 	return result
 }
