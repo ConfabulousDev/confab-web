@@ -232,7 +232,7 @@ describe('claudeAdapter', () => {
   });
 });
 
-// CF-418: Claude adapter applies the fast-mode multiplier (6x) and adds
+// CF-418: Claude adapter applies the fast-mode multiplier (2x) and adds
 // per-request web-search dollars on top of the base arithmetic from
 // `calculateCost`. Both adjustments are Claude-specific.
 describe('claudeAdapter.calculateMessageCost', () => {
@@ -247,15 +247,15 @@ describe('claudeAdapter.calculateMessageCost', () => {
       .toBeCloseTo(0.45, 4);
   });
 
-  it('applies the 6x fast multiplier when usage.speed === "fast"', () => {
+  it('applies the 2x fast multiplier when usage.speed === "fast"', () => {
     const msg = assistantMessageWithUsage(
       'claude-opus-4-6-20260201',
       { ...zeroUsage(), input: 1_000_000, output: 100_000 },
       { speed: 'fast' },
     );
-    // opus-4-6: $5 + $2.50 = $7.50 base → $45 with 6x fast
+    // opus-4-6: $5 + $2.50 = $7.50 base → $15 with 2x fast
     expect(claudeAdapter.calculateMessageCost(msg.message.model, msg.tokenUsage, msg))
-      .toBeCloseTo(45, 4);
+      .toBeCloseTo(15, 4);
   });
 
   it('adds web-search dollars per request, not multiplied by fast', () => {
@@ -264,7 +264,7 @@ describe('claudeAdapter.calculateMessageCost', () => {
       zeroUsage(),
       { speed: 'fast', server_tool_use: { web_search_requests: 10 } },
     );
-    // Token cost = 0; web search = 10 * $0.01 = $0.10. Not multiplied by 6.
+    // Token cost = 0; web search = 10 * $0.01 = $0.10. Not multiplied by the fast rate.
     expect(claudeAdapter.calculateMessageCost(msg.message.model, msg.tokenUsage, msg))
       .toBeCloseTo(0.1, 4);
   });
@@ -275,9 +275,9 @@ describe('claudeAdapter.calculateMessageCost', () => {
       { ...zeroUsage(), input: 100_000, output: 10_000 },
       { speed: 'fast', server_tool_use: { web_search_requests: 2 } },
     );
-    // base = 100k*$5 + 10k*$25 = $0.75; fast = $4.50; web = $0.02 → $4.52
+    // base = 100k*$5 + 10k*$25 = $0.75; fast = $1.50; web = $0.02 → $1.52
     expect(claudeAdapter.calculateMessageCost(msg.message.model, msg.tokenUsage, msg))
-      .toBeCloseTo(4.52, 4);
+      .toBeCloseTo(1.52, 4);
   });
 });
 
@@ -290,7 +290,7 @@ describe('claudeAdapter.extendCostTooltip', () => {
     const msg = assistantMessageWithUsage('claude-sonnet-4-20250514', zeroUsage(), { speed: 'fast' });
     const out = claudeAdapter.extendCostTooltip!(baseLines, zeroUsage(), msg);
     expect(out.some((l) => /Speed:\s*fast/.test(l))).toBe(true);
-    expect(out.some((l) => l.includes('6x'))).toBe(true);
+    expect(out.some((l) => l.includes('2x'))).toBe(true);
   });
 
   it('appends Cache write / Cache read lines when present in canonical usage', () => {
@@ -338,9 +338,9 @@ describe('claudeAdapter Tokens-card tooltips (CF-436)', () => {
     );
   });
 
-  it('defines tokensFastTooltip naming Anthropic priority tier', () => {
+  it('defines tokensFastTooltip naming Anthropic fast mode', () => {
     expect(claudeAdapter.tokensFastTooltip).toBe(
-      'Cost from turns using Anthropic priority tier (~6x base rate)',
+      'Cost from turns using Anthropic fast mode (2x base rate; Opus 5 and Opus 4.8 only)',
     );
   });
 });

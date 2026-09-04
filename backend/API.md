@@ -1313,7 +1313,7 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 {
   "start_date": "2026-04-01T00:00:00Z",
   "end_date": "2026-04-20T23:59:59Z",
-  "card_types": ["session_card_tokens"],
+  "card_types": ["session_card_tokens", "session_card_tokens_v2"],
   "reason": "Opus 4.7 pricing backfill",
   "dry_run": false,
   "confirm": "1234"
@@ -1324,7 +1324,7 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 |-------|------|-------------|
 | `start_date` | string | Required. ISO-8601 with explicit timezone (`Z` or `±hh:mm`). Filter: `sessions.last_message_at >= start_date`. |
 | `end_date` | string | Optional. Same format as `start_date`. Filter: `last_message_at < end_date`. Must be after `start_date`. |
-| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_workflows`, `session_card_smart_recap`. |
+| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_tokens_v2`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_workflows`, `session_card_smart_recap`. |
 | `reason` | string | Required, 1–500 chars. Stored in the audit row. |
 | `dry_run` | bool | Defaults to `true`. `false` to actually delete. |
 | `confirm` | string | Required on execute (`dry_run: false`) — a typed-confirmation echo (kyrr) of the affected-session count. The server **re-counts** affected sessions at execute time and rejects with `400` unless `confirm` equals that fresh count, binding the action to the current blast radius (a stale preview is rejected too). Ignored on dry-run. |

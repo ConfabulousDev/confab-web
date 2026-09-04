@@ -107,12 +107,12 @@ describe('TokensCard', () => {
       expect(costRow).toHaveAttribute('title', codexAdapter.tokensCostTooltip);
     });
 
-    it('uses Anthropic-priority-tier wording for Claude fast-mode tooltip', () => {
+    it('uses Anthropic fast-mode wording for the Claude fast-mode tooltip', () => {
       const data = { ...mockData, fast_turns: 5, fast_cost_usd: '1.10' };
       render(<TokensCard data={data} loading={false} provider="claude-code" />);
       const fastRow = screen.getByText('Fast mode').closest('div');
       expect(fastRow).toHaveAttribute('title', claudeAdapter.tokensFastTooltip!);
-      expect(claudeAdapter.tokensFastTooltip).toMatch(/Anthropic priority tier/);
+      expect(claudeAdapter.tokensFastTooltip).toMatch(/Anthropic fast mode/);
     });
   });
 

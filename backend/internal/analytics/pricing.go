@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/shopspring/decimal"
@@ -144,54 +143,36 @@ func LookupPricing(modelName string) (ModelPricing, bool) {
 	return zeroPricing, false
 }
 
-// sonnet5Sep1 is the boundary between Sonnet 5 introductory and standard pricing.
-// Sessions whose first_seen is before this instant use the "sonnet-5-intro" rates
-// ($2 input, $10 output); sessions on or after use the "sonnet-5" standard rates
-// ($3 input, $15 output). The introductory period runs through Aug 31, 2026.
-var sonnet5Sep1 = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-
 // pricingForModel resolves pricing and applies the project's logging policy for
 // misses, attributing them to the given logger (which upstream enriches with
 // session_id + provider so a warning is traceable):
-//   - known model  → its pricing (with Sonnet 5 date-routing, see below).
-//   - empty model   → zero pricing, DEBUG only. Empty is an expected sentinel, not
+//   - known model → its pricing.
+//   - empty model → zero pricing, DEBUG only. Empty is an expected sentinel, not
 //     an anomaly, so it must never spam WARN during precompute.
 //   - non-empty but unknown → zero pricing, WARN. This is a genuine gap in
 //     pricing.json worth surfacing loudly (carries model + family + context).
 //
-// sessionAt is the session's first_seen timestamp, used to route Sonnet 5 sessions
-// to the correct introductory or standard pricing tier. A zero time.Time (year 0001)
-// is before Sep 1 2026, so callers without a real timestamp correctly route to
-// intro rates — acceptable for test paths and convenience wrappers.
-//
 // A nil logger falls back to the default logger (test/Analyze paths that don't
 // thread a session-scoped logger).
-func pricingForModel(log *slog.Logger, modelName string, sessionAt time.Time) ModelPricing {
+//
+// Pricing is a pure function of the model name: rates are flat per family and
+// never vary by session date. Date-aware routing was removed with the Sonnet 5
+// introductory tier (khjx) — a scheduled increase that was cancelled after we
+// had already encoded it, overcharging every Sonnet 5 session by 50%. Encode a
+// price change when it takes effect, never ahead of time.
+func pricingForModel(log *slog.Logger, modelName string) ModelPricing {
 	if log == nil {
 		log = slog.Default()
 	}
 
-	// Sonnet 5 date-aware routing: sessions starting before 2026-09-01 use the
-	// introductory rates stored under "sonnet-5-intro"; on or after that date they
-	// use the standard "sonnet-5" rates. getModelFamily is called once here to avoid
-	// a second call in LookupPricing below.
-	family := getModelFamily(modelName)
-	if family == "sonnet-5" && sessionAt.Before(sonnet5Sep1) {
-		table := *activePricing.Load()
-		if p, ok := table["sonnet-5-intro"]; ok {
-			return p
-		}
-	}
-
-	pricing, ok := LookupPricing(modelName)
-	if ok {
+	if pricing, ok := LookupPricing(modelName); ok {
 		return pricing
 	}
 	if modelName == "" {
 		log.Debug("skipping pricing lookup: empty model")
 		return zeroPricing
 	}
-	log.Warn("unknown model for pricing", "model", modelName, "family", family)
+	log.Warn("unknown model for pricing", "model", modelName, "family", getModelFamily(modelName))
 	return zeroPricing
 }
 
@@ -202,9 +183,12 @@ var oneMillion = decimal.NewFromInt(1_000_000)
 // Source: https://docs.anthropic.com/en/about-claude/pricing
 var webSearchPricePerRequest = decimal.NewFromFloat(0.01) // $10 per 1,000 searches
 
-// fastModeMultiplier is applied to all token costs when speed is "fast".
+// fastModeMultiplier is applied to all token costs (input, output and both
+// cache tiers) when speed is "fast". Fast mode bills $10/$50 per million
+// against the $5/$25 standard rate on the models that offer it (Claude Opus 5
+// and Opus 4.8) — a flat 2x.
 // Source: https://docs.anthropic.com/en/build-with-claude/fast-mode
-var fastModeMultiplier = decimal.NewFromInt(6)
+var fastModeMultiplier = decimal.NewFromInt(2)
 
 // CalculateCost calculates token-only cost for the given counts.
 func CalculateCost(pricing ModelPricing, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens int64) decimal.Decimal {

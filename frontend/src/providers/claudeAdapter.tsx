@@ -78,7 +78,7 @@ export const claudeAdapter: ClaudeAdapter = {
 
   tokensCostTooltip:
     'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
-  tokensFastTooltip: 'Cost from turns using Anthropic priority tier (~6x base rate)',
+  tokensFastTooltip: `Cost from turns using Anthropic fast mode (${FAST_MODE_MULTIPLIER}x base rate; Opus 5 and Opus 4.8 only)`,
 
   calculateMessageCost(model, usage, message) {
     let cost = calculateCost('claude-code', model, usage);
@@ -106,8 +106,9 @@ export const claudeAdapter: ClaudeAdapter = {
     }
     const wire = isAssistantMessage(message) ? message.message.usage : undefined;
     if (wire?.speed) {
+      const multiplier = wire.speed === 'fast' ? ` (${FAST_MODE_MULTIPLIER}x pricing)` : '';
       lines.push('');
-      lines.push(`Speed: ${wire.speed}${wire.speed === 'fast' ? ' (6x pricing)' : ''}`);
+      lines.push(`Speed: ${wire.speed}${multiplier}`);
     }
     if (wire?.service_tier) {
       lines.push(`Tier: ${wire.service_tier}`);

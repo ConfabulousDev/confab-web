@@ -19,6 +19,7 @@ import {
   computeTokenSpeed,
   formatTokenSpeed,
   computeMessageTokenSpeed,
+  FAST_MODE_MULTIPLIER,
 } from './tokenStats';
 import { PRICING_FIXTURE } from '@/test/pricingFixture';
 
@@ -372,44 +373,74 @@ describe('calculateCost', () => {
 });
 
 // ---------------------------------------------------------------------------
-// calculateCost — Sonnet 5 date-aware pricing
-// Sessions before 2026-09-01 use the intro rates ($2 input, $10 output);
-// sessions on or after use standard rates ($3 input, $15 output).
+// calculateCost — Sonnet 5 flat standard pricing
+// Anthropic cancelled the scheduled 2026-09-01 increase to $3/$15, so the
+// $2/$10 launch pricing is now the standard price. There is no date routing:
+// cost is a pure function of provider + model + usage (khjx D2). These tests
+// take no date at all — that is the property that makes the 50%-overcharge
+// regression unrepeatable.
 // ---------------------------------------------------------------------------
 
-describe('calculateCost — Sonnet 5 date routing', () => {
+describe('calculateCost — Sonnet 5 standard pricing', () => {
   const u = usage({ input: 1_000_000, output: 1_000_000 });
-  const julySess = new Date('2026-07-01T00:00:00Z');
-  const aug31 = new Date('2026-08-31T23:59:59Z');
-  const sep1 = new Date('2026-09-01T00:00:00Z');
-  const sep2 = new Date('2026-09-02T00:00:00Z');
 
-  it('uses intro rate ($2 input, $10 output) before Sep 1', () => {
-    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, julySess);
+  it('prices Sonnet 5 at $2 input / $10 output', () => {
     // 1M input × $2/M + 1M output × $10/M = $12
-    expect(cost).toBeCloseTo(12, 4);
+    expect(calculateCost('claude-code', 'claude-sonnet-5-20260701', u)).toBeCloseTo(12, 4);
   });
 
-  it('still uses intro rate on the last second of Aug 31', () => {
-    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, aug31);
-    expect(cost).toBeCloseTo(12, 4);
+  it('prices Sonnet 5 the same whatever the system clock says', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-01T00:00:00Z'));
+      const early = calculateCost('claude-code', 'claude-sonnet-5-20260701', u);
+      vi.setSystemTime(new Date('2026-12-01T00:00:00Z'));
+      const late = calculateCost('claude-code', 'claude-sonnet-5-20260701', u);
+      expect(early).toBeCloseTo(12, 4);
+      expect(late).toBe(early);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('switches to standard rate ($3 input, $15 output) exactly on Sep 1', () => {
-    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, sep1);
-    // 1M input × $3/M + 1M output × $15/M = $18
-    expect(cost).toBeCloseTo(18, 4);
+  it('does not affect other model families', () => {
+    // sonnet-4-6 stays at $3 input / $15 output
+    expect(calculateCost('claude-code', 'claude-sonnet-4-6-20260101', u)).toBeCloseTo(18, 4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// calculateCost — Fable 5.1 / Mythos 5.1 non-standard cache-read rate.
+// Both bill cache hits at 0.025x base input ($0.25/MTok), not the usual 0.1x
+// ($1.00/MTok) the 5.0 generation uses. Cache reads dominate token volume in
+// agentic sessions, so treating these as 0.1x is a silent 4x overcharge.
+// ---------------------------------------------------------------------------
+
+describe('calculateCost — Fable/Mythos 5.1 cache reads', () => {
+  const cacheOnly = usage({ cacheRead: 1_000_000 });
+
+  it('prices Fable 5.1 cache reads at $0.25/M', () => {
+    expect(calculateCost('claude-code', 'claude-fable-5-1', cacheOnly)).toBeCloseTo(0.25, 4);
   });
 
-  it('uses standard rate after Sep 1', () => {
-    const cost = calculateCost('claude-code', 'claude-sonnet-5-20260701', u, sep2);
-    expect(cost).toBeCloseTo(18, 4);
+  it('prices Mythos 5.1 cache reads at $0.25/M', () => {
+    expect(calculateCost('claude-code', 'claude-mythos-5-1', cacheOnly)).toBeCloseTo(0.25, 4);
   });
 
-  it('does not affect other model families regardless of date', () => {
-    // sonnet-4-6 at $3 input / $15 output is unaffected by Sonnet 5 routing
-    const cost = calculateCost('claude-code', 'claude-sonnet-4-6-20260101', u, julySess);
-    expect(cost).toBeCloseTo(18, 4);
+  it('leaves the 5.0 generation on the $1.00/M cache-read rate', () => {
+    expect(calculateCost('claude-code', 'claude-fable-5', cacheOnly)).toBeCloseTo(1.0, 4);
+    expect(calculateCost('claude-code', 'claude-mythos-5', cacheOnly)).toBeCloseTo(1.0, 4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FAST_MODE_MULTIPLIER — published fast mode is $10/$50 against a $5/$25
+// standard rate, i.e. 2x, on Claude Opus 5 and Opus 4.8 only (khjx D5).
+// ---------------------------------------------------------------------------
+
+describe('FAST_MODE_MULTIPLIER', () => {
+  it('is 2x, matching published fast-mode pricing', () => {
+    expect(FAST_MODE_MULTIPLIER).toBe(2);
   });
 });
 

@@ -286,9 +286,10 @@ describe('OpenCodeTranscriptPane cost rail', () => {
         isCostMode
       />,
     );
-    // calculateCost('opencode','gemini-2.5-pro',FALLBACK_USAGE) → $1.75.
+    // calculateCost('opencode','gemini-2.5-pro',FALLBACK_USAGE)
+    // = (1M × $1.25/M) + (100k × $10.00/M) = $2.25.
     expect(container.querySelector(COST_RAIL)).not.toBeNull();
-    expect(container.textContent).toContain('$1.75');
+    expect(container.textContent).toContain('$2.25');
   });
 
   it('clicking a rail segment scrolls the virtualizer to the right row', () => {

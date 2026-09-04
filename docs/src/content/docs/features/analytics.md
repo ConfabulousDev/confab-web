@@ -19,7 +19,7 @@ See it live on the [demo instance](https://demo.confabulous.dev/sessions/e8b5449
 
 Analytics are derived from the transcript at sync time. No additional LLM calls are made — the numbers come straight from the structured session data the CLI uploads.
 
-Model pricing tables live in the backend (`backend/internal/analytics/pricing.go`) and are kept in sync with the frontend display table (`src/utils/tokenStats.ts`) via a parity test. When a new model ships, both tables update together.
+There is one model pricing table, served by the backend and fetched by the web app at startup, so cost is computed from the same rates everywhere. Rates are flat per model — they do not vary by session date — and a self-hosted backend picks up new prices without a redeploy.
 
 ## Related
 

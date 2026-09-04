@@ -103,6 +103,9 @@ func TestLookupPricing(t *testing.T) {
 		{"claude-opus-4-5-20251101", true, 5},
 		{"claude-opus-5", true, 5},
 		{"claude-mythos-5", true, 10},
+		{"claude-mythos-5-1", true, 10},
+		{"claude-fable-5-1", true, 10},
+		{"claude-sonnet-5", true, 2},
 		{"claude-sonnet-4-20241022", true, 3},
 		{"claude-haiku-3-5-20241022", true, 0.80},
 		{"unknown-model", false, 0}, // unknown non-empty model: not found, zero pricing
@@ -117,9 +120,10 @@ func TestLookupPricing(t *testing.T) {
 		{"gpt-5.4-pro", true, 30.00},
 		{"gpt-5.5", true, 5.00},
 		{"gpt-5.5-pro", true, 30.00},
-		{"gpt-5.6-sol", true, 5.00},
+		{"gpt-5.6-sol", true, 4.00},
 		{"gpt-5.6-terra", true, 2.00},
 		{"gpt-5.6-luna", true, 0.20},
+		{"gpt-6-astra", true, 10.00},
 		{"gpt-4o", true, 2.50},
 		{"gpt-4o-mini", true, 0.15},
 		{"o1", true, 15.00},
@@ -183,7 +187,7 @@ func TestCalculateTotalCost_StandardSpeed(t *testing.T) {
 
 func TestCalculateTotalCost_FastMode(t *testing.T) {
 	// Opus 4.6: input=$5, output=$25 per million
-	// Fast mode: 6x all token costs
+	// Fast mode: 2x all token costs ($10/$50 published fast rate vs $5/$25 standard)
 	pricing, _ := LookupPricing("claude-opus-4-6-20260201")
 	usage := &TokenUsage{
 		InputTokens:  1_000_000,
@@ -193,15 +197,15 @@ func TestCalculateTotalCost_FastMode(t *testing.T) {
 
 	cost := CalculateTotalCost(pricing, usage)
 	// Standard: input 1M * $5/M + output 100k * $25/M = $5 + $2.50 = $7.50
-	// Fast: $7.50 * 6 = $45
-	expected := decimal.NewFromFloat(45)
+	// Fast: $7.50 * 2 = $15
+	expected := decimal.NewFromFloat(15)
 	if !cost.Equal(expected) {
 		t.Errorf("Fast mode cost = %s, want %s", cost, expected)
 	}
 }
 
 func TestCalculateTotalCost_FastModeWithCache(t *testing.T) {
-	// Verify fast mode 6x applies to cache costs too
+	// Verify the fast-mode 2x applies to cache costs too
 	pricing, _ := LookupPricing("claude-opus-4-6-20260201")
 	usage := &TokenUsage{
 		InputTokens:              0,
@@ -213,8 +217,8 @@ func TestCalculateTotalCost_FastModeWithCache(t *testing.T) {
 
 	cost := CalculateTotalCost(pricing, usage)
 	// Standard: cacheWrite 1M * $6.25/M + cacheRead 1M * $0.50/M = $6.75
-	// Fast: $6.75 * 6 = $40.50
-	expected := decimal.NewFromFloat(40.50)
+	// Fast: $6.75 * 2 = $13.50
+	expected := decimal.NewFromFloat(13.50)
 	if !cost.Equal(expected) {
 		t.Errorf("Fast mode with cache cost = %s, want %s", cost, expected)
 	}
@@ -253,10 +257,10 @@ func TestCalculateTotalCost_FastModeWithWebSearch(t *testing.T) {
 	}
 
 	cost := CalculateTotalCost(pricing, usage)
-	// Token cost: 1M * $5/M = $5, fast: $5 * 6 = $30
+	// Token cost: 1M * $5/M = $5, fast: $5 * 2 = $10
 	// Web search: 10 * $0.01 = $0.10 (NOT multiplied by fast mode)
-	// Total: $30.10
-	expected := decimal.NewFromFloat(30.10)
+	// Total: $10.10
+	expected := decimal.NewFromFloat(10.10)
 	if !cost.Equal(expected) {
 		t.Errorf("Fast mode + web search cost = %s, want %s", cost, expected)
 	}
@@ -380,8 +384,8 @@ func TestCalculateTotalCost_CacheTierFastMode(t *testing.T) {
 		Speed:                    "fast",
 	}
 	cost := CalculateTotalCost(pricing, usage)
-	// (1M * $10/M) * 6 = $60.00
-	if want := decimal.NewFromFloat(60); !cost.Equal(want) {
+	// (1M * $10/M) * 2 = $20.00
+	if want := decimal.NewFromFloat(20); !cost.Equal(want) {
 		t.Errorf("fast-mode 1h cache cost = %s, want %s", cost, want)
 	}
 }
@@ -430,14 +434,24 @@ func TestCalculateTotalCost_CacheTierUnderbillingFixed(t *testing.T) {
 
 // TestFlattenEmbeddedNoCollision verifies the embedded provider-nested table
 // flattens to a family-keyed table without losing any family to a cross-provider
-// key collision (the flatten/LookupPricing invariant).
+// key collision (the flatten/LookupPricing invariant). flatten logs-and-skips a
+// family that appears under two providers, so a collision silently drops one
+// provider's rate; with ~80 families that is no longer self-evident by inspection.
 func TestFlattenEmbeddedNoCollision(t *testing.T) {
 	doc := pricingsource.Embedded()
 	flat := *flatten(doc)
 
 	want := 0
-	for _, fams := range doc.Pricing {
+	seen := make(map[string]string) // family → first provider that claimed it
+	for provider, fams := range doc.Pricing {
 		want += len(fams)
+		for family := range fams {
+			if other, dup := seen[family]; dup {
+				t.Errorf("family %q appears under both %q and %q; flatten drops one", family, other, provider)
+				continue
+			}
+			seen[family] = provider
+		}
 	}
 	if len(flat) != want {
 		t.Errorf("flattened family count = %d, want %d (a collision dropped a family)", len(flat), want)
@@ -477,72 +491,172 @@ func TestSetActivePricingSwapsRates(t *testing.T) {
 	}
 }
 
-// TestPricingForModel_Sonnet5_DateRouting covers the introductory-pricing
-// period for Sonnet 5. Sessions starting before 2026-09-01 use the intro
-// rates ($2 input); sessions on or after that date use the standard rates
-// ($3 input). Other model families are unaffected by the routing.
-func TestPricingForModel_Sonnet5_DateRouting(t *testing.T) {
-	julySess := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	septSess := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
-	aug31 := time.Date(2026, 8, 31, 23, 59, 59, 0, time.UTC) // last second of intro period
-	sep1 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)     // first second of standard period
+// TestPricingForModel_Sonnet5_StandardRate pins the corrected Sonnet 5 rate.
+// Anthropic cancelled the scheduled 2026-09-01 increase to $3/$15, so the $2/$10
+// launch pricing is now the standard price and there is no date routing at all
+// (khjx D2). This test is deliberately date-independent: it takes no timestamp,
+// which is the property that makes the 50%-overcharge regression unrepeatable.
+func TestPricingForModel_Sonnet5_StandardRate(t *testing.T) {
+	for _, model := range []string{"claude-sonnet-5", "claude-sonnet-5-20260701"} {
+		t.Run(model, func(t *testing.T) {
+			assertRate(t, pricingForModel(nil, model), rateSpec{model, 2, 10, 2.5, 4, 0.2})
+		})
+	}
+}
 
-	t.Run("intro_rate_before_sep1", func(t *testing.T) {
-		p := pricingForModel(nil, "claude-sonnet-5", julySess)
-		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
-			t.Errorf("sonnet-5 july sess Input = %s, want %s (intro rate)", p.Input, want)
-		}
-		if want := decimal.NewFromFloat(10); !p.Output.Equal(want) {
-			t.Errorf("sonnet-5 july sess Output = %s, want %s (intro rate)", p.Output, want)
-		}
-	})
+// TestEmbeddedHasNoSonnet5Intro guards the deleted introductory tier. The row
+// and both routing branches were removed; a table that still carries the key
+// means the machinery leaked back in.
+func TestEmbeddedHasNoSonnet5Intro(t *testing.T) {
+	if _, ok := embeddedTable()["sonnet-5-intro"]; ok {
+		t.Error("embedded table still carries sonnet-5-intro; the introductory tier was removed (khjx D2)")
+	}
+}
 
-	t.Run("intro_rate_on_aug31", func(t *testing.T) {
-		p := pricingForModel(nil, "claude-sonnet-5", aug31)
-		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
-			t.Errorf("sonnet-5 aug31 Input = %s, want %s (still intro rate)", p.Input, want)
-		}
-	})
+// embeddedTable flattens the embedded document into the family-keyed table the
+// lookup path actually reads.
+func embeddedTable() map[string]ModelPricing {
+	return *flatten(pricingsource.Embedded())
+}
 
-	t.Run("standard_rate_on_sep1", func(t *testing.T) {
-		p := pricingForModel(nil, "claude-sonnet-5", sep1)
-		if want := decimal.NewFromFloat(3); !p.Input.Equal(want) {
-			t.Errorf("sonnet-5 sep1 Input = %s, want %s (standard rate)", p.Input, want)
-		}
-		if want := decimal.NewFromFloat(15); !p.Output.Equal(want) {
-			t.Errorf("sonnet-5 sep1 Output = %s, want %s (standard rate)", p.Output, want)
-		}
-	})
+// rateSpec is one family's (or model's) expected per-million rates.
+type rateSpec struct {
+	name                  string
+	in, out, cw, cw1h, cr float64
+}
 
-	t.Run("standard_rate_after_sep1", func(t *testing.T) {
-		p := pricingForModel(nil, "claude-sonnet-5", septSess)
-		if want := decimal.NewFromFloat(3); !p.Input.Equal(want) {
-			t.Errorf("sonnet-5 sept sess Input = %s, want %s (standard rate)", p.Input, want)
+// assertRate checks all five per-million rates of a resolved family.
+func assertRate(t *testing.T, got ModelPricing, want rateSpec) {
+	t.Helper()
+	for _, f := range []struct {
+		field string
+		got   decimal.Decimal
+		want  float64
+	}{
+		{"input", got.Input, want.in},
+		{"output", got.Output, want.out},
+		{"cacheWrite", got.CacheWrite, want.cw},
+		{"cacheWrite1h", got.CacheWrite1h, want.cw1h},
+		{"cacheRead", got.CacheRead, want.cr},
+	} {
+		if w := decimal.NewFromFloat(f.want); !f.got.Equal(w) {
+			t.Errorf("%s.%s = %s, want %s", want.name, f.field, f.got, w)
 		}
-	})
+	}
+}
 
-	t.Run("dated_variant_routes_correctly_intro", func(t *testing.T) {
-		// "claude-sonnet-5-20260701" → getModelFamily → "sonnet-5" → routes to intro
-		p := pricingForModel(nil, "claude-sonnet-5-20260701", julySess)
-		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
-			t.Errorf("claude-sonnet-5-20260701 july sess Input = %s, want %s (intro)", p.Input, want)
-		}
-	})
+// TestEmbeddedRates pins every rate this ticket corrected or added, keyed by the
+// family string the table is looked up with. A row here is the contract; if a
+// vendor changes a price, this test and pricing.json move together.
+func TestEmbeddedRates(t *testing.T) {
+	tests := []rateSpec{
+		// claude-code — corrections and additions. The 5.1 generation bills cache
+		// hits at 0.025x base input ($0.25/MTok), not the usual 0.1x the 5.0 rows
+		// below keep ($1.00) — a deliberate exception, so both generations are
+		// pinned here. "Normalizing" the 5.1 rows would be a silent 4x overcharge
+		// on the dominant token category in agentic sessions.
+		{"sonnet-5", 2, 10, 2.5, 4, 0.2},
+		{"fable-5-1", 10, 50, 12.5, 20, 0.25},
+		{"mythos-5-1", 10, 50, 12.5, 20, 0.25},
+		{"fable-5", 10, 50, 12.5, 20, 1.0},
+		{"mythos-5", 10, 50, 12.5, 20, 1.0},
 
-	t.Run("other_model_unaffected", func(t *testing.T) {
-		// sonnet-4-6 is unaffected by the routing, rate is $3 regardless of date
-		p := pricingForModel(nil, "claude-sonnet-4-6", julySess)
-		if want := decimal.NewFromFloat(3); !p.Input.Equal(want) {
-			t.Errorf("sonnet-4-6 july sess Input = %s, want %s (should be unchanged)", p.Input, want)
-		}
-	})
+		// codex — corrections and additions.
+		{"gpt-5.1", 1.25, 10.0, 0, 0, 0.125},
+		{"gpt-5.2", 1.75, 14.0, 0, 0, 0.175},
+		{"gpt-5.5-cyber", 12.5, 75.0, 0, 0, 1.25},
+		{"gpt-5.6-sol", 4.0, 20.0, 0, 0, 0.4},
+		{"gpt-5.6-cyber", 12.5, 75.0, 0, 0, 1.25},
+		{"gpt-6-astra", 10.0, 50.0, 0, 0, 1.0},
+		{"chat-latest", 5.0, 30.0, 0, 0, 0.5},
 
-	t.Run("zero_sessionAt_routes_to_intro", func(t *testing.T) {
-		// Zero time.Time (year 0001) is before Sep 1 2026 → intro rates.
-		// This is the expected behavior for callers without a session timestamp.
-		p := pricingForModel(nil, "claude-sonnet-5", time.Time{})
-		if want := decimal.NewFromFloat(2); !p.Input.Equal(want) {
-			t.Errorf("sonnet-5 zero sessionAt Input = %s, want %s (intro rate)", p.Input, want)
+		// opencode — Gemini corrections and additions.
+		{"gemini-2.5-pro", 1.25, 10.0, 0, 0, 0.125},
+		{"gemini-2.5-flash", 0.3, 2.5, 0, 0, 0.03},
+		{"gemini-2.5-flash-lite", 0.1, 0.4, 0, 0, 0.01},
+		{"gemini-3.1-pro-preview", 2.0, 12.0, 0, 0, 0.2},
+		{"gemini-3.8-flash", 0.75, 3.75, 0, 0, 0.075},
+		{"gemini-3.7-flash", 0.75, 3.75, 0, 0, 0.075},
+		{"gemini-3.6-flash", 0.75, 3.75, 0, 0, 0.075},
+		{"gemini-3.5-flash", 1.5, 9.0, 0, 0, 0.15},
+		{"gemini-3.5-flash-lite", 0.3, 2.5, 0, 0, 0},
+		{"gemini-3.1-flash-lite", 0.25, 1.5, 0, 0, 0.025},
+
+		// opencode — xAI Grok additions.
+		{"grok-4.6", 2.0, 6.0, 0, 0, 0.5},
+		{"grok-4.5", 2.0, 6.0, 0, 0, 0.3},
+		{"grok-4.3", 1.25, 2.5, 0, 0, 0.2},
+		{"grok-4.20-0309-reasoning", 1.25, 2.5, 0, 0, 0.2},
+		{"grok-4.20-0309-non-reasoning", 1.25, 2.5, 0, 0, 0.2},
+		{"grok-4.20-multi-agent-0309", 1.25, 2.5, 0, 0, 0.2},
+		{"grok-build-0.1", 1.0, 2.0, 0, 0, 0.2},
+
+		// opencode — Mistral additions. Cached input is unpublished per model,
+		// so cacheRead stays 0 (cache hits bill at the full input rate).
+		{"mistral-medium-3504", 1.5, 7.5, 0, 0, 0},
+		{"mistral-large-2512", 0.5, 1.5, 0, 0, 0},
+		{"mistral-small-2603", 0.15, 0.6, 0, 0, 0},
+		{"ministral-3-14b-2512", 0.2, 0.2, 0, 0, 0},
+		{"ministral-3-8b-2512", 0.15, 0.15, 0, 0, 0},
+		{"ministral-3-3b-2512", 0.1, 0.1, 0, 0, 0},
+		{"codestral-2508", 0.3, 0.9, 0, 0, 0},
+
+		// opencode — DeepSeek V4 additions, stored at off-peak rates (khjx D9).
+		{"deepseek-v4-flash", 0.22, 0.66, 0, 0, 0.007},
+		{"deepseek-v4-pro", 0.66, 1.98, 0, 0, 0.022},
+		{"deepseek-v4-flash-vision-exp", 0.22, 0.66, 0, 0, 0.007},
+	}
+
+	table := embeddedTable()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := table[tt.name]
+			if !ok {
+				t.Fatalf("family %q missing from the embedded pricing table", tt.name)
+			}
+			assertRate(t, got, tt)
+		})
+	}
+}
+
+// TestEmbeddedRetainsLegacyFamilies pins the retired-but-retained rows (khjx
+// D10). Historical sessions still reference them, and dropping a key silently
+// reprices those sessions to $0 rather than failing loudly.
+func TestEmbeddedRetainsLegacyFamilies(t *testing.T) {
+	table := embeddedTable()
+	legacy := []string{
+		"sonnet-3-7", "opus-3", "haiku-3",
+		"o1-mini", "o4-mini", "gpt-4-turbo",
+		"gemini-2.5-pro", "gemini-2.5-flash",
+		"deepseek-v3", "deepseek-r1",
+		"grok-3", "grok-3-mini",
+		"mistral-large-2411", "mistral-small-2501",
+	}
+	for _, family := range legacy {
+		if _, ok := table[family]; !ok {
+			t.Errorf("legacy family %q was dropped from the pricing table; historical sessions would reprice to $0", family)
 		}
-	})
+	}
+}
+
+// TestFastModeMultiplier pins the fast-mode premium at 2x. Anthropic publishes
+// fast mode at $10/$50 per million against a $5/$25 standard rate for Claude
+// Opus 5 and Opus 4.8 — a 2x multiplier, not the 6x this constant previously
+// carried (khjx D5). Caching multipliers stack on top of the fast base price,
+// which is why the multiplier is applied to the whole token subtotal.
+func TestFastModeMultiplier(t *testing.T) {
+	if want := decimal.NewFromInt(2); !fastModeMultiplier.Equal(want) {
+		t.Errorf("fastModeMultiplier = %s, want %s (published fast mode is $10/$50 vs $5/$25 standard)", fastModeMultiplier, want)
+	}
+
+	// End to end: the same usage costs exactly twice as much at "fast" speed.
+	pricing, _ := LookupPricing("claude-opus-5-20260301")
+	usage := func(speed string) *TokenUsage {
+		return &TokenUsage{InputTokens: 1_000_000, OutputTokens: 200_000, Speed: speed}
+	}
+	standard := CalculateTotalCost(pricing, usage(""))
+	fast := CalculateTotalCost(pricing, usage("fast"))
+	if want := standard.Mul(decimal.NewFromInt(2)); !fast.Equal(want) {
+		t.Errorf("fast cost = %s, want %s (2x the standard %s)", fast, want, standard)
+	}
 }

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -26,7 +25,7 @@ func TestPricingForModel_UnknownNonEmptyModelWarnsWithContext(t *testing.T) {
 	log, buf := newCaptureLogger(slog.LevelDebug)
 	log = log.With("session_id", "sess-123", "provider", "codex")
 
-	pricing := pricingForModel(log, "totally-made-up-model", time.Time{})
+	pricing := pricingForModel(log, "totally-made-up-model")
 	if !pricing.Input.IsZero() {
 		t.Errorf("pricingForModel(unknown).Input = %s, want 0", pricing.Input)
 	}
@@ -51,7 +50,7 @@ func TestPricingForModel_UnknownNonEmptyModelWarnsWithContext(t *testing.T) {
 func TestPricingForModel_EmptyModelDebugNoWarn(t *testing.T) {
 	log, buf := newCaptureLogger(slog.LevelDebug)
 
-	pricing := pricingForModel(log, "", time.Time{})
+	pricing := pricingForModel(log, "")
 	if !pricing.Input.IsZero() {
 		t.Errorf("pricingForModel(\"\").Input = %s, want 0", pricing.Input)
 	}
@@ -74,7 +73,7 @@ func TestPricingForModel_NilLoggerSafe(t *testing.T) {
 			t.Fatalf("pricingForModel(nil, ...) panicked: %v", r)
 		}
 	}()
-	if p := pricingForModel(nil, "made-up", time.Time{}); !p.Input.IsZero() {
+	if p := pricingForModel(nil, "made-up"); !p.Input.IsZero() {
 		t.Errorf("pricingForModel(nil, unknown).Input = %s, want 0", p.Input)
 	}
 }

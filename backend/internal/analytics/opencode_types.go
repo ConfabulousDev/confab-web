@@ -3,7 +3,6 @@ package analytics
 import (
 	"context"
 	"encoding/json"
-	"time"
 )
 
 // opencodeRollout holds a parsed OpenCode session: the main thread's messages
@@ -22,9 +21,6 @@ type opencodeRollout struct {
 	downloader       opencodeAgentDownloader
 	cachedAgents     [][]*OpenCodeMessage
 	validationErrors []LineValidationError
-	// createdAt is the session's first_seen timestamp, forwarded to
-	// computeFromOpenCodeRolloutAt for date-aware pricing (e.g. Sonnet 5 intro rates).
-	createdAt        time.Time
 }
 
 type opencodeAgentFileInfo struct {

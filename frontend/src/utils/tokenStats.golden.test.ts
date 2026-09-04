@@ -33,14 +33,14 @@ import { codexAdapter } from '@/providers/codexAdapter';
 //     usage = { input_tokens: 100_000, output_tokens: 10_000 }
 //     pricing = opus-4-7 { input:5, output:25 }
 //     base = (100_000*5 + 10_000*25) / 1e6 = 0.75
-//     fast 6x = 4.50
+//     fast 2x = 1.50
 //     web_search 2 * $0.01 = 0.02   (NOT multiplied by fast)
-//     cost = 4.52
+//     cost = 1.52
 //
-//   session_total = 0.303 + 4.52 = 4.823
+//   session_total = 0.303 + 1.52 = 1.823
 // ---------------------------------------------------------------------------
 
-const CLAUDE_SESSION_TOTAL_USD = 4.823;
+const CLAUDE_SESSION_TOTAL_USD = 1.823;
 
 function claudeAssistant(
   model: string,
