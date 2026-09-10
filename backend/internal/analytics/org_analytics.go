@@ -11,8 +11,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // GetOrgAnalytics retrieves per-user aggregated analytics across all active users.
@@ -20,14 +18,6 @@ import (
 // every counted session contributes to all metrics. All active users appear
 // in the result, even those with zero qualifying sessions in the range.
 func (s *Store) GetOrgAnalytics(ctx context.Context, req OrgAnalyticsRequest) (*OrgAnalyticsResponse, error) {
-	ctx, span := tracer.Start(ctx, "analytics.get_org_analytics",
-		trace.WithAttributes(
-			attribute.Int64("start_ts", req.StartTS),
-			attribute.Int64("end_ts", req.EndTS),
-			attribute.Int("tz_offset", req.TZOffset),
-		))
-	defer span.End()
-
 	tzDuration := time.Duration(req.TZOffset) * time.Minute
 	startLocal := time.Unix(req.StartTS, 0).UTC().Add(-tzDuration)
 	endLocal := time.Unix(req.EndTS, 0).UTC().Add(-tzDuration).Add(-24 * time.Hour) // EndTS is exclusive

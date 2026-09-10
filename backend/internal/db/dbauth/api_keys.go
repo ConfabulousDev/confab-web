@@ -6,10 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -19,9 +15,6 @@ import (
 // into the request context so EnforceReadOnly can block writes from
 // API-key auth as well as session auth.
 func (s *Store) ValidateAPIKey(ctx context.Context, keyHash string) (userID int64, keyID int64, userEmail string, userStatus models.UserStatus, userReadOnly bool, err error) {
-	ctx, span := tracer.Start(ctx, "db.validate_api_key")
-	defer span.End()
-
 	query := `
 		SELECT ak.id, ak.user_id, u.email, u.status, u.read_only
 		FROM api_keys ak
@@ -34,26 +27,17 @@ func (s *Store) ValidateAPIKey(ctx context.Context, keyHash string) (userID int6
 		if err == sql.ErrNoRows {
 			return 0, 0, "", "", false, fmt.Errorf("invalid API key")
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, 0, "", "", false, fmt.Errorf("failed to validate API key: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int64("user.id", userID))
 	return userID, keyID, userEmail, userStatus, userReadOnly, nil
 }
 
 // UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
 func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
-	ctx, span := tracer.Start(ctx, "db.update_api_key_last_used",
-		trace.WithAttributes(attribute.Int64("key.id", keyID)))
-	defer span.End()
-
 	query := `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`
 	_, err := s.conn().ExecContext(ctx, query, keyID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update API key last used: %w", err)
 	}
 	return nil
@@ -61,34 +45,21 @@ func (s *Store) UpdateAPIKeyLastUsed(ctx context.Context, keyID int64) error {
 
 // CountAPIKeys returns the number of API keys for a user
 func (s *Store) CountAPIKeys(ctx context.Context, userID int64) (int, error) {
-	ctx, span := tracer.Start(ctx, "db.count_api_keys",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`
 	var count int
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&count)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, fmt.Errorf("failed to count API keys: %w", err)
 	}
-	span.SetAttributes(attribute.Int("keys.count", count))
 	return count, nil
 }
 
 // CreateAPIKeyWithReturn creates a new API key and returns the key ID and created_at
 // Returns db.ErrAPIKeyLimitExceeded if the user already has db.MaxAPIKeysPerUser keys
 func (s *Store) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
-	ctx, span := tracer.Start(ctx, "db.create_api_key",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	// Check if user has reached the limit
 	count, err := s.CountAPIKeys(ctx, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, err
 	}
 	if count >= db.MaxAPIKeysPerUser {
@@ -104,27 +75,18 @@ func (s *Store) CreateAPIKeyWithReturn(ctx context.Context, userID int64, keyHas
 		if db.IsUniqueViolation(err) {
 			return 0, time.Time{}, db.ErrAPIKeyNameExists
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int64("key.id", keyID))
 	return keyID, createdAt, nil
 }
 
 // ListAPIKeys returns all API keys for a user (without hashes)
 func (s *Store) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey, error) {
-	ctx, span := tracer.Start(ctx, "db.list_api_keys",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `SELECT id, user_id, name, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`
 
 	rows, err := s.conn().QueryContext(ctx, query, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to list API keys: %w", err)
 	}
 	defer rows.Close()
@@ -133,37 +95,23 @@ func (s *Store) ListAPIKeys(ctx context.Context, userID int64) ([]models.APIKey,
 	for rows.Next() {
 		var key models.APIKey
 		if err := rows.Scan(&key.ID, &key.UserID, &key.Name, &key.CreatedAt, &key.LastUsedAt); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan API key: %w", err)
 		}
 		keys = append(keys, key)
 	}
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error iterating API keys: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int("keys.count", len(keys)))
 	return keys, nil
 }
 
 // DeleteAPIKey deletes an API key
 func (s *Store) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
-	ctx, span := tracer.Start(ctx, "db.delete_api_key",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.Int64("key.id", keyID),
-		))
-	defer span.End()
-
 	query := `DELETE FROM api_keys WHERE id = $1 AND user_id = $2`
 
 	result, err := s.conn().ExecContext(ctx, query, keyID, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete API key: %w", err)
 	}
 
@@ -180,14 +128,8 @@ func (s *Store) DeleteAPIKey(ctx context.Context, userID, keyID int64) error {
 // If no key with the same name exists, a new key is created (subject to db.MaxAPIKeysPerUser limit).
 // Returns the new key ID and created_at timestamp.
 func (s *Store) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name string) (int64, time.Time, error) {
-	ctx, span := tracer.Start(ctx, "db.replace_api_key",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, time.Time{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()

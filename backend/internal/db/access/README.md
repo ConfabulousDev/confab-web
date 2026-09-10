@@ -6,7 +6,7 @@ Session access control and share management (create, list, revoke shares; check 
 
 | File | Role |
 |------|------|
-| `store.go` | `Store` struct definition and OpenTelemetry tracer |
+| `store.go` | `Store` struct definition |
 | `access.go` | `GetSessionAccessType` (determines how a user can access a session) and `GetSessionDetailWithAccess` (returns session detail with PII redaction for non-owners) |
 | `shares.go` | Share CRUD: `CreateShare`, `CreateSystemShare`, `ListShares`, `ListAllUserShares`, `ListSystemShares`, `RevokeShare`, `CountUserSharesSince` (daily-quota counter), `DeleteExpiredShares` (periodic housekeeping), and the private `loadShareRecipients` helper |
 
@@ -55,4 +55,3 @@ Session access control and share management (create, list, revoke shares; check 
 
 - `github.com/ConfabulousDev/confab-web/internal/db` -- Root DB package for types, errors, helpers
 - `github.com/ConfabulousDev/confab-web/internal/models` -- `UserStatus` enum for owner deactivation check
-- `go.opentelemetry.io/otel` -- Distributed tracing

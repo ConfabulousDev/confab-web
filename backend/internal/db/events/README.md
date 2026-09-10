@@ -6,7 +6,7 @@ Session event insertion for recording timestamped events with JSON payloads.
 
 | File | Role |
 |------|------|
-| `store.go` | `Store` struct definition and OpenTelemetry tracer |
+| `store.go` | `Store` struct definition |
 | `events.go` | `InsertSessionEvent` -- inserts a row into `session_events` |
 | `events_integration_test.go` | Integration tests for the happy path, nil-payload JSONB-null path, FK violation, and CHECK-constraint rejection of unknown `event_type` values |
 
@@ -38,4 +38,3 @@ Session event insertion for recording timestamped events with JSON payloads.
 ## Dependencies
 
 - `github.com/ConfabulousDev/confab-web/internal/db` -- Root DB package for `SessionEventParams` type
-- `go.opentelemetry.io/otel` -- Distributed tracing

@@ -9,14 +9,7 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
-
-var tracer = otel.Tracer("confab/anthropic")
 
 const (
 	defaultBaseURL = "https://api.anthropic.com"
@@ -55,29 +48,16 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	return c
 }
 
-func spanError(span trace.Span, err error) error {
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
-	return err
-}
-
 // CreateMessage sends a message to the Anthropic API and returns the response.
 func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*MessagesResponse, error) {
-	ctx, span := tracer.Start(ctx, "anthropic.create_message",
-		trace.WithAttributes(
-			attribute.String("llm.model", req.Model),
-			attribute.Int("llm.max_tokens", req.MaxTokens),
-		))
-	defer span.End()
-
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, spanError(span, fmt.Errorf("failed to marshal request: %w", err))
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
-		return nil, spanError(span, fmt.Errorf("failed to create request: %w", err))
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -86,39 +66,28 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, spanError(span, fmt.Errorf("failed to send request: %w", err))
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	span.SetAttributes(attribute.Int("http.status_code", resp.StatusCode))
-
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, spanError(span, fmt.Errorf("failed to read response: %w", err))
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
 		var apiErr APIError
 		if err := json.Unmarshal(respBody, &apiErr); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, fmt.Sprintf("API error (status %d)", resp.StatusCode))
 			return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
 		}
 		apiErr.StatusCode = resp.StatusCode
-		return nil, spanError(span, &apiErr)
+		return nil, &apiErr
 	}
 
 	var messagesResp MessagesResponse
 	if err := json.Unmarshal(respBody, &messagesResp); err != nil {
-		return nil, spanError(span, fmt.Errorf("failed to unmarshal response: %w", err))
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
-
-	span.SetAttributes(
-		attribute.Int("llm.tokens.input", messagesResp.Usage.InputTokens),
-		attribute.Int("llm.tokens.output", messagesResp.Usage.OutputTokens),
-		attribute.Int("llm.tokens.cache_creation", messagesResp.Usage.CacheCreationInputTokens),
-		attribute.Int("llm.tokens.cache_read", messagesResp.Usage.CacheReadInputTokens),
-	)
 
 	return &messagesResp, nil
 }

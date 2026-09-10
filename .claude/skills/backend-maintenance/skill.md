@@ -277,7 +277,6 @@ Create a summary with:
 - Clear package separation (api, db, auth, storage, email, analytics)
 - Interface usage for testability (RateLimiter, email.Service)
 - Context propagation with timeouts throughout
-- OpenTelemetry tracing instrumentation
 - Sentinel errors (ErrSessionNotFound, ErrForbidden, etc.)
 - Validation package with DB-aligned length limits
 - Graceful shutdown handling

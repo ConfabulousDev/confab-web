@@ -13,7 +13,6 @@ The free managed instance at [confabulous.dev](https://confabulous.dev) runs on 
 - **Tigris** ([Fly Object Storage](https://fly.io/docs/reference/tigris/)) for S3-compatible session-blob storage.
 - **[Neon](https://neon.tech/)** as the managed Postgres provider — connection string passed in as `DATABASE_URL` (a Fly secret).
 - **Resend** for share-invitation email.
-- **Honeycomb** for OpenTelemetry traces.
 - **Anthropic** for Smart Recaps.
 
 The full configuration lives in the repo at [`fly.toml`](https://github.com/ConfabulousDev/confab-web/blob/main/fly.toml), with the deploy script at [`deploy-to-fly.sh`](https://github.com/ConfabulousDev/confab-web/blob/main/deploy-to-fly.sh).
@@ -22,7 +21,7 @@ Notable choices for a Fly.io deployment:
 
 - Two `[[vm]]` blocks — one for the `app` process (auto-stop enabled), one for the always-on `worker` singleton.
 - `S3_ENDPOINT = "fly.storage.tigris.dev"` for Tigris, with `S3_USE_SSL = "true"`.
-- Secrets (`AWS_*`, `CSRF_SECRET_KEY`, `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `OTEL_EXPORTER_OTLP_HEADERS`) are set via `fly secrets set`, not in `fly.toml`.
+- Secrets (`AWS_*`, `CSRF_SECRET_KEY`, `RESEND_API_KEY`, `ANTHROPIC_API_KEY`) are set via `fly secrets set`, not in `fly.toml`.
 - `auto_stop_machines = 'stop'` plus `min_machines_running = 1` keeps response latency low while letting unused machines stop on idle.
 
 ### Deploying

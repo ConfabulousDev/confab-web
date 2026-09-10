@@ -28,7 +28,6 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `compression.go` | `decompressMiddleware` -- handles zstd decompression of request bodies from CLI uploads |
 | `content_type.go` | `validateContentType` middleware -- enforces `application/json` Content-Type on POST/PUT/PATCH requests within `/api/v1` |
 | `flylogger.go` | `FlyLogger` middleware and `ParseCLIUserAgent` -- structured HTTP request logging with client IP, user ID, Fly.io region, CLI version, and 4xx error body capture |
-| `tracing.go` | `SpanEnricher` middleware -- adds CLI version/OS/arch attributes to OpenTelemetry spans |
 | `fetch_metadata.go` | `crossOriginGuard` -- Fetch-Metadata (`Sec-Fetch-Site`) + `Origin` cross-origin check wrapping `/auth/cli/authorize` and `/auth/device/verify`, which sit outside the CSRF group. Unlike the CSRF library it does NOT exempt safe methods, so the state-changing GET (`cli/authorize`) is covered; reuses `trustedOrigins`; fails closed when neither header is present (56mw). |
 
 ## Key Types
@@ -112,7 +111,6 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
 - **`filippo.io/csrf/gorilla`** -- CSRF protection
 - **`github.com/andybalholm/brotli`** -- Brotli compression encoder
 - **`github.com/klauspost/compress/zstd`** -- zstd decompression for CLI uploads
-- **`go.opentelemetry.io/otel`** -- OpenTelemetry span enrichment
 - **`internal/auth`** -- authentication middleware and API key generation
 - **`internal/db`** (and sub-packages) -- database access layer
 - **`internal/storage`** -- S3 storage for transcript chunks

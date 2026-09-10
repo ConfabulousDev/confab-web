@@ -10,22 +10,9 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
-
-var tracer = otel.Tracer("confab/storage")
-
-// recordSpanError marks the span as failed and records err on it. It is a
-// shorthand for the RecordError+SetStatus pair repeated across storage ops.
-func recordSpanError(span trace.Span, err error) {
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
-}
 
 // Sentinel errors for storage operations
 var (
@@ -95,36 +82,24 @@ func NewS3Storage(config S3Config) (*S3Storage, error) {
 
 // Download retrieves a file from S3/MinIO
 func (s *S3Storage) Download(ctx context.Context, key string) ([]byte, error) {
-	ctx, span := tracer.Start(ctx, "storage.download",
-		trace.WithAttributes(attribute.String("storage.key", key)))
-	defer span.End()
-
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		recordSpanError(span, err)
 		return nil, classifyStorageError(err, "download")
 	}
 	defer object.Close()
 
 	data, err := io.ReadAll(object)
 	if err != nil {
-		recordSpanError(span, err)
 		return nil, classifyStorageError(err, "download")
 	}
 
-	span.SetAttributes(attribute.Int("file.size", len(data)))
 	return data, nil
 }
 
 // Delete removes a file from S3/MinIO
 func (s *S3Storage) Delete(ctx context.Context, key string) error {
-	ctx, span := tracer.Start(ctx, "storage.delete",
-		trace.WithAttributes(attribute.String("storage.key", key)))
-	defer span.End()
-
 	err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
-		recordSpanError(span, err)
 		return fmt.Errorf("failed to delete from S3: %w", err)
 	}
 	return nil
@@ -208,18 +183,6 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, provider stri
 		return "", fmt.Errorf("invalid line range [%d, %d]: must satisfy 1 <= firstLine <= lastLine <= %d", firstLine, lastLine, MaxLineNumber)
 	}
 
-	ctx, span := tracer.Start(ctx, "storage.upload_chunk",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("session.provider", provider),
-			attribute.String("session.external_id", externalID),
-			attribute.String("file.name", fileName),
-			attribute.Int("chunk.first_line", firstLine),
-			attribute.Int("chunk.last_line", lastLine),
-			attribute.Int("file.size", len(data)),
-		))
-	defer span.End()
-
 	key := chunkPrefix(userID, provider, externalID, fileName) +
 		fmt.Sprintf("chunk_%08d_%08d.jsonl", firstLine, lastLine)
 
@@ -228,7 +191,6 @@ func (s *S3Storage) UploadChunk(ctx context.Context, userID int64, provider stri
 		ContentType: "application/json",
 	})
 	if err != nil {
-		recordSpanError(span, err)
 		return "", classifyStorageError(err, "upload chunk")
 	}
 
@@ -243,15 +205,6 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, provider strin
 		return nil, fmt.Errorf("list chunks: %w", err)
 	}
 
-	ctx, span := tracer.Start(ctx, "storage.list_chunks",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("session.provider", provider),
-			attribute.String("session.external_id", externalID),
-			attribute.String("file.name", fileName),
-		))
-	defer span.End()
-
 	prefix := chunkPrefix(userID, provider, externalID, fileName)
 
 	var keys []string
@@ -262,21 +215,15 @@ func (s *S3Storage) ListChunks(ctx context.Context, userID int64, provider strin
 
 	for obj := range objectCh {
 		if obj.Err != nil {
-			span.RecordError(obj.Err)
-			span.SetStatus(codes.Error, obj.Err.Error())
 			return nil, classifyStorageError(obj.Err, "list chunks")
 		}
 		keys = append(keys, obj.Key)
 
 		// Sanity check to prevent unbounded memory usage
 		if len(keys) > MaxChunksPerFile {
-			err := fmt.Errorf("list chunks: %w (limit: %d)", ErrTooManyChunks, MaxChunksPerFile)
-			recordSpanError(span, err)
-			return nil, err
+			return nil, fmt.Errorf("list chunks: %w (limit: %d)", ErrTooManyChunks, MaxChunksPerFile)
 		}
 	}
-
-	span.SetAttributes(attribute.Int("chunks.count", len(keys)))
 
 	// Keys are already sorted by ListObjects (lexicographic order)
 	// Due to zero-padded line numbers, this gives correct order
@@ -291,19 +238,10 @@ func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, pr
 		return fmt.Errorf("delete session chunks: %w", err)
 	}
 
-	ctx, span := tracer.Start(ctx, "storage.delete_all_session_chunks",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("session.provider", provider),
-			attribute.String("session.external_id", externalID),
-		))
-	defer span.End()
-
 	// Session-wide prefix (no file-name segment) — deletes every chunk under
 	// this session's chunks/ subtree, scoped to the named provider.
 	prefix := sessionChunksPrefix(userID, provider, externalID)
 
-	var deletedCount int
 	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
@@ -311,31 +249,20 @@ func (s *S3Storage) DeleteAllSessionChunks(ctx context.Context, userID int64, pr
 
 	for obj := range objectCh {
 		if obj.Err != nil {
-			span.RecordError(obj.Err)
-			span.SetStatus(codes.Error, obj.Err.Error())
 			return classifyStorageError(obj.Err, "list session chunks")
 		}
 		if err := s.Delete(ctx, obj.Key); err != nil {
-			recordSpanError(span, err)
 			return fmt.Errorf("failed to delete chunk %s: %w", obj.Key, err)
 		}
-		deletedCount++
 	}
-
-	span.SetAttributes(attribute.Int("chunks.deleted", deletedCount))
 
 	return nil
 }
 
 // DeleteAllUserData deletes all S3 objects for a user (prefix: {userID}/).
 func (s *S3Storage) DeleteAllUserData(ctx context.Context, userID int64) error {
-	ctx, span := tracer.Start(ctx, "storage.delete_all_user_data",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	prefix := fmt.Sprintf("%d/", userID)
 
-	var deletedCount int
 	objectCh := s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
@@ -343,17 +270,12 @@ func (s *S3Storage) DeleteAllUserData(ctx context.Context, userID int64) error {
 
 	for obj := range objectCh {
 		if obj.Err != nil {
-			span.RecordError(obj.Err)
-			span.SetStatus(codes.Error, obj.Err.Error())
 			return classifyStorageError(obj.Err, "list user objects")
 		}
 		if err := s.Delete(ctx, obj.Key); err != nil {
-			recordSpanError(span, err)
 			return fmt.Errorf("failed to delete object %s: %w", obj.Key, err)
 		}
-		deletedCount++
 	}
 
-	span.SetAttributes(attribute.Int("objects.deleted", deletedCount))
 	return nil
 }

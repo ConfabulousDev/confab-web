@@ -6,7 +6,7 @@ Session CRUD, paginated listing with filtering, and incremental sync state manag
 
 | File | Role |
 |------|------|
-| `store.go` | `Store` struct definition and OpenTelemetry tracer |
+| `store.go` | `Store` struct definition |
 | `session.go` | Session listing (`ListUserSessions`, `ListUserSessionsPaginated`), detail retrieval, delete, ownership verification, title/summary updates, ID lookups. Cursor-based pagination, search (FTS via `BuildPrefixTsquery`, commit-SHA prefix, plus session-ID prefix matching — confab UUID `s.id` and `external_id`, gated to queries ≥ `idSearchMinLen` chars; CF-573), and filter option materialization. Visibility routes through `db.VisibleSessionsCTE` + `dedupedVisibleCTE` (priority dedup: owner > private_share > system_share) so the predicate is shared with analytics (CF-495). `VerifySessionOwnership` and `GetSessionOwnerExternalIDAndProvider` both return the canonical provider value alongside the external_id so callers can pass it straight into chunk-storage methods. |
 | `sync.go` | Incremental sync operations: `FindOrCreateSyncSession`, `UpdateSyncFileState`, `GetSyncFileState`, `UpdateSyncFileChunkCount`, `buildSessionLookupQuery`. Manages the `sync_files` table and session metadata updates during sync. The provider-aware lookup matches both canonical and legacy `session_type` values for `claude-code`. |
 
@@ -58,4 +58,3 @@ Provider value constants and the `Claude Code` → `claude-code` legacy mapping 
 - `github.com/ConfabulousDev/confab-web/internal/db` -- Root DB package for types, errors, helpers
 - `github.com/lib/pq` -- `pq.Array` and `pq.StringArray` for PostgreSQL array operations
 - `github.com/google/uuid` -- UUID generation for new sessions
-- `go.opentelemetry.io/otel` -- Distributed tracing

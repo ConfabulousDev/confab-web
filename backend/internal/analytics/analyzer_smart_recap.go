@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -10,9 +11,6 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -123,10 +121,6 @@ func NewSmartRecapAnalyzer(client *anthropic.Client, model string, cfg SmartReca
 // cardStats contains the computed analytics cards (tokens, session, conversation, etc.)
 // which are included in the prompt for additional context.
 func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, cardStats map[string]interface{}) (*SmartRecapResult, error) {
-	ctx, span := tracer.Start(ctx, "analytics.smart_recap.analyze",
-		trace.WithAttributes(attribute.String("llm.model", a.model)))
-	defer span.End()
-
 	// Use pre-built transcript if provided (streaming path), otherwise build from FileCollection
 	transcript := input.Transcript
 	idMap := input.IDMap
@@ -134,10 +128,7 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 		transcript, idMap = PrepareTranscript(input.FileCollection)
 	}
 	if transcript == "" {
-		err := fmt.Errorf("no content to analyze")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
+		return nil, errors.New("no content to analyze")
 	}
 
 	// Prepare the stats section
@@ -149,26 +140,15 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 		userContent = transcript + "\n\n" + statsSection
 	}
 
-	// Track content size
-	contentLen := len(userContent)
-	truncated := false
-
 	// Truncate if too long (prioritize transcript, stats are at the end)
-	if contentLen > a.maxTranscriptChars {
+	if len(userContent) > a.maxTranscriptChars {
 		// Truncate transcript portion, keep stats
 		maxTranscript := a.maxTranscriptChars - len(statsSection) - 100 // leave room for truncation message
 		if maxTranscript > 0 && len(transcript) > maxTranscript {
 			transcript = transcript[:maxTranscript] + "\n\n[Transcript truncated due to length]"
 			userContent = transcript + "\n\n" + statsSection
 		}
-		truncated = true
 	}
-
-	span.SetAttributes(
-		attribute.Int("content.chars", contentLen),
-		attribute.Bool("content.truncated", truncated),
-		attribute.Bool("stats.included", statsSection != ""),
-	)
 
 	start := time.Now()
 
@@ -189,8 +169,6 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 		},
 	})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("LLM request failed: %w", err)
 	}
 
@@ -208,8 +186,6 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 			"response_length", len(llmContent),
 			"raw_response", llmContent,
 		)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
@@ -219,13 +195,6 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 	result.InputTokens = resp.Usage.InputTokens
 	result.OutputTokens = resp.Usage.OutputTokens
 	result.GenerationTimeMs = generationTimeMs
-
-	// Record final metrics
-	span.SetAttributes(
-		attribute.Int("llm.tokens.input", result.InputTokens),
-		attribute.Int("llm.tokens.output", result.OutputTokens),
-		attribute.Int("generation.time_ms", generationTimeMs),
-	)
 
 	return result, nil
 }

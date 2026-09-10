@@ -10,7 +10,7 @@ package only records the thread tree shape and per-thread metadata.
 
 | File | Role |
 |------|------|
-| `store.go` | `Store` struct and OpenTelemetry tracer |
+| `store.go` | `Store` struct |
 | `rollouts.go` | `Rollout` type, `UpsertRolloutParams`, `UpsertRollout`, `GetRollout`, `ListSubtree` (recursive CTE) |
 | `rollouts_test.go` | Integration tests (Docker-backed) |
 
@@ -49,4 +49,3 @@ Integration tests live in `rollouts_test.go` and require Docker (Postgres contai
 ## Dependencies
 
 - `github.com/ConfabulousDev/confab-web/internal/db` — Root DB package (handle, sentinel errors, `NormalizeProvider`)
-- `go.opentelemetry.io/otel` — Distributed tracing

@@ -208,9 +208,6 @@ Controls when sessions need recomputation. `WORKER_REGULAR_*` = analytics cards,
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `LOG_LEVEL` | `info` | No | Log level: `debug`, `info`, `warn`, `error` |
-| `OTEL_SERVICE_NAME` | *(none)* | No | OpenTelemetry service name |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(none)* | No | OTLP exporter endpoint (e.g. `https://api.honeycomb.io`) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | *(none)* | No | OTLP exporter headers (e.g. `x-honeycomb-team=your-api-key`) |
 | `ENABLE_PPROF` | `false` | No | Enable pprof profiling server on `localhost:6060` |
 
 ## HTTP Tuning

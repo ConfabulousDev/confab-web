@@ -6,9 +6,6 @@ import (
 	"fmt"
 
 	"github.com/lib/pq"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -16,10 +13,6 @@ import (
 
 // GetUserByID retrieves a user by ID
 func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, error) {
-	ctx, span := tracer.Start(ctx, "db.get_user_by_id",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `SELECT id, email, name, avatar_url, status, read_only, is_admin, created_at, updated_at FROM users WHERE id = $1`
 
 	var user models.User
@@ -38,8 +31,6 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 		if err == sql.ErrNoRows {
 			return nil, db.ErrUserNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
@@ -51,10 +42,6 @@ func (s *Store) GetUserByID(ctx context.Context, userID int64) (*models.User, er
 // the resulting user and whether the row pre-existed (caller logs WARN if so,
 // because flipping a real user is a significant operator action). CF-483.
 func (s *Store) UpsertDemoIdentity(ctx context.Context, email string) (*models.User, bool, error) {
-	ctx, span := tracer.Start(ctx, "db.upsert_demo_identity",
-		trace.WithAttributes(attribute.String("email", email)))
-	defer span.End()
-
 	query := `
 		INSERT INTO users (email, name, status, is_admin, read_only, created_at, updated_at)
 		VALUES ($1, 'Demo', 'active', false, true, NOW(), NOW())
@@ -75,8 +62,6 @@ func (s *Store) UpsertDemoIdentity(ctx context.Context, email string) (*models.U
 		&preExisted,
 	)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, false, fmt.Errorf("upsert demo identity: %w", err)
 	}
 	return &user, preExisted, nil
@@ -88,14 +73,8 @@ func (s *Store) UpsertDemoIdentity(ctx context.Context, email string) (*models.U
 // cannot be logged in via password even if it inherited a hash from
 // a pre-existing real user. Idempotent.
 func (s *Store) DeletePasswordIdentitiesForUser(ctx context.Context, userID int64) error {
-	ctx, span := tracer.Start(ctx, "db.delete_password_identities_for_user",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `DELETE FROM user_identities WHERE user_id = $1 AND provider = 'password'`
 	if _, err := s.conn().ExecContext(ctx, query, userID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("delete password identities: %w", err)
 	}
 	return nil
@@ -103,18 +82,12 @@ func (s *Store) DeletePasswordIdentitiesForUser(ctx context.Context, userID int6
 
 // CountUsers returns the total number of users in the system
 func (s *Store) CountUsers(ctx context.Context) (int, error) {
-	ctx, span := tracer.Start(ctx, "db.count_users")
-	defer span.End()
-
 	query := `SELECT COUNT(*) FROM users`
 	var count int
 	err := s.conn().QueryRowContext(ctx, query).Scan(&count)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, fmt.Errorf("failed to count users: %w", err)
 	}
-	span.SetAttributes(attribute.Int("users.count", count))
 	return count, nil
 }
 
@@ -124,16 +97,11 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 // env super-admins without a matching user row are excluded — they can't
 // actually log in. Used by the last-effective-admin guard (g0bq).
 func (s *Store) ListEffectiveAdminIDs(ctx context.Context, superAdminEmails []string) ([]int64, error) {
-	ctx, span := tracer.Start(ctx, "db.list_effective_admin_ids")
-	defer span.End()
-
 	query := `
 		SELECT id FROM users
 		WHERE status = 'active' AND (is_admin = true OR LOWER(email) = ANY($1))`
 	rows, err := s.conn().QueryContext(ctx, query, pq.Array(superAdminEmails))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to list effective admin ids: %w", err)
 	}
 	defer rows.Close()
@@ -142,41 +110,29 @@ func (s *Store) ListEffectiveAdminIDs(ctx context.Context, superAdminEmails []st
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
-			span.RecordError(err)
 			return nil, fmt.Errorf("failed to scan effective admin id: %w", err)
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
 		return nil, fmt.Errorf("effective admin id rows: %w", err)
 	}
-	span.SetAttributes(attribute.Int("admins.effective_count", len(ids)))
 	return ids, nil
 }
 
 // UserExistsByEmail checks if a user exists with the given email
 func (s *Store) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
-	ctx, span := tracer.Start(ctx, "db.user_exists_by_email")
-	defer span.End()
-
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`
 	var exists bool
 	err := s.conn().QueryRowContext(ctx, query, email).Scan(&exists)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return false, fmt.Errorf("failed to check user exists: %w", err)
 	}
-	span.SetAttributes(attribute.Bool("user.exists", exists))
 	return exists, nil
 }
 
 // ListAllUsers returns all users in the system with stats, ordered by ID
 func (s *Store) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, error) {
-	ctx, span := tracer.Start(ctx, "db.list_all_users")
-	defer span.End()
-
 	query := `
 		SELECT
 			u.id, u.email, u.name, u.avatar_url, u.status, u.created_at, u.updated_at, u.is_admin,
@@ -192,8 +148,6 @@ func (s *Store) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, erro
 
 	rows, err := s.conn().QueryContext(ctx, query)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
 	defer rows.Close()
@@ -215,45 +169,29 @@ func (s *Store) ListAllUsers(ctx context.Context) ([]models.AdminUserStats, erro
 			&user.LastLoggedIn,
 		)
 		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
 		users = append(users, user)
 	}
 
 	if err = rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error iterating users: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int("users.count", len(users)))
 	return users, nil
 }
 
 // UpdateUserStatus updates the status of a user (active/inactive)
 func (s *Store) UpdateUserStatus(ctx context.Context, userID int64, status models.UserStatus) error {
-	ctx, span := tracer.Start(ctx, "db.update_user_status",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("user.status", string(status)),
-		))
-	defer span.End()
-
 	query := `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2`
 
 	result, err := s.conn().ExecContext(ctx, query, status, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update user status: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
@@ -267,23 +205,15 @@ func (s *Store) UpdateUserStatus(ctx context.Context, userID int64, status model
 // DeleteUser permanently deletes a user and all associated data (via CASCADE)
 // Note: S3 objects must be deleted separately before calling this function
 func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
-	ctx, span := tracer.Start(ctx, "db.delete_user",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `DELETE FROM users WHERE id = $1`
 
 	result, err := s.conn().ExecContext(ctx, query, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
@@ -296,52 +226,32 @@ func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
 
 // HasOwnSessions checks if a user has any sessions they own
 func (s *Store) HasOwnSessions(ctx context.Context, userID int64) (bool, error) {
-	ctx, span := tracer.Start(ctx, "db.has_own_sessions",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `SELECT EXISTS(SELECT 1 FROM sessions WHERE user_id = $1)`
 	var exists bool
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&exists)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return false, fmt.Errorf("failed to check user sessions: %w", err)
 	}
-	span.SetAttributes(attribute.Bool("user.has_own_sessions", exists))
 	return exists, nil
 }
 
 // HasAPIKeys checks if a user has any API keys
 func (s *Store) HasAPIKeys(ctx context.Context, userID int64) (bool, error) {
-	ctx, span := tracer.Start(ctx, "db.has_api_keys",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `SELECT EXISTS(SELECT 1 FROM api_keys WHERE user_id = $1)`
 	var exists bool
 	err := s.conn().QueryRowContext(ctx, query, userID).Scan(&exists)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return false, fmt.Errorf("failed to check user API keys: %w", err)
 	}
-	span.SetAttributes(attribute.Bool("user.has_api_keys", exists))
 	return exists, nil
 }
 
 // GetUserSessionIDs returns all session IDs (UUIDs) for a user
 func (s *Store) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, error) {
-	ctx, span := tracer.Start(ctx, "db.get_user_session_ids",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `SELECT id FROM sessions WHERE user_id = $1`
 
 	rows, err := s.conn().QueryContext(ctx, query, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get user sessions: %w", err)
 	}
 	defer rows.Close()
@@ -350,20 +260,15 @@ func (s *Store) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, 
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("failed to scan session ID: %w", err)
 		}
 		sessionIDs = append(sessionIDs, id)
 	}
 
 	if err = rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error iterating sessions: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int("sessions.count", len(sessionIDs)))
 	return sessionIDs, nil
 }
 
@@ -371,26 +276,15 @@ func (s *Store) GetUserSessionIDs(ctx context.Context, userID int64) ([]string, 
 // when no row matches. This controls one half of the admin union; the
 // SUPER_ADMIN_EMAILS env half is unaffected.
 func (s *Store) SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error {
-	ctx, span := tracer.Start(ctx, "db.set_user_admin",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.Bool("user.is_admin", isAdmin),
-		))
-	defer span.End()
-
 	query := `UPDATE users SET is_admin = $1, updated_at = NOW() WHERE id = $2`
 
 	result, err := s.conn().ExecContext(ctx, query, isAdmin, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to set user admin: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 

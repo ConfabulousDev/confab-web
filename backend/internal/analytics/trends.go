@@ -14,8 +14,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // resolveProviderFilter expands canonical wire values to the canonical+legacy
@@ -120,17 +118,6 @@ func lowercaseAll(ss []string) []string {
 // aggregation routes through buildTrendsQuery so the visibility predicate
 // + owner narrowing live in exactly one place (CF-495).
 func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) (*TrendsResponse, error) {
-	ctx, span := tracer.Start(ctx, "analytics.get_trends",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.Int64("start_ts", req.StartTS),
-			attribute.Int64("end_ts", req.EndTS),
-			attribute.Int("tz_offset", req.TZOffset),
-			attribute.Int("owners.count", len(req.Owners)),
-			attribute.Bool("share_all_sessions", req.ShareAllSessions),
-		))
-	defer span.End()
-
 	// Derive local dates from epoch timestamps and timezone offset for the response
 	tzDuration := time.Duration(req.TZOffset) * time.Minute
 	startLocal := time.Unix(req.StartTS, 0).UTC().Add(-tzDuration)
@@ -301,9 +288,9 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 //
 // daily_agg groups by (session_date, session_type) so DailySessionCount can
 // carry a per-provider session-count map for the stacked-bar chart. Empty
-// days from the date_range LEFT JOIN surface as one row with session_type
-// '' and zero numerics — used only to register the date in the output (no
-// provider accumulation). Provider keys are folded server-side via
+// days from the date_range LEFT JOIN surface as one row with an empty
+// session_type and zero numerics — used only to register the date in the
+// output (no provider accumulation). Provider keys are folded server-side via
 // models.NormalizeProvider so legacy 'Claude Code' rows collapse into
 // 'claude-code'.
 func (s *Store) aggregateOverviewAndActivity(ctx context.Context, tq trendsQuery) (*TrendsOverviewCard, *TrendsActivityCard, *TrendsUtilizationCard, int, error) {

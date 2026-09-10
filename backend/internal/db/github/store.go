@@ -4,10 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
-	"go.opentelemetry.io/otel"
 )
-
-var tracer = otel.Tracer("confab/db/github")
 
 // Store provides GitHub link database operations.
 type Store struct {

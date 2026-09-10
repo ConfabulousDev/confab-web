@@ -107,14 +107,13 @@ Client (browser / CLI)
 │  2. ClientIP (extract real IP from proxy headers)   │
 │  3. RateLimit (reject abusive requests early)       │
 │  4. RequestID                                       │
-│  5. SpanEnricher (OpenTelemetry)                    │
-│  6. Logger (request-scoped structured logging)      │
-│  7. Redirects + Security headers                    │
-│  8. Compression (Brotli / gzip)                     │
-│  9. FlyLogger                                       │
-│  10. CORS                                           │
-│  11. CSRF (session-based routes only)               │
-│  12. Auth (RequireSession / RequireAPIKey /          │
+│  5. Logger (request-scoped structured logging)      │
+│  6. Redirects + Security headers                    │
+│  7. Compression (Brotli / gzip)                     │
+│  8. FlyLogger                                       │
+│  9. CORS                                            │
+│  10. CSRF (session-based routes only)               │
+│  11. Auth (RequireSession / RequireAPIKey /          │
 │          OptionalAuth — per route group)             │
 └──────────────────────┬──────────────────────────────┘
                        │

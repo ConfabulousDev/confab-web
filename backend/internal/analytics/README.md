@@ -285,7 +285,6 @@ Key test patterns:
 | Dependency | Purpose |
 |------------|---------|
 | `github.com/shopspring/decimal` | Precise cost arithmetic (avoids floating-point rounding) |
-| `go.opentelemetry.io/otel` | Distributed tracing spans on all Store and compute operations |
 | `github.com/lib/pq` | PostgreSQL array parameters in trends queries |
 | `github.com/ConfabulousDev/confab-web/internal/anthropic` | LLM client for smart recap generation |
 | `github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings` | Custom smart recap prompt retrieval |

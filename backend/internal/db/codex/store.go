@@ -4,10 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
-	"go.opentelemetry.io/otel"
 )
-
-var tracer = otel.Tracer("confab/db/codex")
 
 // Store provides codex_rollouts database operations.
 type Store struct {

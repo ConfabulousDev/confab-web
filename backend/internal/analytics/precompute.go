@@ -13,9 +13,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/lib/pq"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // ErrQuotaExceeded is returned when a user has exceeded their smart recap quota for the month.
@@ -145,10 +142,6 @@ func NewPrecomputer(rawDB *sql.DB, store *storage.S3Storage, analyticsStore *Sto
 //
 // Sessions are ordered by: new sessions → version mismatch → largest line gap → last_sync_at
 func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]StaleSession, error) {
-	ctx, span := tracer.Start(ctx, "precompute.find_stale_sessions",
-		trace.WithAttributes(attribute.Int("limit", limit)))
-	defer span.End()
-
 	th := p.config.RegularCardsThresholds
 
 	// Query implements the staleness algorithm:
@@ -287,8 +280,6 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		WorkflowsCardVersion,              // $15
 	)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	defer rows.Close()
@@ -298,8 +289,6 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 		var s StaleSession
 		var rawProvider string
 		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 		s.Provider = models.NormalizeProvider(rawProvider)
@@ -307,12 +296,9 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 	}
 
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	span.SetAttributes(attribute.Int("sessions.found", len(sessions)))
 	return sessions, nil
 }
 
@@ -320,57 +306,30 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 // session. Smart recap is handled separately via PrecomputeSmartRecapOnly with
 // its own staleness thresholds.
 func (p *Precomputer) PrecomputeRegularCards(ctx context.Context, session StaleSession) error {
-	ctx, span := tracer.Start(ctx, "precompute.regular_cards",
-		trace.WithAttributes(
-			attribute.String("session.id", session.SessionID),
-			attribute.String("session.provider", session.Provider),
-			attribute.Int64("session.user_id", session.UserID),
-			attribute.Int64("session.total_lines", session.TotalLines),
-		))
-	defer span.End()
-
 	// Enrich the ctx logger so any unknown-model pricing warning emitted deep in
 	// the compute path is traceable to this session.
 	ctx = logger.WithLogger(ctx, logger.Ctx(ctx).With("session_id", session.SessionID, "provider", session.Provider))
 
 	sp, err := ProviderFor(session.Provider)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
 	rollout, err := sp.Parse(ctx, p.parseInput(session))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	if rollout == nil {
-		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
 	computed := sp.ComputeCards(ctx, rollout)
 	if computed == nil {
-		err := fmt.Errorf("provider %q returned nil compute result", session.Provider)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if computed.SkippedAgentFiles > 0 {
-		span.SetAttributes(attribute.Int("agent_files.skipped", computed.SkippedAgentFiles))
+		return fmt.Errorf("provider %q returned nil compute result", session.Provider)
 	}
 
 	cards := computed.ToCards(session.SessionID, session.TotalLines)
-	if err := p.analyticsStore.UpsertCards(ctx, cards); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	span.SetAttributes(attribute.Bool("session.computed", true))
-	return nil
+	return p.analyticsStore.UpsertCards(ctx, cards)
 }
 
 func (p *Precomputer) parseInput(session StaleSession) ParseInput {
@@ -387,20 +346,11 @@ func (p *Precomputer) parseInput(session StaleSession) ParseInput {
 // precomputeSmartRecap handles smart recap generation with line count and quota checks.
 // Returns an error if smart recap generation fails. Returns nil if skipped (up-to-date, quota exceeded, lock held).
 func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSession, input GenerateInput, clearMessageIDs bool) error {
-	ctx, span := tracer.Start(ctx, "precompute.smart_recap",
-		trace.WithAttributes(attribute.String("session.id", session.SessionID)))
-	defer span.End()
-
 	isAdminRegen := session.RegenRequestedAt != nil
-	if isAdminRegen {
-		span.SetAttributes(attribute.Bool("admin_regen", true))
-	}
 
 	// Get current smart recap card to check if up-to-date
 	smartCard, err := p.analyticsStore.GetSmartRecapCard(ctx, session.SessionID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -409,7 +359,7 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	// since the card may be "up to date" by version+lines but stale by admin request.
 	if smartCard.IsUpToDate(session.TotalLines) {
 		if !isAdminRegen || !smartCard.ComputedAt.Before(*session.RegenRequestedAt) {
-			span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "up_to_date"))
+			logger.Ctx(ctx).Debug("smart recap skipped: up to date", "session_id", session.SessionID)
 			return nil
 		}
 	}
@@ -420,12 +370,9 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 		// the later Increment call in the generator never fails on a missing row).
 		quota, err := recapquota.GetOrCreate(ctx, p.db, session.UserID)
 		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 		if p.config.SmartRecapQuota > 0 && quota.ComputeCount >= p.config.SmartRecapQuota {
-			span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "quota_exceeded"))
 			return ErrQuotaExceeded
 		}
 	}
@@ -433,22 +380,13 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 	// Use the shared generator for the actual generation (handles lock, LLM call, save, quota increment)
 	result := p.smartRecapGenerator.generate(ctx, input, p.config.LockTimeoutSeconds, isAdminRegen, clearMessageIDs)
 
+	// A lock-held skip is logged by the generator itself, which covers every
+	// caller (worker and API), so it needs no second line here.
 	if result.Skipped {
-		span.SetAttributes(attribute.Bool("smart_recap.skipped", true), attribute.String("reason", "lock_held"))
 		return nil
 	}
-	if result.Error != nil {
-		span.RecordError(result.Error)
-		span.SetStatus(codes.Error, result.Error.Error())
-		return result.Error
-	}
 
-	span.SetAttributes(
-		attribute.Bool("smart_recap.generated", true),
-		attribute.Int("llm.tokens.input", result.Card.InputTokens),
-		attribute.Int("llm.tokens.output", result.Card.OutputTokens),
-	)
-	return nil
+	return result.Error
 }
 
 // FindStaleSmartRecapSessions returns sessions where smart recap is stale but regular cards are up-to-date.
@@ -459,12 +397,8 @@ func (p *Precomputer) precomputeSmartRecap(ctx context.Context, session StaleSes
 //
 // This complements FindStaleSessions which finds sessions with stale regular cards.
 func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int) ([]StaleSession, error) {
-	ctx, span := tracer.Start(ctx, "precompute.find_stale_smart_recap_sessions",
-		trace.WithAttributes(attribute.Int("limit", limit)))
-	defer span.End()
-
 	if !p.config.SmartRecapEnabled {
-		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
+		logger.Ctx(ctx).Debug("smart recap disabled: skipping stale smart recap scan")
 		return nil, nil
 	}
 
@@ -635,8 +569,6 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 		pq.Array(models.AllowedProviders), // $16
 	)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	defer rows.Close()
@@ -646,8 +578,6 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 		var s StaleSession
 		var rawProvider string
 		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines, &s.RegenRequestedAt); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 		s.Provider = models.NormalizeProvider(rawProvider)
@@ -655,12 +585,9 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 	}
 
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	span.SetAttributes(attribute.Int("sessions.found", len(sessions)))
 	return sessions, nil
 }
 
@@ -672,10 +599,6 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 // 4. Recap changed (recap computed_at > recap_indexed_at, or recap exists but not indexed)
 // 5. Metadata changed (MD5 hash mismatch on titles/summary/first_user_message)
 func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit int) ([]StaleSession, error) {
-	ctx, span := tracer.Start(ctx, "precompute.find_stale_search_index_sessions",
-		trace.WithAttributes(attribute.Int("limit", limit)))
-	defer span.End()
-
 	query := `
 		WITH session_lines AS (
 			SELECT session_id, SUM(last_synced_line) as total_lines
@@ -738,8 +661,6 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 		pq.Array(models.AllowedProviders), // $10
 	)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	defer rows.Close()
@@ -749,62 +670,40 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 		var s StaleSession
 		var rawProvider string
 		if err := rows.Scan(&s.SessionID, &s.UserID, &s.ExternalID, &rawProvider, &s.TotalLines); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 		s.Provider = models.NormalizeProvider(rawProvider)
 		sessions = append(sessions, s)
 	}
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	span.SetAttributes(attribute.Int("sessions.found", len(sessions)))
 	return sessions, nil
 }
 
 // BuildSearchIndexOnly builds the search index for a session.
 func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSession) error {
-	ctx, span := tracer.Start(ctx, "precompute.build_search_index",
-		trace.WithAttributes(
-			attribute.String("session.id", session.SessionID),
-			attribute.String("session.provider", session.Provider),
-			attribute.Int64("session.total_lines", session.TotalLines),
-		))
-	defer span.End()
-
 	sp, err := ProviderFor(session.Provider)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
 	rollout, err := sp.Parse(ctx, p.parseInput(session))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	if rollout == nil {
-		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
 	content, err := ExtractSearchContentWithUserMessages(ctx, p.db, session.SessionID, sp.SearchText(ctx, rollout))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
 	recapIndexedAt, err := p.loadRecapIndexedAt(ctx, session.SessionID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -816,14 +715,7 @@ func (p *Precomputer) BuildSearchIndexOnly(ctx context.Context, session StaleSes
 		MetadataHash:    content.MetadataHash,
 	}
 
-	if err := p.analyticsStore.UpsertSearchIndex(ctx, record, content); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	span.SetAttributes(attribute.Bool("session.indexed", true))
-	return nil
+	return p.analyticsStore.UpsertSearchIndex(ctx, record, content)
 }
 
 // loadRecapIndexedAt fetches session_card_smart_recap.computed_at (UTC) for the
@@ -847,42 +739,25 @@ func (p *Precomputer) loadRecapIndexedAt(ctx context.Context, sessionID string) 
 
 // PrecomputeSmartRecapOnly computes only the smart recap for a session.
 func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session StaleSession) error {
-	ctx, span := tracer.Start(ctx, "precompute.smart_recap_only",
-		trace.WithAttributes(
-			attribute.String("session.id", session.SessionID),
-			attribute.String("session.provider", session.Provider),
-			attribute.Int64("session.user_id", session.UserID),
-			attribute.Int64("session.total_lines", session.TotalLines),
-		))
-	defer span.End()
-
 	sp, err := ProviderFor(session.Provider)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
 	if !p.config.SmartRecapEnabled {
-		span.SetAttributes(attribute.Bool("smart_recap.disabled", true))
 		return nil
 	}
 
 	rollout, err := sp.Parse(ctx, p.parseInput(session))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	if rollout == nil {
-		span.SetAttributes(attribute.Bool("session.empty", true))
 		return nil
 	}
 
 	cards, err := p.analyticsStore.GetCards(ctx, session.SessionID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -893,23 +768,15 @@ func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session Stal
 
 	transcript, idMap, err := sp.PrepareTranscript(ctx, rollout)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	if err := p.precomputeSmartRecap(ctx, session, GenerateInput{
+
+	return p.precomputeSmartRecap(ctx, session, GenerateInput{
 		SessionID:  session.SessionID,
 		UserID:     session.UserID,
 		LineCount:  session.TotalLines,
 		Transcript: transcript,
 		IDMap:      idMap,
 		CardStats:  cardStats,
-	}, sp.ClearMessageIDs()); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	span.SetAttributes(attribute.Bool("session.computed", true))
-	return nil
+	}, sp.ClearMessageIDs())
 }

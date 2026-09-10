@@ -62,5 +62,4 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 ## Dependencies
 
 - `github.com/minio/minio-go/v7` -- S3-compatible object storage client
-- `go.opentelemetry.io/otel` -- Distributed tracing
 - `log/slog` -- Structured logging for large-merge warnings and overlap diagnostics

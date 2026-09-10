@@ -11,10 +11,7 @@ import (
 	"database/sql"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
-	"go.opentelemetry.io/otel"
 )
-
-var tracer = otel.Tracer("confab/db/cursor")
 
 // Store provides cursor_session_meta database operations.
 type Store struct {

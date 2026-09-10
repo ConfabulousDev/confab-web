@@ -6,7 +6,7 @@ Authentication and authorization for Confab. Supports multiple OAuth providers, 
 
 | File | Role |
 |------|------|
-| `auth.go` | Core auth primitives: `GenerateAPIKey`, `HashAPIKey` (both delegate to `db.HashToken` — the shared sha256 primitive also used for web-session IDs and device codes, 40hj), API key context key, `RequireAPIKey` middleware, `TryAPIKeyAuth` (non-rejecting), `GetUserID` context extractor, `SetUserIDForTest` helper, `setLogUserID` for FlyLogger integration, OpenTelemetry span enrichment |
+| `auth.go` | Core auth primitives: `GenerateAPIKey`, `HashAPIKey` (both delegate to `db.HashToken` — the shared sha256 primitive also used for web-session IDs and device codes, 40hj), API key context key, `RequireAPIKey` middleware, `TryAPIKeyAuth` (non-rejecting), `GetUserID` context extractor, `SetUserIDForTest` helper, `setLogUserID` for FlyLogger integration |
 | `oauth.go` | Shared OAuth/session core (3vsq): session cookie management, all auth middleware (`RequireSession`, `RequireSessionOrAPIKey`, `OptionalAuth`), `TrySessionAuth`, logout, CLI authorize flow (`HandleCLIAuthorize`, `isLocalhostURL`), user cap enforcement (`CanUserLogin`, `DefaultMaxUsers`), `OAuthConfig` struct + lazy OIDC endpoint discovery method (`getOIDCEndpoints`), and the cross-provider helpers (`generatePKCE`, `setOAuthLoginCookies`, `oauthHTTPClient`, `generateRandomString`, cookie/redirect/email-mismatch helpers, plus the shared callback helpers `validateOAuthCallback` (state+PKCE+code) and `checkUserEligibility` (email-domain + user-cap, returning `errEmailDomainNotPermitted`/`errUserCapReached`) with `redirectUserIneligible` mapping those to the login-page redirect — e7py), plus `redirectInactiveUser` (w8tz) which the three OAuth callbacks use to reject a deactivated account before `CreateWebSession` (login-loop fix). The four login protocols live in their own files. |
 | `oauth_github.go` | GitHub OAuth (3vsq): `HandleGitHubLogin`/`HandleGitHubCallback`, `exchangeGitHubCode`, `getGitHubUser`, `getGitHubPrimaryEmail` (separate `/user/emails` call for verified email), `githubUser`/`githubEmail` types. |
 | `oauth_google.go` | Google OAuth (3vsq): `HandleGoogleLogin`/`HandleGoogleCallback`, `exchangeGoogleCode`, `getGoogleUser`, `googleUser` type. |
@@ -39,9 +39,8 @@ All middleware functions:
 3. Enforce email domain restrictions if `allowedDomains` is non-empty
 4. Set user ID + read-only flag (CF-483) in request context via `context.WithValue`
 5. Enrich the request-scoped logger with `user_id`
-6. Enrich the OpenTelemetry span with user attributes
-7. Set user ID on the FlyLogger response writer for access logging
-8. Chain `EnforceReadOnly` (CF-483) internally so mutating requests from a read-only user return the structured 403 — runs AFTER user resolution so the context has the read-only flag
+6. Set user ID on the FlyLogger response writer for access logging
+7. Chain `EnforceReadOnly` (CF-483) internally so mutating requests from a read-only user return the structured 403 — runs AFTER user resolution so the context has the read-only flag
 
 ### Handler factories (return `http.HandlerFunc`, registered in `api/server.go`)
 
@@ -135,7 +134,6 @@ If the new mode is neither API key nor session cookie, add a new `Try*Auth` func
 ## Dependencies
 
 - **`golang.org/x/crypto/bcrypt`** -- password hashing
-- **`go.opentelemetry.io/otel`** -- span enrichment with user attributes
 - **`internal/db`** (and `internal/db/dbauth`, `internal/db/user`) -- database access for sessions, API keys, OAuth identities, device codes
 - **`internal/logger`** -- structured logging
 - **`internal/clientip`** -- client IP for audit logging on failed auth

@@ -6,11 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // ChunkInfo holds parsed chunk metadata and content.
@@ -35,10 +30,9 @@ const maxParallelDownloads = 10
 
 // chunkResult holds the result of a parallel chunk download.
 type chunkResult struct {
-	index    int
-	chunk    ChunkInfo
-	err      error
-	duration time.Duration
+	index int
+	chunk ChunkInfo
+	err   error
 }
 
 // ParseChunkKey extracts line numbers from a chunk S3 key.
@@ -69,18 +63,8 @@ func ParseChunkKey(key string) (int, int, bool) {
 // This is a convenience method that combines ListChunks, DownloadChunks, and MergeChunks.
 // Returns nil if no chunks exist (not an error).
 func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, provider string, externalID, fileName string) ([]byte, error) {
-	ctx, span := tracer.Start(ctx, "storage.download_and_merge_chunks",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("session.provider", provider),
-			attribute.String("session.external_id", externalID),
-			attribute.String("file.name", fileName),
-		))
-	defer span.End()
-
 	chunkKeys, err := s.ListChunks(ctx, userID, provider, externalID, fileName)
 	if err != nil {
-		recordSpanError(span, err)
 		return nil, err
 	}
 	if len(chunkKeys) == 0 {
@@ -89,35 +73,19 @@ func (s *S3Storage) DownloadAndMergeChunks(ctx context.Context, userID int64, pr
 
 	chunks, err := s.DownloadChunks(ctx, chunkKeys)
 	if err != nil {
-		recordSpanError(span, err)
 		return nil, err
 	}
 	if len(chunks) == 0 {
 		return nil, nil
 	}
 
-	merged, err := MergeChunks(chunks)
-	if err != nil {
-		recordSpanError(span, err)
-		return nil, err
-	}
-
-	span.SetAttributes(
-		attribute.Int("chunks.count", len(chunks)),
-		attribute.Int("merged.bytes", len(merged)),
-	)
-
-	return merged, nil
+	return MergeChunks(chunks)
 }
 
 // DownloadChunks downloads all chunks for the given keys in parallel and returns them as ChunkInfo slices.
 // Keys with unparseable names are skipped with a warning.
 // Downloads are limited to maxParallelDownloads concurrent operations.
 func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]ChunkInfo, error) {
-	ctx, span := tracer.Start(ctx, "storage.download_chunks",
-		trace.WithAttributes(attribute.Int("keys.count", len(chunkKeys))))
-	defer span.End()
-
 	if len(chunkKeys) == 0 {
 		return nil, nil
 	}
@@ -132,7 +100,7 @@ func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]C
 	for _, key := range chunkKeys {
 		firstLine, lastLine, ok := ParseChunkKey(key)
 		if !ok {
-			span.AddEvent("skipped_unparseable_key", trace.WithAttributes(attribute.String("key", key)))
+			slog.Warn("Skipping unparseable chunk key", "key", key)
 			continue
 		}
 		validKeys = append(validKeys, keyInfo{key: key, firstLine: firstLine, lastLine: lastLine})
@@ -152,18 +120,14 @@ func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]C
 			sem <- struct{}{}        // acquire semaphore
 			defer func() { <-sem }() // release semaphore
 
-			start := time.Now()
 			data, err := s.Download(ctx, ki.key)
-			elapsed := time.Since(start)
-
 			if err != nil {
-				results <- chunkResult{index: idx, err: err, duration: elapsed}
+				results <- chunkResult{index: idx, err: err}
 				return
 			}
 
 			results <- chunkResult{
-				index:    idx,
-				duration: elapsed,
+				index: idx,
 				chunk: ChunkInfo{
 					Key:       ki.key,
 					FirstLine: ki.firstLine,
@@ -177,15 +141,9 @@ func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]C
 	// Collect results
 	chunks := make([]ChunkInfo, len(validKeys))
 	var firstErr error
-	var maxDuration time.Duration
-	var sumDuration time.Duration
 
 	for range validKeys {
 		result := <-results
-		sumDuration += result.duration
-		if result.duration > maxDuration {
-			maxDuration = result.duration
-		}
 		if result.err != nil {
 			if firstErr == nil {
 				firstErr = result.err
@@ -195,15 +153,7 @@ func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]C
 		chunks[result.index] = result.chunk
 	}
 
-	span.SetAttributes(
-		attribute.Int("valid_keys.count", len(validKeys)),
-		attribute.Int64("max_duration_ms", maxDuration.Milliseconds()),
-		attribute.Int64("sum_duration_ms", sumDuration.Milliseconds()),
-	)
-
 	if firstErr != nil {
-		span.RecordError(firstErr)
-		span.SetStatus(codes.Error, firstErr.Error())
 		return nil, firstErr
 	}
 
@@ -300,4 +250,3 @@ func splitLines(data []byte) [][]byte {
 	}
 	return lines
 }
-

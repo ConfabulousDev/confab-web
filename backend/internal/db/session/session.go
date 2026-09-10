@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -63,28 +60,19 @@ func lowercaseSlice(ss []string) []string {
 
 // ListUserSessions returns all sessions visible to a user (owned + shared) with deduplication.
 func (s *Store) ListUserSessions(ctx context.Context, userID int64) ([]db.SessionListItem, error) {
-	ctx, span := tracer.Start(ctx, "db.list_user_sessions",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := s.buildSharedWithMeQuery()
 
 	rows, err := s.conn().QueryContext(ctx, query, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to query sessions: %w", err)
 	}
 	defer rows.Close()
 
 	sessions, err := scanSessionListItems(rows)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
 	return sessions, nil
 }
 
@@ -144,32 +132,19 @@ func (s *Store) buildSharedWithMeQuery() string {
 
 // ListUserSessionsPaginated returns filtered, cursor-paginated sessions with pre-materialized filter options.
 func (s *Store) ListUserSessionsPaginated(ctx context.Context, userID int64, params db.SessionListParams) (*db.SessionListResult, error) {
-	ctx, span := tracer.Start(ctx, "db.list_user_sessions_paginated",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	if params.PageSize == 0 {
 		params.PageSize = db.DefaultPageSize
 	}
 
 	filterOptions, err := s.queryFilterOptions(ctx, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
 	sessions, hasMore, nextCursor, err := s.queryPaginatedSessions(ctx, userID, params)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-
-	span.SetAttributes(
-		attribute.Int("sessions.count", len(sessions)),
-		attribute.Bool("sessions.has_more", hasMore),
-	)
 
 	return &db.SessionListResult{
 		Sessions:      sessions,
@@ -449,13 +424,6 @@ func (s *Store) queryPaginatedSessions(ctx context.Context, userID int64, params
 
 // GetSessionDetail returns detailed information about a session by its UUID primary key
 func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID int64) (*db.SessionDetail, error) {
-	ctx, span := tracer.Start(ctx, "db.get_session_detail",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	var session db.SessionDetail
 	var gitInfoBytes []byte
 	// Column list and Scan targets live in db/session_detail.go so this
@@ -474,20 +442,14 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 		if err == sql.ErrNoRows || db.IsInvalidUUIDError(err) {
 			return nil, db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	session.Provider = models.NormalizeProvider(session.Provider)
 
 	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if err := db.LoadSessionSyncFiles(ctx, s.DB, &session); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
@@ -496,17 +458,8 @@ func (s *Store) GetSessionDetail(ctx context.Context, sessionID string, userID i
 
 // DeleteSessionFromDB deletes an entire session and all its runs from the database
 func (s *Store) DeleteSessionFromDB(ctx context.Context, sessionID string, userID int64) error {
-	ctx, span := tracer.Start(ctx, "db.delete_session",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	result, err := s.conn().ExecContext(ctx, `DELETE FROM sessions WHERE id = $1 AND user_id = $2`, sessionID, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 
@@ -522,61 +475,34 @@ func (s *Store) DeleteSessionFromDB(ctx context.Context, sessionID string, userI
 // It returns the session's external_id and the canonical provider value
 // (legacy 'Claude Code' rows are normalized to 'claude-code' here).
 func (s *Store) VerifySessionOwnership(ctx context.Context, sessionID string, userID int64) (externalID string, provider string, err error) {
-	ctx, span := tracer.Start(ctx, "db.verify_session_ownership",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	query := `SELECT external_id, session_type FROM sessions WHERE id = $1 AND user_id = $2`
 	err = s.conn().QueryRowContext(ctx, query, sessionID, userID).Scan(&externalID, &provider)
 	if err == sql.ErrNoRows {
 		var exists bool
 		checkQuery := `SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)`
 		if checkErr := s.conn().QueryRowContext(ctx, checkQuery, sessionID).Scan(&exists); checkErr != nil {
-			span.RecordError(checkErr)
-			span.SetStatus(codes.Error, checkErr.Error())
 			return "", "", fmt.Errorf("failed to check session existence: %w", checkErr)
 		}
 		if exists {
-			span.SetAttributes(attribute.String("result", "forbidden"))
 			return "", "", db.ErrForbidden
 		}
-		span.SetAttributes(attribute.String("result", "not_found"))
 		return "", "", db.ErrSessionNotFound
 	}
 	if err != nil {
 		if db.IsInvalidUUIDError(err) {
-			span.SetAttributes(attribute.String("result", "not_found"))
 			return "", "", db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return "", "", fmt.Errorf("failed to verify session ownership: %w", err)
 	}
 	provider = models.NormalizeProvider(provider)
-	span.SetAttributes(
-		attribute.String("result", "owner"),
-		attribute.String("session.provider", provider),
-	)
 	return externalID, provider, nil
 }
 
 // UpdateSessionSummary updates the summary field for a session identified by external_id
 func (s *Store) UpdateSessionSummary(ctx context.Context, externalID string, userID int64, summary string) error {
-	ctx, span := tracer.Start(ctx, "db.update_session_summary",
-		trace.WithAttributes(
-			attribute.String("session.external_id", externalID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	query := `UPDATE sessions SET summary = $1 WHERE external_id = $2 AND user_id = $3`
 	result, err := s.conn().ExecContext(ctx, query, summary, externalID, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update session summary: %w", err)
 	}
 
@@ -600,13 +526,6 @@ func (s *Store) UpdateSessionSummary(ctx context.Context, externalID string, use
 
 // UpdateSessionCustomTitle updates the custom_title field for a session identified by UUID
 func (s *Store) UpdateSessionCustomTitle(ctx context.Context, sessionID string, userID int64, customTitle *string) error {
-	ctx, span := tracer.Start(ctx, "db.update_session_custom_title",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	query := `UPDATE sessions SET custom_title = $1 WHERE id = $2 AND user_id = $3`
 	result, err := s.conn().ExecContext(ctx, query, customTitle, sessionID, userID)
 	if err != nil {
@@ -639,10 +558,6 @@ func (s *Store) UpdateSessionCustomTitle(ctx context.Context, sessionID string, 
 
 // UpdateSessionSuggestedTitle updates the suggested_session_title field for a session.
 func (s *Store) UpdateSessionSuggestedTitle(ctx context.Context, sessionID string, suggestedTitle string) error {
-	ctx, span := tracer.Start(ctx, "db.update_session_suggested_title",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	if suggestedTitle == "" {
 		return nil
 	}
@@ -650,8 +565,6 @@ func (s *Store) UpdateSessionSuggestedTitle(ctx context.Context, sessionID strin
 	query := `UPDATE sessions SET suggested_session_title = $1 WHERE id = $2`
 	_, err := s.conn().ExecContext(ctx, query, suggestedTitle, sessionID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update suggested session title: %w", err)
 	}
 	return nil
@@ -665,45 +578,26 @@ func (s *Store) UpdateSessionSuggestedTitle(ctx context.Context, sessionID strin
 // file read, transcript download) that don't go through the owner-only
 // VerifySessionOwnership route.
 func (s *Store) GetSessionOwnerExternalIDAndProvider(ctx context.Context, sessionID string) (userID int64, externalID string, provider string, err error) {
-	ctx, span := tracer.Start(ctx, "db.get_session_owner_external_id_and_provider",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	query := `SELECT user_id, external_id, session_type FROM sessions WHERE id = $1`
 	err = s.conn().QueryRowContext(ctx, query, sessionID).Scan(&userID, &externalID, &provider)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, "", "", db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, "", "", fmt.Errorf("failed to get session: %w", err)
 	}
 	provider = models.NormalizeProvider(provider)
-	span.SetAttributes(
-		attribute.Int64("user.id", userID),
-		attribute.String("session.provider", provider),
-	)
 	return userID, externalID, provider, nil
 }
 
 // GetSessionIDByExternalID looks up the internal session ID by external_id for a specific user.
 func (s *Store) GetSessionIDByExternalID(ctx context.Context, externalID string, userID int64) (sessionID string, err error) {
-	ctx, span := tracer.Start(ctx, "db.get_session_id_by_external_id",
-		trace.WithAttributes(
-			attribute.String("session.external_id", externalID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	query := `SELECT id FROM sessions WHERE external_id = $1 AND user_id = $2`
 	err = s.conn().QueryRowContext(ctx, query, externalID, userID).Scan(&sessionID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return "", fmt.Errorf("failed to get session: %w", err)
 	}
 	return sessionID, nil

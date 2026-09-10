@@ -6,7 +6,7 @@ GitHub link CRUD for associating pull requests and commits with sessions.
 
 | File | Role |
 |------|------|
-| `store.go` | `Store` struct definition and OpenTelemetry tracer |
+| `store.go` | `Store` struct definition |
 | `links.go` | `CreateGitHubLink`, `GetGitHubLinksForSession`, `GetGitHubLinkByID`, `DeleteGitHubLink` |
 | `links_integration_test.go` | Integration tests for insert, upsert source/URL update, the three `overwriteTitle` branches, list ordering, empty-result, invalid-UUID → `ErrSessionNotFound`, FK violation, and the shared `ErrGitHubLinkNotFound` paths on Get/Delete |
 
@@ -43,4 +43,3 @@ GitHub link CRUD for associating pull requests and commits with sessions.
 
 - `github.com/ConfabulousDev/confab-web/internal/db` -- Root DB package for types, errors, helpers (`IsInvalidUUIDError`)
 - `github.com/ConfabulousDev/confab-web/internal/models` -- `GitHubLink` type with `LinkType` enum
-- `go.opentelemetry.io/otel` -- Distributed tracing
