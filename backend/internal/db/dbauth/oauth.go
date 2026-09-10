@@ -5,10 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -22,14 +18,8 @@ import (
 // already-linked path (matching identity) and brand-new-user path are
 // unaffected by the flag.
 func (s *Store) FindOrCreateUserByOAuth(ctx context.Context, info models.OAuthUserInfo, autoLinkEmail bool) (*models.User, error) {
-	ctx, span := tracer.Start(ctx, "db.find_or_create_user_by_oauth",
-		trace.WithAttributes(attribute.String("oauth.provider", string(info.Provider))))
-	defer span.End()
-
 	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()

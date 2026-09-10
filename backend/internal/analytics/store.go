@@ -8,13 +8,7 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
-
-var tracer = otel.Tracer("confab/analytics")
 
 // Store provides database operations for session analytics cards.
 type Store struct {
@@ -350,10 +344,6 @@ func (c *Cards) ToResponse() *AnalyticsResponse {
 
 // GetSmartRecapCard retrieves the smart recap card for a session.
 func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*SmartRecapCardRecord, error) {
-	ctx, span := tracer.Start(ctx, "analytics.get_smart_recap_card",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
 			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
@@ -387,8 +377,6 @@ func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*Smart
 		return nil, nil
 	}
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
@@ -414,10 +402,6 @@ func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*Smart
 
 // UpsertSmartRecapCard inserts or updates a smart recap card, clearing the computing lock.
 func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCardRecord) error {
-	ctx, span := tracer.Start(ctx, "analytics.upsert_smart_recap_card",
-		trace.WithAttributes(attribute.String("session.id", record.SessionID)))
-	defer span.End()
-
 	wentWellJSON, err := json.Marshal(record.WentWell)
 	if err != nil {
 		return fmt.Errorf("marshaling went_well: %w", err)
@@ -479,20 +463,12 @@ func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCard
 		record.OutputTokens,
 		record.GenerationTimeMs,
 	)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	}
 	return err
 }
 
 // AcquireSmartRecapLock attempts to acquire the computing lock for a smart recap.
 // Returns true if the lock was acquired, false if another process is already computing.
 func (s *Store) AcquireSmartRecapLock(ctx context.Context, sessionID string, lockTimeoutSeconds int) (bool, error) {
-	ctx, span := tracer.Start(ctx, "analytics.acquire_smart_recap_lock",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	// Atomically set the lock if it doesn't exist or is stale
 	query := `
 		INSERT INTO session_card_smart_recap (
@@ -512,25 +488,17 @@ func (s *Store) AcquireSmartRecapLock(ctx context.Context, sessionID string, loc
 	err := s.db.QueryRowContext(ctx, query, sessionID, lockTimeoutSeconds).Scan(&returnedID)
 	if err == sql.ErrNoRows {
 		// Lock not acquired - another process has it
-		span.SetAttributes(attribute.Bool("lock.acquired", false))
 		return false, nil
 	}
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return false, err
 	}
 
-	span.SetAttributes(attribute.Bool("lock.acquired", true))
 	return true, nil
 }
 
 // ClearSmartRecapLock clears the computing lock (e.g., on error).
 func (s *Store) ClearSmartRecapLock(ctx context.Context, sessionID string) error {
-	ctx, span := tracer.Start(ctx, "analytics.clear_smart_recap_lock",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	query := `
 		UPDATE session_card_smart_recap
 		SET computing_started_at = NULL
@@ -538,10 +506,6 @@ func (s *Store) ClearSmartRecapLock(ctx context.Context, sessionID string) error
 	`
 
 	_, err := s.db.ExecContext(ctx, query, sessionID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	}
 	return err
 }
 
@@ -555,10 +519,6 @@ func (s *Store) ClearSmartRecapLock(ctx context.Context, sessionID string) error
 //   - Weight B: smart recap content
 //   - Weight C: user messages from transcript
 func (s *Store) UpsertSearchIndex(ctx context.Context, record *SearchIndexRecord, content *SearchIndexContent) error {
-	ctx, span := tracer.Start(ctx, "analytics.upsert_search_index",
-		trace.WithAttributes(attribute.String("session.id", record.SessionID)))
-	defer span.End()
-
 	query := `
 		INSERT INTO session_search_index (
 			session_id, version, content_text, search_vector,
@@ -591,10 +551,6 @@ func (s *Store) UpsertSearchIndex(ctx context.Context, record *SearchIndexRecord
 		record.RecapIndexedAt,    // $8
 		record.MetadataHash,      // $9
 	)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	}
 	return err
 }
 

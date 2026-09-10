@@ -19,8 +19,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
-	"github.com/honeycombio/otel-config-go/otelconfig"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Build identity, injected via -ldflags at release/deploy time (see Dockerfile,
@@ -46,16 +44,6 @@ func main() {
 	// Access via: fly proxy 6060:6060 -a confab-backend
 	if os.Getenv("ENABLE_PPROF") == "true" {
 		go startPprofServer()
-	}
-
-	// Initialize OpenTelemetry (sends traces to Honeycomb)
-	// Configured via env vars: OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
-	otelShutdown, err := otelconfig.ConfigureOpenTelemetry()
-	if err != nil {
-		logger.Warn("failed to configure OpenTelemetry", "error", err)
-		// Non-fatal: continue without tracing if OTEL env vars not set
-	} else {
-		defer otelShutdown()
 	}
 
 	// Load configuration from environment
@@ -149,14 +137,10 @@ func main() {
 	})
 	router := server.SetupRoutes()
 
-	// Wrap router with OpenTelemetry HTTP instrumentation
-	// This automatically traces all incoming HTTP requests
-	handler := otelhttp.NewHandler(router, "confabulous-backend-prod")
-
 	// HTTP server configuration
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", config.Port),
-		Handler:      handler,
+		Handler:      router,
 		ReadTimeout:  config.ReadTimeout,  // Configurable via HTTP_READ_TIMEOUT (default: 30s)
 		WriteTimeout: config.WriteTimeout, // Configurable via HTTP_WRITE_TIMEOUT (default: 30s)
 		IdleTimeout:  60 * time.Second,

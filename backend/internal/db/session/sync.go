@@ -9,9 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -36,34 +33,17 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 		params.Provider = models.ProviderClaudeCode
 	}
 
-	ctx, span := tracer.Start(ctx, "db.find_or_create_sync_session",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("session.external_id", params.ExternalID),
-			attribute.String("session.provider", params.Provider),
-		))
-	defer span.End()
-
 	selectQuery, selectArgs := buildSessionLookupQuery(userID, params.ExternalID, params.Provider)
 
 	err = s.conn().QueryRowContext(ctx, selectQuery, selectArgs...).Scan(&sessionID)
 	if err == nil {
-		span.SetAttributes(attribute.Bool("session.created", false))
 		if err := s.updateSessionMetadata(ctx, sessionID, params); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
 		}
 		sid, files, err := s.getSyncFilesForSession(ctx, sessionID)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-		}
 		return sid, files, err
 	}
 	if err != sql.ErrNoRows {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return "", nil, fmt.Errorf("failed to find session: %w", err)
 	}
 
@@ -74,33 +54,21 @@ func (s *Store) FindOrCreateSyncSession(ctx context.Context, userID int64, param
 	`
 	_, err = s.conn().ExecContext(ctx, insertQuery, sessionID, userID, params.ExternalID, params.Provider, params.CWD, params.TranscriptPath, params.GitInfo, params.Hostname, params.Username)
 	if err == nil {
-		span.SetAttributes(attribute.Bool("session.created", true))
 		return sessionID, make(map[string]db.SyncFileState), nil
 	}
 
 	if db.IsUniqueViolation(err) {
-		span.SetAttributes(attribute.Bool("session.race_condition", true))
 		err = s.conn().QueryRowContext(ctx, selectQuery, selectArgs...).Scan(&sessionID)
 		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to find session after conflict: %w", err)
 		}
 		if err := s.updateSessionMetadata(ctx, sessionID, params); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return "", nil, fmt.Errorf("failed to update session metadata: %w", err)
 		}
 		sid, files, err := s.getSyncFilesForSession(ctx, sessionID)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-		}
 		return sid, files, err
 	}
 
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
 	return "", nil, fmt.Errorf("failed to create session: %w", err)
 }
 
@@ -160,19 +128,8 @@ func (s *Store) getSyncFilesForSession(ctx context.Context, sessionID string) (s
 // interpolation start; first_seen is never raised. Pass nil to leave it
 // untouched (every non-Cursor provider).
 func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fileType string, lastSyncedLine int, lastMessageAt, createdAt *time.Time, summary, firstUserMessage *string, gitInfo json.RawMessage) error {
-	ctx, span := tracer.Start(ctx, "db.update_sync_file_state",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.String("file.name", fileName),
-			attribute.String("file.type", fileType),
-			attribute.Int("sync.last_line", lastSyncedLine),
-		))
-	defer span.End()
-
 	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -187,8 +144,6 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 	`
 	_, err = tx.ExecContext(ctx, syncQuery, sessionID, fileName, fileType, lastSyncedLine)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update sync file state: %w", err)
 	}
 
@@ -226,14 +181,10 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 	sessionQuery += " WHERE id = $1"
 	_, err = tx.ExecContext(ctx, sessionQuery, args...)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update session metadata: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to commit: %w", err)
 	}
 
@@ -242,13 +193,6 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 
 // GetSyncFileState retrieves the sync state for a specific file
 func (s *Store) GetSyncFileState(ctx context.Context, sessionID, fileName string) (*db.SyncFileState, error) {
-	ctx, span := tracer.Start(ctx, "db.get_sync_file_state",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.String("file.name", fileName),
-		))
-	defer span.End()
-
 	query := `SELECT file_name, file_type, last_synced_line, chunk_count FROM sync_files WHERE session_id = $1 AND file_name = $2`
 	var state db.SyncFileState
 	err := s.conn().QueryRowContext(ctx, query, sessionID, fileName).Scan(&state.FileName, &state.FileType, &state.LastSyncedLine, &state.ChunkCount)
@@ -256,29 +200,16 @@ func (s *Store) GetSyncFileState(ctx context.Context, sessionID, fileName string
 		return nil, db.ErrFileNotFound
 	}
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get sync file state: %w", err)
 	}
-	span.SetAttributes(attribute.Int("sync.last_line", state.LastSyncedLine))
 	return &state, nil
 }
 
 // UpdateSyncFileChunkCount sets the chunk_count for a file (used for self-healing on read)
 func (s *Store) UpdateSyncFileChunkCount(ctx context.Context, sessionID, fileName string, chunkCount int) error {
-	ctx, span := tracer.Start(ctx, "db.update_sync_file_chunk_count",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.String("file.name", fileName),
-			attribute.Int("chunk.count", chunkCount),
-		))
-	defer span.End()
-
 	query := `UPDATE sync_files SET chunk_count = $3, updated_at = NOW() WHERE session_id = $1 AND file_name = $2`
 	_, err := s.conn().ExecContext(ctx, query, sessionID, fileName, chunkCount)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update chunk count: %w", err)
 	}
 	return nil

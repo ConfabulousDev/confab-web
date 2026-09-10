@@ -6,8 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/ConfabulousDev/confab-web/internal/logger"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // AgentProvider yields the next parsed agent file, or io.EOF when done.
@@ -61,12 +59,6 @@ type WorkflowInputs struct {
 // alongside the generic processors (it is not a FileProcessor — see
 // analyzer_workflows.go).
 func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider AgentProvider, wf *WorkflowInputs) (*ComputeResult, error) {
-	ctx, span := tracer.Start(ctx, "analytics.compute_streaming",
-		trace.WithAttributes(
-			attribute.Int64("main.lines", int64(len(main.Lines))),
-		))
-	defer span.End()
-
 	// Session-scoped logger (upstream enriches it with session_id + provider) so
 	// any unknown-model pricing warning is traceable.
 	log := logger.Ctx(ctx)
@@ -146,11 +138,6 @@ func ComputeStreaming(ctx context.Context, main *TranscriptFile, agentProvider A
 		}
 		workflowRuns = workflowsAnalyzer.Result()
 	}
-
-	span.SetAttributes(
-		attribute.Int("agent_files.processed", len(agentFilesSeen)),
-		attribute.Int("agent_files.skipped", skippedAgentFiles),
-	)
 
 	// Build result from analyzer outputs
 	tokens := tokensAnalyzer.Result()

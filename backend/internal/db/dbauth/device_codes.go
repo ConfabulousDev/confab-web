@@ -6,26 +6,17 @@ import (
 	"fmt"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ConfabulousDev/confab-web/internal/db"
 )
 
 // CreateDeviceCode creates a new device code for CLI authentication
 func (s *Store) CreateDeviceCode(ctx context.Context, deviceCode, userCode, keyName string, expiresAt time.Time) error {
-	ctx, span := tracer.Start(ctx, "db.create_device_code")
-	defer span.End()
-
 	// Store sha256(device_code) so a DB read can't replay it (40hj). user_code
 	// stays plaintext (D4): low-entropy + short-lived, defended by the 8epk
 	// per-verifier throttle rather than at-rest hashing.
 	query := `INSERT INTO device_codes (device_code, user_code, key_name, expires_at) VALUES ($1, $2, $3, $4)`
 	_, err := s.conn().ExecContext(ctx, query, db.HashToken(deviceCode), userCode, keyName, expiresAt)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to create device code: %w", err)
 	}
 	return nil
@@ -33,9 +24,6 @@ func (s *Store) CreateDeviceCode(ctx context.Context, deviceCode, userCode, keyN
 
 // GetDeviceCodeByUserCode retrieves a device code by user code (for web verification page)
 func (s *Store) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*db.DeviceCode, error) {
-	ctx, span := tracer.Start(ctx, "db.get_device_code_by_user_code")
-	defer span.End()
-
 	query := `SELECT id, device_code, user_code, key_name, user_id, expires_at, authorized_at, created_at
 	          FROM device_codes WHERE user_code = $1 AND expires_at > NOW()`
 
@@ -48,8 +36,6 @@ func (s *Store) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*
 		if err == sql.ErrNoRows {
 			return nil, db.ErrDeviceCodeNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get device code: %w", err)
 	}
 	return &dc, nil
@@ -57,9 +43,6 @@ func (s *Store) GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*
 
 // GetDeviceCodeByDeviceCode retrieves a device code by device code (for CLI polling)
 func (s *Store) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string) (*db.DeviceCode, error) {
-	ctx, span := tracer.Start(ctx, "db.get_device_code_by_device_code")
-	defer span.End()
-
 	query := `SELECT id, device_code, user_code, key_name, user_id, expires_at, authorized_at, created_at
 	          FROM device_codes WHERE device_code = $1`
 
@@ -72,8 +55,6 @@ func (s *Store) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string
 		if err == sql.ErrNoRows {
 			return nil, db.ErrDeviceCodeNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get device code: %w", err)
 	}
 	return &dc, nil
@@ -81,17 +62,11 @@ func (s *Store) GetDeviceCodeByDeviceCode(ctx context.Context, deviceCode string
 
 // AuthorizeDeviceCode marks a device code as authorized by a user
 func (s *Store) AuthorizeDeviceCode(ctx context.Context, userCode string, userID int64) error {
-	ctx, span := tracer.Start(ctx, "db.authorize_device_code",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	query := `UPDATE device_codes SET user_id = $1, authorized_at = NOW()
 	          WHERE user_code = $2 AND expires_at > NOW() AND authorized_at IS NULL`
 
 	result, err := s.conn().ExecContext(ctx, query, userID, userCode)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to authorize device code: %w", err)
 	}
 
@@ -104,14 +79,9 @@ func (s *Store) AuthorizeDeviceCode(ctx context.Context, userCode string, userID
 
 // DeleteDeviceCode removes a device code (after successful token exchange or expiration)
 func (s *Store) DeleteDeviceCode(ctx context.Context, deviceCode string) error {
-	ctx, span := tracer.Start(ctx, "db.delete_device_code")
-	defer span.End()
-
 	query := `DELETE FROM device_codes WHERE device_code = $1`
 	_, err := s.conn().ExecContext(ctx, query, db.HashToken(deviceCode))
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to delete device code: %w", err)
 	}
 	return nil

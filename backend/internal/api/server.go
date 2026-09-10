@@ -193,15 +193,13 @@ func (s *Server) SetupRoutes() http.Handler {
 	r.Use(ratelimit.Middleware(s.globalLimiter))
 	// 4. RequestID: assign unique ID for request tracing (used by FlyLogger)
 	r.Use(middleware.RequestID)
-	// 5. SpanEnricher: add CLI version/os/arch to OpenTelemetry span
-	r.Use(SpanEnricher)
-	// 6. Request-scoped logger: adds req_id to all logs within the request
+	// 5. Request-scoped logger: adds req_id to all logs within the request
 	r.Use(logger.Middleware)
-	// 7. Redirects and security headers
+	// 6. Redirects and security headers
 	r.Use(wwwRedirectMiddleware())
 	r.Use(securityHeadersMiddleware())
 
-	// 8. Compression: Brotli (preferred) + gzip (fallback)
+	// 7. Compression: Brotli (preferred) + gzip (fallback)
 	// Brotli provides 15-25% better compression than gzip for JSON
 	// Serves Brotli to modern clients (95%+), gzip to legacy clients
 	compressor := middleware.NewCompressor(5) // gzip level 5 (baseline)
@@ -211,7 +209,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	})
 	r.Use(compressor.Handler)
 
-	// 9. FlyLogger: AFTER compressor so it captures uncompressed response bodies
+	// 8. FlyLogger: AFTER compressor so it captures uncompressed response bodies
 	r.Use(FlyLogger)
 
 	// CORS configuration - CRITICAL SECURITY FIX

@@ -14,8 +14,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
@@ -48,23 +46,6 @@ func GenerateAPIKey() (string, string, error) {
 // HashAPIKey hashes an API key for validation
 func HashAPIKey(rawKey string) string {
 	return db.HashToken(rawKey)
-}
-
-// enrichSpanWithUser adds user attributes to the current span for tracing
-// Uses one-hot encoding for auth mode (exactly one of authAPIKey/authSession should be true)
-func enrichSpanWithUser(ctx context.Context, userID int64, userEmail string, authAPIKey, authSession bool) {
-	span := trace.SpanFromContext(ctx)
-	attrs := []attribute.KeyValue{
-		attribute.Int64("user.id", userID),
-		attribute.String("user.email", userEmail),
-	}
-	if authAPIKey {
-		attrs = append(attrs, attribute.Bool("auth.api_key", true))
-	}
-	if authSession {
-		attrs = append(attrs, attribute.Bool("auth.session", true))
-	}
-	span.SetAttributes(attrs...)
 }
 
 // apiKeyAuthResult contains the result of API key authentication
@@ -194,9 +175,6 @@ func RequireAPIKey(database *db.DB, allowedDomains []string) func(http.Handler) 
 			// Enrich request-scoped logger with user_id
 			log := logger.Ctx(r.Context()).With("user_id", userID)
 			ctx := logger.WithLogger(r.Context(), log)
-
-			// Enrich OpenTelemetry span with user info
-			enrichSpanWithUser(ctx, userID, userEmail, true, false)
 
 			// Add user ID + read-only flag (CF-483) to request context
 			ctx = context.WithValue(ctx, userIDContextKey, userID)

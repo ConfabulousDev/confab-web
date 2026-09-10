@@ -12,7 +12,7 @@ mirrors the `db/codex` sidecar shape.
 
 | File | Role |
 |------|------|
-| `store.go` | `Store` struct and OpenTelemetry tracer |
+| `store.go` | `Store` struct |
 | `meta.go` | `UpsertModel`, `GetModel` |
 | `meta_test.go` | Integration tests (Docker-backed) |
 

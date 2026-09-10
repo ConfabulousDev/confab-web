@@ -10,10 +10,8 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings"
+	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // SmartRecapGeneratorConfig holds configuration for the smart recap generator.
@@ -100,23 +98,13 @@ func (g *SmartRecapGenerator) GenerateWithMessageIDClearing(ctx context.Context,
 }
 
 func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput, lockTimeoutSeconds int, skipQuota bool, clearIDs bool) *GenerateResult {
-	ctx, span := tracer.Start(ctx, "smart_recap.generate",
-		trace.WithAttributes(
-			attribute.String("session.id", input.SessionID),
-			attribute.Int64("session.line_count", input.LineCount),
-			attribute.String("llm.model", g.config.Model),
-		))
-	defer span.End()
-
 	// Try to acquire the lock
 	acquired, err := g.store.AcquireSmartRecapLock(ctx, input.SessionID, lockTimeoutSeconds)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return &GenerateResult{Error: err}
 	}
 	if !acquired {
-		span.SetAttributes(attribute.Bool("lock.skipped", true))
+		logger.Ctx(ctx).Debug("smart recap skipped: lock held", "session_id", input.SessionID)
 		return &GenerateResult{Skipped: true}
 	}
 
@@ -139,10 +127,7 @@ func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput,
 	genCtx, genCancel := context.WithTimeout(ctx, g.config.GenerationTimeout)
 	defer genCancel()
 	result, err := analyzer.Analyze(genCtx, input, input.CardStats)
-
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		// Clear the lock so another request can try
 		// Use background context to ensure cleanup happens even if request was canceled
 		clearCtx, clearCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -185,8 +170,6 @@ func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput,
 	// Admin-triggered regeneration (skipQuota=true) bypasses this.
 	if !skipQuota {
 		if err := recapquota.Increment(saveCtx, g.db, input.UserID); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "quota increment failed: "+err.Error())
 			_ = g.store.ClearSmartRecapLock(saveCtx, input.SessionID)
 			return &GenerateResult{Error: fmt.Errorf("failed to increment quota: %w", err)}
 		}
@@ -194,8 +177,6 @@ func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput,
 
 	// Save the card (this also clears the lock via upsert)
 	if err := g.store.UpsertSmartRecapCard(saveCtx, card); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		_ = g.store.ClearSmartRecapLock(saveCtx, input.SessionID)
 		return &GenerateResult{Error: err}
 	}
@@ -206,15 +187,10 @@ func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput,
 			result.SuggestedSessionTitle, input.SessionID)
 		if err != nil {
 			// Log but don't fail - the main operation succeeded
-			span.SetAttributes(attribute.String("title.update.error", err.Error()))
+			logger.Ctx(ctx).Warn("failed to update suggested session title",
+				"session_id", input.SessionID, "error", err)
 		}
 	}
-
-	span.SetAttributes(
-		attribute.Int("llm.tokens.input", result.InputTokens),
-		attribute.Int("llm.tokens.output", result.OutputTokens),
-		attribute.Int("generation.time_ms", result.GenerationTimeMs),
-	)
 
 	return &GenerateResult{Card: card, SuggestedTitle: result.SuggestedSessionTitle}
 }

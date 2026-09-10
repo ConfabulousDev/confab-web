@@ -7,10 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -19,18 +15,8 @@ import (
 // isPublic: true for public shares (anyone with link), false for recipient-only shares
 // recipientEmails: email addresses to grant access (ignored if isPublic)
 func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64, isPublic bool, expiresAt *time.Time, recipientEmails []string) (*db.SessionShare, error) {
-	ctx, span := tracer.Start(ctx, "db.create_share",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.Int64("user.id", userID),
-			attribute.Bool("share.is_public", isPublic),
-		))
-	defer span.End()
-
 	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -146,14 +132,8 @@ func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64,
 // AUTHORIZATION: This function does NOT verify admin status. Callers must enforce
 // admin auth before invoking.
 func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expiresAt *time.Time) (*db.SessionShare, error) {
-	ctx, span := tracer.Start(ctx, "db.create_system_share",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
@@ -170,8 +150,6 @@ func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expires
 		if db.IsInvalidUUIDError(err) {
 			return nil, db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
@@ -189,8 +167,6 @@ func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expires
 		 RETURNING id, created_at`,
 		sessionID, expiresAt).Scan(&share.ID, &share.CreatedAt)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to create share: %w", err)
 	}
 
@@ -199,27 +175,19 @@ func (s *Store) CreateSystemShare(ctx context.Context, sessionID string, expires
 		`INSERT INTO session_share_system (share_id) VALUES ($1)`,
 		share.ID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to create system share: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int64("share.id", share.ID))
 	return &share, nil
 }
 
 // ListSystemShares returns all system-wide shares (admin operation).
 // System shares are identified by having a row in session_share_system.
 func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error) {
-	ctx, span := tracer.Start(ctx, "db.list_system_shares")
-	defer span.End()
-
 	query := `
 		SELECT ss.id, ss.session_id, se.external_id, se.session_type,
 		       ss.expires_at, ss.created_at, ss.last_accessed_at
@@ -232,8 +200,6 @@ func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error)
 
 	rows, err := s.conn().QueryContext(ctx, query)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to list system shares: %w", err)
 	}
 	defer rows.Close()
@@ -256,19 +222,11 @@ func (s *Store) ListSystemShares(ctx context.Context) ([]db.SessionShare, error)
 		return nil, fmt.Errorf("error iterating system shares: %w", err)
 	}
 
-	span.SetAttributes(attribute.Int("shares.count", len(shares)))
 	return shares, nil
 }
 
 // ListShares returns all shares for a session (by UUID primary key)
 func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) ([]db.SessionShare, error) {
-	ctx, span := tracer.Start(ctx, "db.list_shares",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	// Verify session exists for this user and load identity columns
 	var externalID, rawProvider string
 	err := s.conn().QueryRowContext(ctx,
@@ -281,8 +239,6 @@ func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) 
 		if db.IsInvalidUUIDError(err) {
 			return nil, db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to verify session: %w", err)
 	}
 	provider := models.NormalizeProvider(rawProvider)
@@ -334,10 +290,6 @@ func (s *Store) ListShares(ctx context.Context, sessionID string, userID int64) 
 
 // ListAllUserShares returns all shares for a user across all sessions
 func (s *Store) ListAllUserShares(ctx context.Context, userID int64) ([]db.ShareWithSessionInfo, error) {
-	ctx, span := tracer.Start(ctx, "db.list_all_user_shares",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	// Get all shares for the user with session info and public status
 	query := `
 		SELECT
@@ -394,13 +346,6 @@ func (s *Store) ListAllUserShares(ctx context.Context, userID int64) ([]db.Share
 
 // RevokeShare deletes a share by ID
 func (s *Store) RevokeShare(ctx context.Context, shareID int64, userID int64) error {
-	ctx, span := tracer.Start(ctx, "db.revoke_share",
-		trace.WithAttributes(
-			attribute.Int64("share.id", shareID),
-			attribute.Int64("user.id", userID),
-		))
-	defer span.End()
-
 	// Verify ownership via session and delete
 	result, err := s.conn().ExecContext(ctx,
 		`DELETE FROM session_shares ss
@@ -408,8 +353,6 @@ func (s *Store) RevokeShare(ctx context.Context, shareID int64, userID int64) er
 		 WHERE ss.session_id = s.id AND ss.id = $1 AND s.user_id = $2`,
 		shareID, userID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to revoke share: %w", err)
 	}
 
@@ -438,22 +381,15 @@ func (s *Store) DeleteExpiredShares(ctx context.Context, olderThan time.Duration
 	// the worker's local timezone can't skew the window.
 	cutoff := time.Now().UTC().Add(-olderThan)
 
-	ctx, span := tracer.Start(ctx, "db.delete_expired_shares",
-		trace.WithAttributes(attribute.String("share.cutoff", cutoff.String())))
-	defer span.End()
-
 	result, err := s.conn().ExecContext(ctx,
 		`DELETE FROM session_shares
 		 WHERE expires_at IS NOT NULL AND expires_at < $1`,
 		cutoff)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, fmt.Errorf("failed to delete expired shares: %w", err)
 	}
 
 	deleted, _ := result.RowsAffected()
-	span.SetAttributes(attribute.Int64("share.deleted", deleted))
 	return deleted, nil
 }
 
@@ -464,10 +400,6 @@ func (s *Store) DeleteExpiredShares(ctx context.Context, olderThan time.Duration
 // is durable and multi-instance-safe (no in-memory window that a restart would
 // reset), at the cost of one indexed COUNT per create.
 func (s *Store) CountUserSharesSince(ctx context.Context, userID int64, since time.Time) (int, error) {
-	ctx, span := tracer.Start(ctx, "db.count_user_shares_since",
-		trace.WithAttributes(attribute.Int64("user.id", userID)))
-	defer span.End()
-
 	var count int
 	err := s.conn().QueryRowContext(ctx,
 		`SELECT COUNT(*)
@@ -476,8 +408,6 @@ func (s *Store) CountUserSharesSince(ctx context.Context, userID int64, since ti
 		 WHERE s.user_id = $1 AND ss.created_at >= $2`,
 		userID, since).Scan(&count)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return 0, fmt.Errorf("failed to count user shares: %w", err)
 	}
 	return count, nil

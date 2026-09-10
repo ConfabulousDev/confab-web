@@ -85,7 +85,6 @@ that still uses the public template defaults, `loadConfig` refuses to start when
 ### Observability
 | Var | Purpose |
 |---|---|
-| `OTEL_SERVICE_NAME` / `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | OpenTelemetry config (Honeycomb). Tracing is no-op if unset. |
 | `LOG_LEVEL` | `debug` / `info` / `warn` / `error`. Default `info`. |
 
 ## Worker env vars

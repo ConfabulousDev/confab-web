@@ -5,10 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -18,14 +14,6 @@ import (
 // Returns the access type and the share ID (if applicable).
 // viewerUserID can be nil for unauthenticated users.
 func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64) (*db.SessionAccessInfo, error) {
-	ctx, span := tracer.Start(ctx, "db.get_session_access_type",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
-	if viewerUserID != nil {
-		span.SetAttributes(attribute.Int64("user.id", *viewerUserID))
-	}
-
 	// First, check if session exists and get owner
 	var ownerUserID int64
 	err := s.conn().QueryRowContext(ctx,
@@ -37,20 +25,16 @@ func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, view
 		if db.IsInvalidUUIDError(err) {
 			return nil, db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
 	// Check if viewer is the owner (most specific)
 	if viewerUserID != nil && *viewerUserID == ownerUserID {
-		span.SetAttributes(attribute.String("access.type", "owner"))
 		return &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}, nil
 	}
 
 	// ShareAllSessions: any authenticated user gets system-level access (no share rows needed)
 	if s.DB.ShareAllSessions && viewerUserID != nil {
-		span.SetAttributes(attribute.String("access.type", "system"))
 		return &db.SessionAccessInfo{AccessType: db.SessionAccessSystem}, nil
 	}
 
@@ -89,16 +73,11 @@ func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, view
 
 	if err == sql.ErrNoRows {
 		// No shares exist for this session
-		span.SetAttributes(attribute.String("access.type", "none"))
 		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone}, nil
 	}
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to check share access: %w", err)
 	}
-
-	span.SetAttributes(attribute.String("access.type", accessType))
 
 	switch accessType {
 	case "recipient":
@@ -118,16 +97,6 @@ func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, view
 // Hostname and username are only returned for owners.
 // Updates last_accessed_at on the share if accessed via share.
 func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *db.SessionAccessInfo) (*db.SessionDetail, error) {
-	ctx, span := tracer.Start(ctx, "db.get_session_detail_with_access",
-		trace.WithAttributes(
-			attribute.String("session.id", sessionID),
-			attribute.String("access.type", string(accessInfo.AccessType)),
-		))
-	defer span.End()
-	if viewerUserID != nil {
-		span.SetAttributes(attribute.Int64("viewer.user_id", *viewerUserID))
-	}
-
 	// Check owner's status to block access if deactivated
 	var session db.SessionDetail
 	var gitInfoBytes []byte
@@ -158,8 +127,6 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 		if db.IsInvalidUUIDError(err) {
 			return nil, db.ErrSessionNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 	session.Provider = models.NormalizeProvider(session.Provider)
@@ -191,8 +158,6 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 
 	// Unmarshal git_info and load sync files
 	if err := db.UnmarshalSessionGitInfo(&session, gitInfoBytes); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	// git_info is a free-form JSONB passthrough that typically holds remote
@@ -206,8 +171,6 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 		session.GitInfo = db.SanitizeGitInfoForSharing(session.GitInfo)
 	}
 	if err := db.LoadSessionSyncFiles(ctx, s.DB, &session); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 

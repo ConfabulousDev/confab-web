@@ -9,10 +9,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // =============================================================================
@@ -408,10 +404,6 @@ var cardOps = []cardOp{
 // Returns a Cards struct with nil fields for cards that don't exist.
 // All card queries run in parallel to minimize latency.
 func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) {
-	ctx, span := tracer.Start(ctx, "analytics.get_cards",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	cards := &Cards{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -440,10 +432,7 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 		allErrs = append(allErrs, err)
 	}
 	if len(allErrs) > 0 {
-		combined := errors.Join(allErrs...)
-		span.RecordError(combined)
-		span.SetStatus(codes.Error, combined.Error())
-		return nil, combined
+		return nil, errors.Join(allErrs...)
 	}
 
 	return cards, nil
@@ -452,18 +441,6 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 // UpsertCards inserts or updates all set cards for a session.
 // All card upserts run in parallel to minimize latency.
 func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
-	// Get session ID from the first available card for tracing.
-	var sessionID string
-	if cards.TokensV2 != nil {
-		sessionID = cards.TokensV2.SessionID
-	} else if cards.Session != nil {
-		sessionID = cards.Session.SessionID
-	}
-
-	ctx, span := tracer.Start(ctx, "analytics.upsert_cards",
-		trace.WithAttributes(attribute.String("session.id", sessionID)))
-	defer span.End()
-
 	var wg sync.WaitGroup
 	errs := make(chan error, len(cardOps))
 
@@ -488,10 +465,7 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 		allErrs = append(allErrs, err)
 	}
 	if len(allErrs) > 0 {
-		combined := errors.Join(allErrs...)
-		span.RecordError(combined)
-		span.SetStatus(codes.Error, combined.Error())
-		return combined
+		return errors.Join(allErrs...)
 	}
 
 	return nil

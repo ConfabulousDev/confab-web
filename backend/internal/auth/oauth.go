@@ -561,9 +561,6 @@ func RequireSession(database *db.DB, config *OAuthConfig) func(http.Handler) htt
 			log := logger.Ctx(r.Context()).With("user_id", authResult.userID)
 			ctx := logger.WithLogger(r.Context(), log)
 
-			// Enrich OpenTelemetry span with user info
-			enrichSpanWithUser(ctx, authResult.userID, authResult.userEmail, false, true)
-
 			// Add user ID + read-only flag (CF-483) to context
 			ctx = context.WithValue(ctx, userIDContextKey, authResult.userID)
 			ctx = WithReadOnly(ctx, authResult.userReadOnly)
@@ -587,25 +584,21 @@ func RequireSessionOrAPIKey(database *db.DB, config *OAuthConfig) func(http.Hand
 			var userID int64
 			var userEmail string
 			var userReadOnly bool
-			var authAPIKey, authSession bool
 
 			// Try session cookie first
 			if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
 				userID = sessionAuth.userID
 				userEmail = sessionAuth.userEmail
 				userReadOnly = sessionAuth.userReadOnly
-				authSession = true
 			} else if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
 				// Fall back to API key
 				userID = apiKeyAuth.userID
 				userEmail = apiKeyAuth.userEmail
 				userReadOnly = apiKeyAuth.userReadOnly
-				authAPIKey = true
 			} else if demoAuth := AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey); demoAuth != nil {
 				userID = demoAuth.userID
 				userEmail = demoAuth.userEmail
 				userReadOnly = demoAuth.userReadOnly
-				authSession = true
 			} else {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
@@ -623,9 +616,6 @@ func RequireSessionOrAPIKey(database *db.DB, config *OAuthConfig) func(http.Hand
 			// Enrich request-scoped logger with user_id
 			log := logger.Ctx(r.Context()).With("user_id", userID)
 			ctx := logger.WithLogger(r.Context(), log)
-
-			// Enrich OpenTelemetry span with user info
-			enrichSpanWithUser(ctx, userID, userEmail, authAPIKey, authSession)
 
 			// Add user ID + read-only flag (CF-483) to context
 			ctx = context.WithValue(ctx, userIDContextKey, userID)
@@ -654,24 +644,20 @@ func OptionalAuth(database *db.DB, config *OAuthConfig) func(http.Handler) http.
 			var userID int64
 			var userEmail string
 			var userReadOnly bool
-			var authAPIKey, authSession bool
 
 			// Try API key first, then session cookie
 			if apiKeyAuth := TryAPIKeyAuth(r, database); apiKeyAuth != nil {
 				userID = apiKeyAuth.userID
 				userEmail = apiKeyAuth.userEmail
 				userReadOnly = apiKeyAuth.userReadOnly
-				authAPIKey = true
 			} else if sessionAuth := TrySessionAuth(r, database); sessionAuth != nil {
 				userID = sessionAuth.userID
 				userEmail = sessionAuth.userEmail
 				userReadOnly = sessionAuth.userReadOnly
-				authSession = true
 			} else if demoAuth := AutoImpersonateIfDemo(w, r, database, config.DemoIdentityEmail, config.CSRFSecretKey); demoAuth != nil {
 				userID = demoAuth.userID
 				userEmail = demoAuth.userEmail
 				userReadOnly = demoAuth.userReadOnly
-				authSession = true
 			} else {
 				// No auth - when domain restrictions are in place, require authentication
 				// to prevent anonymous access to public shares on on-prem instances
@@ -692,7 +678,6 @@ func OptionalAuth(database *db.DB, config *OAuthConfig) func(http.Handler) http.
 			setLogUserID(w, userID)
 			log := logger.Ctx(r.Context()).With("user_id", userID)
 			ctx := logger.WithLogger(r.Context(), log)
-			enrichSpanWithUser(ctx, userID, userEmail, authAPIKey, authSession)
 			ctx = context.WithValue(ctx, userIDContextKey, userID)
 			ctx = WithReadOnly(ctx, userReadOnly)
 			next.ServeHTTP(w, r.WithContext(ctx))

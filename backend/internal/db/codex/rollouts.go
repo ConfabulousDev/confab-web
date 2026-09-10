@@ -7,10 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ConfabulousDev/confab-web/internal/db"
 )
 
@@ -95,13 +91,6 @@ func scanRollout(scanner interface {
 //     empty (COALESCE/NULLIF). Non-empty incoming values overwrite.
 //   - updated_at advances on every successful call (NOW()).
 func (s *Store) UpsertRollout(ctx context.Context, userID int64, p UpsertRolloutParams) error {
-	ctx, span := tracer.Start(ctx, "db.upsert_rollout",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("thread.uuid", p.ThreadUUID),
-		))
-	defer span.End()
-
 	const query = `
 		INSERT INTO codex_rollouts (
 			thread_uuid, user_id, parent_thread_uuid, hosted_session_id, hosted_file_name,
@@ -129,8 +118,6 @@ func (s *Store) UpsertRollout(ctx context.Context, userID int64, p UpsertRollout
 		p.AgentPath, p.AgentRole, p.AgentNickname,
 	)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("upsert codex rollout: %w", err)
 	}
 	return nil
@@ -139,13 +126,6 @@ func (s *Store) UpsertRollout(ctx context.Context, userID int64, p UpsertRollout
 // GetRollout returns the rollout row owned by userID with the given thread UUID.
 // Returns db.ErrRolloutNotFound when the row does not exist for this user.
 func (s *Store) GetRollout(ctx context.Context, userID int64, threadUUID string) (*Rollout, error) {
-	ctx, span := tracer.Start(ctx, "db.get_rollout",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("thread.uuid", threadUUID),
-		))
-	defer span.End()
-
 	query := `SELECT ` + rolloutColumns + ` FROM codex_rollouts WHERE user_id = $1 AND thread_uuid = $2`
 	row := s.conn().QueryRowContext(ctx, query, userID, threadUUID)
 	r, err := scanRollout(row)
@@ -153,8 +133,6 @@ func (s *Store) GetRollout(ctx context.Context, userID int64, threadUUID string)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, db.ErrRolloutNotFound
 		}
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("get codex rollout: %w", err)
 	}
 	return r, nil
@@ -165,13 +143,6 @@ func (s *Store) GetRollout(ctx context.Context, userID int64, threadUUID string)
 // created_at ASC. Uses UNION (not UNION ALL) so any cycle in the input
 // terminates naturally via per-iteration row deduplication.
 func (s *Store) ListSubtree(ctx context.Context, userID int64, rootThreadUUID string) ([]*Rollout, error) {
-	ctx, span := tracer.Start(ctx, "db.list_subtree",
-		trace.WithAttributes(
-			attribute.Int64("user.id", userID),
-			attribute.String("thread.uuid", rootThreadUUID),
-		))
-	defer span.End()
-
 	// The recursive CTE selects raw columns (no COALESCE) so the recursive
 	// JOIN compares parent_thread_uuid against the unaltered thread_uuid; the
 	// final SELECT reuses rolloutColumns to apply COALESCE consistently with
@@ -200,8 +171,6 @@ func (s *Store) ListSubtree(ctx context.Context, userID int64, rootThreadUUID st
 
 	rows, err := s.conn().QueryContext(ctx, query, userID, rootThreadUUID)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("list codex rollout subtree: %w", err)
 	}
 	defer rows.Close()
@@ -210,15 +179,11 @@ func (s *Store) ListSubtree(ctx context.Context, userID int64, rootThreadUUID st
 	for rows.Next() {
 		r, err := scanRollout(rows)
 		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("scan subtree row: %w", err)
 		}
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("iterate subtree rows: %w", err)
 	}
 	return out, nil

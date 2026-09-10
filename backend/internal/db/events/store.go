@@ -4,10 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/ConfabulousDev/confab-web/internal/db"
-	"go.opentelemetry.io/otel"
 )
-
-var tracer = otel.Tracer("confab/db/events")
 
 // Store provides session event database operations.
 type Store struct {

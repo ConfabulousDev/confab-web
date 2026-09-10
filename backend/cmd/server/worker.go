@@ -14,13 +14,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
-	"github.com/honeycombio/otel-config-go/otelconfig"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 )
-
-var workerTracer = otel.Tracer("confab/worker")
 
 // WorkerConfig holds configuration for the analytics precompute worker.
 type WorkerConfig struct {
@@ -55,14 +49,6 @@ type Worker struct {
 // runWorker is the entry point for the background worker process.
 func runWorker() {
 	logger.Info("starting analytics precompute worker")
-
-	// Initialize OpenTelemetry (same as server)
-	otelShutdown, err := otelconfig.ConfigureOpenTelemetry()
-	if err != nil {
-		logger.Warn("failed to configure OpenTelemetry for worker", "error", err)
-	} else {
-		defer otelShutdown()
-	}
 
 	// Load worker configuration
 	workerConfig := loadWorkerConfig()
@@ -163,9 +149,6 @@ func (w *Worker) Run(ctx context.Context) {
 // 1. Sessions with stale regular cards (computes regular cards only)
 // 2. Sessions with stale smart recap but fresh regular cards (computes smart recap only)
 func (w *Worker) runOnce(ctx context.Context) {
-	ctx, span := workerTracer.Start(ctx, "worker.run_once")
-	defer span.End()
-
 	logger.Info("starting precomputation cycle")
 
 	// Refresh the active price table (best-effort, lazily cached behind a short
@@ -181,13 +164,11 @@ func (w *Worker) runOnce(ctx context.Context) {
 		deleted, err := (&access.Store{DB: w.db}).DeleteExpiredShares(ctx, w.config.ShareRetention)
 		if err != nil {
 			logger.Error("failed to delete expired shares", "error", err)
-			span.RecordError(err)
 		} else if deleted > 0 {
 			logger.Info("deleted expired shares",
 				"count", deleted,
 				"retention", w.config.ShareRetention,
 			)
-			span.SetAttributes(attribute.Int64("shares.deleted", deleted))
 		}
 	}
 
@@ -195,8 +176,6 @@ func (w *Worker) runOnce(ctx context.Context) {
 	regularSessions, err := w.precomputer.FindStaleSessions(ctx, w.config.MaxSessions)
 	if err != nil {
 		logger.Error("failed to find stale sessions", "error", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 
@@ -204,8 +183,6 @@ func (w *Worker) runOnce(ctx context.Context) {
 	smartRecapSessions, err := w.precomputer.FindStaleSmartRecapSessions(ctx, w.config.MaxSessions)
 	if err != nil {
 		logger.Error("failed to find stale smart recap sessions", "error", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 
@@ -213,19 +190,12 @@ func (w *Worker) runOnce(ctx context.Context) {
 	searchIndexSessions, err := w.precomputer.FindStaleSearchIndexSessions(ctx, w.config.MaxSearchIndexSessions)
 	if err != nil {
 		logger.Error("failed to find stale search index sessions", "error", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 
 	totalFound := len(regularSessions) + len(smartRecapSessions) + len(searchIndexSessions)
 	if totalFound == 0 {
 		logger.Info("no stale sessions found")
-		span.SetAttributes(
-			attribute.Int("sessions.regular.found", 0),
-			attribute.Int("sessions.smart_recap.found", 0),
-			attribute.Int("sessions.search_index.found", 0),
-		)
 		return
 	}
 
@@ -233,11 +203,6 @@ func (w *Worker) runOnce(ctx context.Context) {
 		"regular_cards", len(regularSessions),
 		"smart_recap_only", len(smartRecapSessions),
 		"search_index_only", len(searchIndexSessions),
-	)
-	span.SetAttributes(
-		attribute.Int("sessions.regular.found", len(regularSessions)),
-		attribute.Int("sessions.smart_recap.found", len(smartRecapSessions)),
-		attribute.Int("sessions.search_index.found", len(searchIndexSessions)),
 	)
 
 	// In dry-run mode, just log what would be processed and return
@@ -271,12 +236,6 @@ func (w *Worker) runOnce(ctx context.Context) {
 			"would_process_smart_recap", len(smartRecapSessions),
 			"would_process_search_index", len(searchIndexSessions),
 		)
-		span.SetAttributes(
-			attribute.Bool("dry_run", true),
-			attribute.Int("sessions.regular.would_process", len(regularSessions)),
-			attribute.Int("sessions.smart_recap.would_process", len(smartRecapSessions)),
-			attribute.Int("sessions.search_index.would_process", len(searchIndexSessions)),
-		)
 		return
 	}
 
@@ -296,14 +255,6 @@ func (w *Worker) runOnce(ctx context.Context) {
 		"smart_recap_errors", smartRecapErrors,
 		"search_index_processed", searchIndexProcessed,
 		"search_index_errors", searchIndexErrors,
-	)
-	span.SetAttributes(
-		attribute.Int("sessions.regular.processed", regularProcessed),
-		attribute.Int("sessions.regular.errors", regularErrors),
-		attribute.Int("sessions.smart_recap.processed", smartRecapProcessed),
-		attribute.Int("sessions.smart_recap.errors", smartRecapErrors),
-		attribute.Int("sessions.search_index.processed", searchIndexProcessed),
-		attribute.Int("sessions.search_index.errors", searchIndexErrors),
 	)
 }
 
