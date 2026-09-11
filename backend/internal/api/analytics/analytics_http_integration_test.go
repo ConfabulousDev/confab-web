@@ -497,7 +497,7 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 //   - tokens.cache_creation = 0     (OpenAI doesn't charge for cache writes)
 //   - tokens.cache_read     = 200   (cached portion)
 //   - code_activity.files_modified = 1 (one Add File)
-//   - code_activity.files_read     = 0 (Codex has no Read tool)
+//   - code_activity.files_read     = 0 (<=0.130.0 rollout: no parsed_cmd, m2ky)
 //   - code_activity.lines_added    = 3 (the three +-prefixed lines)
 const codexExactFixture = `{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-test-aaaa-bbbb-cccc-dddddddddddd","timestamp":"2026-05-13T01:00:00.000Z","cwd":"/test","originator":"codex-tui","cli_version":"0.130.0","source":"cli","thread_source":"user","model_provider":"openai","model":"gpt-5"}}
 {"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","cwd":"/test","approval_policy":"on-request"}}
@@ -647,7 +647,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_Exact(t *testing.T) {
 		t.Fatalf("Cards[\"code_activity\"] = %T, want map[string]interface{}", codeActivityRaw)
 	}
 	if got := jsonNumber(codeActivity["files_read"]); got != 0 {
-		t.Errorf("code_activity.files_read = %d, want 0 (no Read tool in codex)", got)
+		t.Errorf("code_activity.files_read = %d, want 0 (<=0.130.0 rollout: no parsed_cmd)", got)
 	}
 	if got := jsonNumber(codeActivity["files_modified"]); got != 1 {
 		t.Errorf("code_activity.files_modified = %d, want 1", got)

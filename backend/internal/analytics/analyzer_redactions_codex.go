@@ -40,5 +40,13 @@ func computeCodexRedactions(out *ComputeResult, r *codex.ParsedRollout) {
 			count(tc.Arguments)
 			count(tc.Output)
 		}
+		// <=0.130.0 edit bodies are inside the apply_patch envelope counted
+		// above; >=0.149.1 edit bodies live only on FileChange items, so the
+		// eras would otherwise report different totals for the same edit.
+		for _, edit := range turn.FileEdits {
+			count(edit.Path)
+			count(edit.UnifiedDiff)
+			count(edit.Content)
+		}
 	}
 }

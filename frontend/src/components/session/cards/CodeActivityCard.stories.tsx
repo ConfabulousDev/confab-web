@@ -5,9 +5,10 @@ const meta: Meta<typeof CodeActivityCard> = {
   title: 'Session/Cards/CodeActivityCard',
   component: CodeActivityCard,
   args: {
-    // Default provider; Codex* stories override. The 'Files read' row is
-    // hidden when provider is codex, and the 'Searches' row gets a Codex
-    // tooltip explaining the web_search_call exclusion (CF-439).
+    // Default provider; Codex* stories override. Every provider shows all
+    // rows; Codex additionally gets tooltips on 'Files read' and 'Searches'
+    // explaining that both come from Codex's own per-command classification,
+    // recorded only from CLI 0.149.1 onward (CF-439, m2ky).
     provider: 'claude-code',
   },
   parameters: {
@@ -181,11 +182,12 @@ export const Loading: Story = {
 };
 
 /**
- * Codex session: Files-read row is hidden (Codex has no Read tool), and the
- * Searches row gets a tooltip explaining `web_search_call` is not counted as
- * file search (CF-439).
+ * Codex session from before CLI 0.149.1: Files read and Searches are
+ * structurally zero, because that era recorded the shell command line with no
+ * indication of its purpose. Both rows are still shown, with tooltips
+ * explaining the zero rather than hiding the metric (CF-439, m2ky).
  */
-export const Codex: Story = {
+export const CodexPreV149: Story = {
   args: {
     provider: 'codex',
     data: {
@@ -204,8 +206,31 @@ export const Codex: Story = {
 };
 
 /**
- * Codex variant of ManyLanguages: same visual richness but with the Codex
- * row-hiding + Searches tooltip applied.
+ * Codex session from CLI 0.149.1 or later: `parsed_cmd` classifies each shell
+ * command, so Files read and Searches carry real values — the regression m2ky
+ * fixed, where every modern Codex session reported an all-zero card.
+ */
+export const CodexModernEra: Story = {
+  args: {
+    provider: 'codex',
+    data: {
+      files_read: 17,
+      files_modified: 12,
+      lines_added: 192,
+      lines_removed: 106,
+      search_count: 2,
+      language_breakdown: {
+        go: 8,
+        md: 4,
+      },
+    },
+    loading: false,
+  },
+};
+
+/**
+ * Codex variant of ManyLanguages: same visual richness, with the Codex
+ * Files-read + Searches tooltips applied.
  */
 export const CodexManyLanguages: Story = {
   args: {

@@ -38,6 +38,13 @@ func ExtractCodexUserMessagesText(rollouts []*codex.ParsedRollout) string {
 				}
 				b.Add(tc.Name + " " + args)
 			}
+			// <=0.130.0 rollouts reach edited paths through the apply_patch
+			// envelope in Arguments above. >=0.149.1 rollouts carry them only
+			// on FileChange items, so index them here or the two eras are not
+			// searchable alike.
+			for _, edit := range turn.FileEdits {
+				b.Add(edit.Path)
+			}
 		}
 	}
 	return b.String()

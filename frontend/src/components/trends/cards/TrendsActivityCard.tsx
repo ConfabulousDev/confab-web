@@ -22,13 +22,17 @@ const UNKNOWN_PROVIDER_COLOR = '#9ca3af';
 // canonical provider id.
 const FALLBACK_STACK_KEY = '__total__';
 
-const FILES_READ_CAVEAT = 'Excludes Codex sessions (no Read tool)';
+// m2ky: Codex >=0.149.1 does report file reads (from its own `parsed_cmd`
+// command classification), so the old "no Read tool" claim is false. Only the
+// pre-0.149.1 era is missing from the total, and a Trends window can span both.
+const FILES_READ_CAVEAT = 'Excludes Codex sessions from before CLI 0.149.1, which did not report file reads';
 
 interface TrendsActivityCardProps {
   data: TrendsActivityCardData | null;
   // Canonical provider ids in the filtered window (TrendsResponse.providers_present).
-  // Drives the Files Read row's three-state behavior: hidden when only Codex
-  // (no Read tool), caveat tooltip when mixed Claude+Codex, unchanged otherwise.
+  // Drives the Files Read row's caveat: a ⓘ tooltip whenever Codex is present,
+  // because Codex sessions from before CLI 0.149.1 contribute no file reads
+  // (m2ky). The row itself always renders.
   providersPresent: string[];
 }
 
@@ -132,10 +136,10 @@ export function TrendsActivityCard({ data, providersPresent }: TrendsActivityCar
 
   if (!data) return null;
 
-  // Files Read three-state: hide when only Codex (always 0 by design, mirrors
-  // CF-439); caveat when mixed Claude+Codex; unchanged otherwise.
+  // Files Read: the row used to be hidden for a Codex-only window because the
+  // total was structurally 0. Codex >=0.149.1 reports it for real (m2ky), so
+  // the row always renders and the caveat marks the partial older-era total.
   const hasCodex = providersPresent.includes('codex');
-  const onlyCodex = hasCodex && providersPresent.length === 1;
 
   const hasChartData = chartData.length > 1;
   // Fallback path always emits exactly one stack key, so length > 1 implies
@@ -144,26 +148,24 @@ export function TrendsActivityCard({ data, providersPresent }: TrendsActivityCar
 
   return (
     <TrendsCard title="Code Activity" icon={CodeIcon}>
-      {!onlyCodex && (
-        <StatRow
-          label="Files Read"
-          value={
-            <>
-              {formatNumber(data.total_files_read)}
-              {hasCodex && (
-                <span
-                  className={styles.caveatIcon}
-                  title={FILES_READ_CAVEAT}
-                  aria-label={FILES_READ_CAVEAT}
-                >
-                  ⓘ
-                </span>
-              )}
-            </>
-          }
-          icon={FileIcon}
-        />
-      )}
+      <StatRow
+        label="Files Read"
+        value={
+          <>
+            {formatNumber(data.total_files_read)}
+            {hasCodex && (
+              <span
+                className={styles.caveatIcon}
+                title={FILES_READ_CAVEAT}
+                aria-label={FILES_READ_CAVEAT}
+              >
+                ⓘ
+              </span>
+            )}
+          </>
+        }
+        icon={FileIcon}
+      />
       <StatRow
         label="Files Modified"
         value={formatNumber(data.total_files_modified)}

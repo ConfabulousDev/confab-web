@@ -118,7 +118,7 @@ export const ClaudeOnly: Story = {
 };
 
 // Mixed Claude + Codex window: Files Read row renders with the ⓘ caveat
-// (excludes Codex sessions); chart stacks Claude and Codex series.
+// (excludes pre-0.149.1 Codex sessions); chart stacks Claude and Codex series.
 export const Mixed: Story = {
   args: {
     providersPresent: ['claude-code', 'codex'],
@@ -140,14 +140,39 @@ export const Mixed: Story = {
   },
 };
 
-// Codex-only window: Files Read row is omitted entirely (Codex has no Read
-// tool, so the total would always be 0). Chart shows a Codex-colored
-// single-stack series.
-export const CodexOnly: Story = {
+// Codex-only window, all sessions predating CLI 0.149.1: that era reported no
+// file reads, so the total really is 0 — but the row still renders, with the ⓘ
+// caveat explaining the zero (m2ky). Chart shows a Codex-colored single-stack
+// series.
+export const CodexOnlyPreV149: Story = {
   args: {
     providersPresent: ['codex'],
     data: {
       total_files_read: 0,
+      total_files_modified: 156,
+      total_lines_added: 3200,
+      total_lines_removed: 980,
+      daily_session_counts: [
+        { date: '2024-01-08', session_count: 2, per_provider: { codex: 2 } },
+        { date: '2024-01-09', session_count: 4, per_provider: { codex: 4 } },
+        { date: '2024-01-10', session_count: 1, per_provider: { codex: 1 } },
+        { date: '2024-01-11', session_count: 5, per_provider: { codex: 5 } },
+        { date: '2024-01-12', session_count: 3, per_provider: { codex: 3 } },
+        { date: '2024-01-13', session_count: 2, per_provider: { codex: 2 } },
+        { date: '2024-01-14', session_count: 4, per_provider: { codex: 4 } },
+      ],
+    },
+  },
+};
+
+// Codex-only window on CLI 0.149.1 or later: `parsed_cmd` classification makes
+// Files Read a real number for Codex. The ⓘ caveat stays, because a window can
+// still contain older sessions that contribute nothing to the total (m2ky).
+export const CodexOnlyModernEra: Story = {
+  args: {
+    providersPresent: ['codex'],
+    data: {
+      total_files_read: 412,
       total_files_modified: 156,
       total_lines_added: 3200,
       total_lines_removed: 980,

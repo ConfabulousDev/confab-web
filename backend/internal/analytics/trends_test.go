@@ -1658,8 +1658,9 @@ func TestGetTrends_TokensPerProvider_LegacyAliasFold(t *testing.T) {
 // behavior of the Activity card when a mixed Claude + Codex window is in play:
 //
 //   - Files Modified / Lines Added / Lines Removed accumulate from BOTH providers.
-//   - Files Read accumulates from Claude only (Codex has no Read tool — its
-//     CodeActivity rows always carry FilesRead=0 by design).
+//   - Files Read accumulates from Claude only here, because this fixture's
+//     Codex rows are <=0.130.0 sessions, which record no parsed_cmd and so
+//     carry FilesRead=0. >=0.149.1 Codex sessions do contribute reads (m2ky).
 //   - DailySessionCounts[i].PerProvider exposes a canonical-id-keyed map per day
 //     so the frontend can render stacked bars (mirrors DailyCostPoint.PerProvider
 //     from the Tokens card).
@@ -1816,7 +1817,7 @@ func TestGetTrends_CodexOnlyFilesReadZero(t *testing.T) {
 		t.Fatal("Activity card must be non-nil")
 	}
 	if got := resp.Cards.Activity.TotalFilesRead; got != 0 {
-		t.Errorf("TotalFilesRead = %d, want 0 (Codex has no Read tool)", got)
+		t.Errorf("TotalFilesRead = %d, want 0 (<=0.130.0 Codex rollouts report no reads)", got)
 	}
 	if got, want := resp.Cards.Activity.TotalFilesModified, 3; got != want {
 		t.Errorf("TotalFilesModified = %d, want %d", got, want)

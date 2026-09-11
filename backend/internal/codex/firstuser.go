@@ -21,26 +21,17 @@ import (
 //	>=0.149.1  {"type":"event_msg","payload":{"type":"item_completed",
 //	            "item":{"type":"UserMessage","content":[{"type":"text","text":"…"}]}}}
 //
-// This file is the single home for that shape knowledge: callers that need the
-// human prompt (today, the sync ingest path) route through it rather than
-// decoding the payload a second time.
+// This file is the single home for reading the human prompt out of those
+// shapes: callers that need it (today, the sync ingest path) route through
+// these helpers rather than decoding the payload a second time. The
+// >=0.149.1 envelope struct itself (eventItemCompletedPayload / completedItem)
+// lives with the other wire payload types in parser.go, whose
+// handleItemCompleted dispatches the non-UserMessage item types; both readers
+// share that one declaration.
 
 // eventUserMessagePayload is the <=0.130.0 event_msg.user_message payload.
 type eventUserMessagePayload struct {
 	Message string `json:"message"`
-}
-
-// eventItemCompletedPayload is the >=0.149.1 event_msg.item_completed payload.
-// Only the fields needed to recognize and read a UserMessage item are decoded;
-// AgentMessage, CommandExecution and friends fall out as an item type mismatch.
-type eventItemCompletedPayload struct {
-	Item *struct {
-		Type    string `json:"type"`
-		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-	} `json:"item"`
 }
 
 // EventMsgUserText returns the human-typed text carried by an `event_msg`

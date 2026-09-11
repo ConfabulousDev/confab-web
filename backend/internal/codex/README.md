@@ -22,14 +22,16 @@ backend pipelines.
 
 | File | Role |
 |------|------|
-| `parser.go` | `ParseRollout(io.Reader) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, and skill / `<skills_instructions>` / `<subagent_notification>` extraction. |
-| `types.go` | `ParsedRollout`, `Turn`, `Message`, `ToolCall`, `TokenUsage`, `CompactionEvent`, `ValidationError`, plus `SubagentSource`, `SkillInvocation`, `SubagentSpawn`, `SkillAvailable` (CF-443). Pure data types — no imports beyond `time`. |
+| `parser.go` | `ParseRollout(io.Reader) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, skill / `<skills_instructions>` / `<subagent_notification>` extraction, and the >=0.149.1 `item_completed` item dispatch (`handleItemCompleted`). |
+| `types.go` | `ParsedRollout`, `Turn`, `Message`, `ToolCall`, `TokenUsage`, `CompactionEvent`, `ValidationError`, plus `SubagentSource`, `SkillInvocation`, `SubagentSpawn`, `SkillAvailable` (CF-443) and `FileEdit` (m2ky). Pure data types — no imports beyond `time`. |
 | `firstuser.go` | `EventMsgUserText(json.RawMessage) string` and `UserMessageFromLine(string) string` — extract the human-typed prompt from an `event_msg` line across both wire eras (`user_message` on <=0.130.0, `item_completed` → `UserMessage` on >=0.149.1). Reads the event_msg stream only; the user-role `response_item` stream is injected context (`<environment_context>`, AGENTS.md), never the prompt. Returns `""` for anything underivable. |
 | `firstuser_test.go` | Unit tests for the two extractors against wire shapes captured from real rollouts: both eras, mixed `text`/`skill` content parts, and the response_item / non-UserMessage lines that must yield `""`. |
+| `itemcompleted_test.go` | Unit tests for the >=0.149.1 `item_completed` dispatch (m2ky): FileChange → sorted `FileEdits`, CommandExecution → `ParsedCommandKinds`, Extension `web.search` → synthesized tool call, unobserved Extension kinds and unhandled item types skipped, UserMessage/AgentMessage deliberately not double-recorded, a mixed-era rollout, and malformed items. Fixture lines reproduce real captured wire shapes. |
 | `parser_test.go` | Unit tests against the fixtures below. Covers the legacy parser scenarios plus CF-443 (session_meta source variants, `<skills_instructions>` catalog, `<skill>` invocation extraction + stripping, `spawn_agent` / `wait_agent` routing, `<subagent_notification>` stripping, depth>1, completion-text truncation). |
 | `testdata/sample_rollout.jsonl` | Legacy fixture: session_meta, three completed turns (turn 3 carries an inline-failed `custom_tool_call` per CF-438), function_call + custom_tool_call, web_search_call, encrypted reasoning, non-null `token_count.info`, a compacted line, an unknown top-level type (forward-compat), and a trailing orphan `function_call_output`. |
 | `testdata/sample_rollout_with_skill_invocation.jsonl` | CF-443: developer message with `<skills_instructions>` catalog plus a user message wrapping a single `<skill>` invocation. |
 | `testdata/sample_rollout_parent_with_spawns.jsonl` | CF-443: parent-side rollout with two `spawn_agent` calls (one completed, one failed) and a `wait_agent` reporting both outcomes, plus a `<subagent_notification>` user-message artifact. |
+| `testdata/sample_rollout_modern.jsonl` | m2ky: a >=0.149.1-era rollout — session_meta without `model`, `item_completed` items (UserMessage, Reasoning, two CommandExecutions with `parsed_cmd`, an `Extension` web.search, a FileChange with one `update` and one `add`, AgentMessage), plus the response_item twins (`custom_tool_call` name `exec` whose `input` is JavaScript, and the user/assistant messages) that prove the two streams both carry the conversation. |
 
 ## Parser contract
 
@@ -93,6 +95,74 @@ and applies the following rules:
     `CompletionStatus`, and `CompletionText` (truncated to 1000 chars).
     Orphan spawns (no `wait_agent` in the rollout) remain `Completed=false`.
 
+12. **`event_msg.item_completed`** (>=0.149.1): dispatched by `item.type`.
+    `CommandExecution` appends each `parsed_cmd[].type` to
+    `Turn.ParsedCommandKinds`; `FileChange` flattens `item.changes` into
+    `Turn.FileEdits`, **sorted by path** so downstream accumulation never
+    depends on JSON map order; `Extension` with `kind: "web.search"`
+    synthesizes a `ToolCall` named `web.search` (mirroring the <=0.130.0
+    `web_search_call` synthesis). `UserMessage`, `AgentMessage`, `Reasoning`,
+    `ImageView` and unknown item types are deliberately **not** recorded — see
+    "Wire-format eras" below. Items are never recorded as tool calls apart from
+    that one synthesis.
+
+## Wire-format eras
+
+Codex reshaped its rollout format at **0.149.1** (~2026-08-25). Old rollouts
+live in the object store forever, so both shapes are supported permanently; the
+pre-0.149 shape is frozen, so this does not grow over time. Handling is
+**per-event, with no rollout-level era switch** — a session started before a CLI
+upgrade and resumed after it contains both shapes in one file.
+
+What moved:
+
+| Signal | <=0.130.0 | >=0.149.1 |
+|--------|-----------|-----------|
+| File edits | `apply_patch` custom_tool_call, `*** Begin Patch` envelope | `item_completed` → `FileChange`, per-path map of `{type, unified_diff}` (update) or `{type, content}` (add) |
+| Shell runs | `exec_command` function_call, arguments are JSON | `exec` custom_tool_call whose `input` is **JavaScript**; the structured form (`command`, `cwd`, `parsed_cmd`, `status`) is on `item_completed` → `CommandExecution` |
+| Web search | `web_search_call` response_item + `web_search_end` event | `item_completed` → `Extension`, `kind: "web.search"` |
+| User / assistant text | `event_msg.user_message` / `agent_message`, plus response_item `message` | `item_completed` → `UserMessage` / `AgentMessage`, plus response_item `message` |
+| Patch status | `event_msg.patch_apply_end` | carried inline on the `FileChange` item |
+| `model` | `session_meta.model` | absent from session_meta; `turn_context` / `task_started` only |
+
+**The two streams inverted, and cannot be merged.** For a modern shell run the
+response_item carries JavaScript (`const r = await tools.exec_command({cmd:"…"})`)
+while the structured data is on the event side. Their ids never overlap
+(`call_…` vs `exec-…`) and their counts diverge (one sampled rollout: 122
+`custom_tool_call` vs 42 `CommandExecution`), so there is no dedupe-on-merge
+design available. Each consumer reads whichever stream carries its signal.
+
+**Why UserMessage / AgentMessage items are dropped.** Modern rollouts carry the
+conversation in *both* streams — verified across every captured >=0.149.1
+rollout — and the parser already reads `response_item`, so recording the event
+copy would double every message count. The one consumer that needs the
+event-stream user text is server-side `first_user_message` derivation, which
+runs before parsing and reads it through `EventMsgUserText` in `firstuser.go`
+— the single home for that shape.
+
+### Present in modern rollouts, deliberately unconsumed
+
+- **`token_usage_record`** (new top-level type, 380 occurrences across the
+  sampled rollouts). Per-response token accounting, richer than
+  `event_msg.token_count`:
+  `payload.{thread_id, turn_id, session_id, root_turn_id, response_id}` plus
+  three identical-shaped blocks — `usage`, `turn_token_usage` and
+  `thread_token_usage` — each
+  `{input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens, reasoning_output_tokens, total_tokens}`.
+  Token analytics are **not** broken (`token_count` survives in modern
+  rollouts), so adopting this is a feature, not a fix — it is the per-turn
+  substrate ticket 90c3 needs.
+- **`world_state`** (carries `agents_md` text) and **`item.ImageView`** — no
+  analyzer consumes either.
+
+### Open question
+
+`compacted` / `context_compacted` appear in **no** captured >=0.149.1 rollout.
+Either the representation changed again or none of the sampled sessions
+compacted. There is no modern sample to design against, so `handleCompacted` is
+left keyed on the old shape rather than guessed at. Modern compaction handling
+is unverified.
+
 ## Invariants
 
 - `ParseRollout` returns `(*ParsedRollout, error)` — error is only set for
@@ -103,12 +173,17 @@ and applies the following rules:
 - `ToolCall.Status` is one of `"pending"`, `"completed"`, `"failed"`.
 - `Message.Phase` is `"final"` for assistant messages with no explicit phase
   and is empty for user messages.
+- `Turn.FileEdits` is sorted by `Path`. It and `Turn.ParsedCommandKinds` are
+  always empty for <=0.130.0 rollouts.
+- `ParsedCommandKinds` values are Codex's own open-ended vocabulary. Consumers
+  must bucket recognized kinds explicitly and treat an unrecognized kind as
+  uncounted — `"unknown"` is the majority of real entries.
 
 ## Dependencies
 
 | Dependency | Purpose |
 |------------|---------|
-| stdlib only (`bufio`, `bytes`, `encoding/json`, `regexp`, `strconv`, `strings`, `time`, `io`, `fmt`) | The parser intentionally avoids project imports so it can be used as a leaf package by `analytics` without cycles. |
+| stdlib only (`bufio`, `bytes`, `encoding/json`, `regexp`, `sort`, `strconv`, `strings`, `time`, `io`, `fmt`) | The parser intentionally avoids project imports so it can be used as a leaf package by `analytics` without cycles. |
 
 ## Consumers
 

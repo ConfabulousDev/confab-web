@@ -46,22 +46,28 @@ describe('TrendsActivityCard Files Read row — providersPresent branches', () =
     expect(caveatEl).not.toBeNull();
   });
 
-  it('omits Files Read row entirely when providersPresent is ["codex"]', () => {
-    render(
+  // m2ky: the row used to be omitted for a Codex-only window because the total
+  // was structurally 0. Codex >=0.149.1 reports file reads for real, so the row
+  // renders with its real value and keeps the caveat for the older era.
+  it('renders Files Read with its value when providersPresent is ["codex"]', () => {
+    const { container } = render(
       <TrendsActivityCard
-        data={makeData({ total_files_read: 0 })}
+        data={makeData({ total_files_read: 412 })}
         providersPresent={['codex']}
       />,
     );
-    expect(screen.queryByText('Files Read')).not.toBeInTheDocument();
+    expect(screen.getByText('Files Read')).toBeInTheDocument();
+    expect(screen.getByText('412')).toBeInTheDocument();
+    expect(container.querySelector('[title*="0.149.1"]')).not.toBeNull();
   });
 
-  it('ⓘ title attribute mentions Codex has no Read tool', () => {
+  it('ⓘ title attribute names the Codex version, not a missing Read tool', () => {
     const { container } = render(
       <TrendsActivityCard data={makeData()} providersPresent={['claude-code', 'codex']} />,
     );
-    const caveatEl = container.querySelector('[title*="no Read tool"]');
-    expect(caveatEl).not.toBeNull();
+    expect(container.querySelector('[title*="0.149.1"]')).not.toBeNull();
+    // The old copy claimed Codex has no Read tool at all; that is now false.
+    expect(container.querySelector('[title*="no Read tool"]')).toBeNull();
   });
 });
 

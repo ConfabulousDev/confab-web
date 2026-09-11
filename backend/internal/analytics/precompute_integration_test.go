@@ -3139,9 +3139,11 @@ func TestPrecomputeRegularCards_CodexSession(t *testing.T) {
 			cards.Tools != nil, cards.CodeActivity != nil, cards.Conversation != nil,
 			cards.AgentsAndSkills != nil, cards.Redactions != nil)
 	}
-	// Codex has no Read tool, so FilesRead must stay at 0.
+	// This is a <=0.130.0 rollout, whose exec_command carries no parsed_cmd
+	// classification, so FilesRead must stay at 0 (m2ky). >=0.149.1 rollouts do
+	// populate it — see analytics/codex_modern_era_test.go.
 	if cards.CodeActivity != nil && cards.CodeActivity.FilesRead != 0 {
-		t.Errorf("CodeActivity.FilesRead = %d, want 0 (Codex has no Read tool)", cards.CodeActivity.FilesRead)
+		t.Errorf("CodeActivity.FilesRead = %d, want 0 (<=0.130.0 rollout: no parsed_cmd)", cards.CodeActivity.FilesRead)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -859,9 +860,148 @@ func (p *parser) handleEventMsg(ts time.Time, raw json.RawMessage, lineNum int) 
 		if ref, ok := p.callIndex[pae.CallID]; ok {
 			p.toolCallAt(ref).Status = "failed"
 		}
+	case "item_completed":
+		p.handleItemCompleted(ts, raw)
 	default:
-		// user_message, agent_message, and other event types are intentionally
-		// dropped (redundant with response_item, or pure UI metadata).
+		// <=0.130.0 events we deliberately drop: user_message / agent_message /
+		// web_search_end / mcp_tool_call_end are redundant with the
+		// response_item stream, and context_compacted is redundant with the
+		// top-level `compacted` line that handleCompacted records.
+	}
+}
+
+// ----------------------------------------------------------------------------
+// event_msg → item_completed (>=0.149.1)
+// ----------------------------------------------------------------------------
+
+// Codex 0.149.1 collapsed user_message, agent_message, patch_apply_end,
+// web_search_end and mcp_tool_call_end into one `item_completed` envelope
+// discriminated by `item.type`.
+//
+// The two streams also inverted. A modern shell run's response_item carries
+// JavaScript in `input` (`const r = await tools.exec_command({cmd:"…"})`),
+// while the structured command, cwd, parsed_cmd and status live only on the
+// event side. The streams cannot be merged: their ids never overlap (`call_…`
+// vs `exec-…`) and their counts diverge, so each consumer reads whichever
+// stream carries its signal.
+
+// eventItemCompletedPayload is the >=0.149.1 event_msg.item_completed payload.
+// It is the single decode of that envelope in this package — handleItemCompleted
+// below dispatches on the item type, and firstuser.go's EventMsgUserText reads
+// the UserMessage case out of the same struct rather than declaring a second
+// copy of the shape.
+type eventItemCompletedPayload struct {
+	Item *completedItem `json:"item"`
+}
+
+// completedItem is the union of the item shapes we consume. Fields belonging to
+// other item types simply stay zero.
+type completedItem struct {
+	Type string `json:"type"`
+
+	// UserMessage / AgentMessage: typed text parts. Real rollouts mix non-text
+	// parts (e.g. `skill`) in here, and sibling item types capitalize the part
+	// type as "Text", so readers match case-insensitively and skip the rest.
+	// EventMsgUserText (firstuser.go) is the reader for the UserMessage case.
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+
+	// CommandExecution: Codex's own classification of the shell line it ran.
+	ParsedCmd []struct {
+		Type string `json:"type"`
+	} `json:"parsed_cmd"`
+
+	// FileChange: one entry per touched path.
+	Changes map[string]struct {
+		Type        string `json:"type"`
+		UnifiedDiff string `json:"unified_diff"`
+		Content     string `json:"content"`
+	} `json:"changes"`
+
+	// Extension: `kind` names the extension that ran.
+	Kind  string `json:"kind"`
+	Query string `json:"query"`
+}
+
+// handleItemCompleted routes a >=0.149.1 item to the turn state its analyzers
+// read. Items are never recorded as tool calls — modern rollouts already
+// surface `exec` and `wait` through response_item, and the two streams are not
+// 1:1, so counting both would double the Tools card.
+func (p *parser) handleItemCompleted(ts time.Time, raw json.RawMessage) {
+	var ev eventItemCompletedPayload
+	if err := json.Unmarshal(raw, &ev); err != nil || ev.Item == nil {
+		return
+	}
+	item := ev.Item
+
+	switch item.Type {
+	case "CommandExecution":
+		kinds := make([]string, 0, len(item.ParsedCmd))
+		for _, cmd := range item.ParsedCmd {
+			if cmd.Type != "" {
+				kinds = append(kinds, cmd.Type)
+			}
+		}
+		if len(kinds) == 0 {
+			return
+		}
+		p.ensureTurn(ts)
+		p.active.ParsedCommandKinds = append(p.active.ParsedCommandKinds, kinds...)
+
+	case "FileChange":
+		if len(item.Changes) == 0 {
+			return
+		}
+		// `changes` is a JSON object, so decode order is unspecified — sort to
+		// keep FileEdits (and every count derived from it) deterministic.
+		paths := make([]string, 0, len(item.Changes))
+		for path := range item.Changes {
+			paths = append(paths, path)
+		}
+		sort.Strings(paths)
+		p.ensureTurn(ts)
+		for _, path := range paths {
+			change := item.Changes[path]
+			p.active.FileEdits = append(p.active.FileEdits, FileEdit{
+				Path:        path,
+				ChangeType:  change.Type,
+				UnifiedDiff: change.UnifiedDiff,
+				Content:     change.Content,
+				Timestamp:   ts,
+			})
+		}
+
+	case "Extension":
+		// `web.search` is where web_search_call went, and the only kind present
+		// in any captured rollout. Synthesize a tool call so modern web
+		// searches count like old ones do (mirroring the <=0.130.0 web_search_call
+		// synthesis in handleResponseItem), under the raw modern name: the tool
+		// vocabulary genuinely changed, and reporting a name that never
+		// appeared in the transcript would misstate the data. Extension items
+		// carry no status field, so the synthesized call is always "completed";
+		// a failed web search is not distinguishable in this format.
+		if item.Kind != "web.search" {
+			return
+		}
+		p.ensureTurn(ts)
+		p.active.ToolCalls = append(p.active.ToolCalls, ToolCall{
+			Name:      "web.search",
+			Arguments: item.Query,
+			Status:    "completed",
+			Timestamp: ts,
+		})
+
+	default:
+		// UserMessage, AgentMessage, Reasoning, ImageView and anything newer are
+		// deliberately not recorded. Modern rollouts carry user and assistant
+		// text in BOTH streams — verified across every captured >=0.149.1
+		// rollout — and the parser already reads response_item for it, so
+		// recording the event copy would double every message count. The one
+		// consumer that needs the event-stream user text (server-side
+		// first_user_message derivation, which runs before parsing) reads it
+		// through EventMsgUserText in firstuser.go.
 	}
 }
 

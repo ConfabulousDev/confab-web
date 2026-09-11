@@ -27,10 +27,16 @@ import (
 //     per-tool stats and excluded from TotalToolCalls / ToolErrorCount (CF-438).
 //     spawn_agent / wait_agent function_calls are routed out of Turn.ToolCalls
 //     by the parser (CF-443) so they only surface in the Agents & Skills card.
-//   - Code activity: per-rollout dispatch. apply_patch envelopes drive
-//     FilesModified / LinesAdded / Removed and LanguageBreakdown. FilesRead
-//     stays 0 (Codex has no Read tool). SearchCount stays 0 — web_search_call
-//     is web search, not file search (CF-439).
+//   - Code activity: per-rollout dispatch, reading whichever shape the
+//     rollout's CLI era emitted (m2ky). <=0.130.0 apply_patch envelopes and
+//     >=0.149.1 item_completed FileChange items both drive FilesModified /
+//     LinesAdded / Removed and LanguageBreakdown. FilesRead and SearchCount
+//     are era-dependent: >=0.149.1 populates them from Codex's own
+//     item.parsed_cmd classification ("read" / "search"), while <=0.130.0
+//     keeps zeros because exec_command records the command but nothing about
+//     its purpose. Web searches are excluded from SearchCount in both eras —
+//     that is web search, not file search, and it counts as a tool instead
+//     (CF-439).
 //   - Agents/skills: per-rollout dispatch (CF-443). SubagentSpawns bucket by
 //     agent_role (success = wait_agent "completed", error = any other status
 //     or orphan). SkillInvocations bucket by skill name, always success
