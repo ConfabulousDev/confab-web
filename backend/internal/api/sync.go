@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
+	"github.com/ConfabulousDev/confab-web/internal/codex"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbcodex "github.com/ConfabulousDev/confab-web/internal/db/codex"
 	dbcursor "github.com/ConfabulousDev/confab-web/internal/db/cursor"
@@ -487,9 +488,25 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	if provider == models.ProviderOpencode {
 		extractTimestamp = extractOpenCodeTimestampFromLine
 	}
+	// Codex sessions never carry a summary (a Claude-only concept), so their
+	// list visibility rests entirely on first_user_message — a NULL column drops
+	// the session out of the session list AND out of Trends / cost-by-model
+	// (db.ListableSessionPredicate). Deriving it here rather than trusting the
+	// client keeps visibility independent of CLI parser correctness: a CLI that
+	// omits the field no longer strands the session (tgxn).
+	//
+	// First chunk only: in every rollout inspected the first user message lands
+	// by line 10, so chunk 1 always holds it. Sessions whose chunk 1 predates
+	// this fix are repaired by a separate backfill, not by re-deriving on every
+	// later chunk.
+	deriveFirstUserMessage := provider == models.ProviderCodex &&
+		req.FileType == "transcript" &&
+		req.FirstLine == 1 &&
+		(req.Metadata == nil || req.Metadata.FirstUserMessage == nil)
 
 	var content bytes.Buffer
 	var latestTimestamp *time.Time
+	var derivedFirstUserMessage string
 	var prLinks []*models.GitHubLink
 	prLinkSeen := make(map[string]struct{}) // dedup by "owner/repo/ref"
 	for _, line := range req.Lines {
@@ -502,6 +519,10 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 					latestTimestamp = ts
 				}
 			}
+		}
+
+		if deriveFirstUserMessage && derivedFirstUserMessage == "" {
+			derivedFirstUserMessage = codex.UserMessageFromLine(line)
 		}
 
 		if parseClaudeCode {
@@ -580,6 +601,22 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 		// UpdateSyncFileState lowers first_seen to it when it is earlier; clamp
 		// far-future values first (same sort-order-abuse guard as above).
 		createdAt = clampFutureTimestamp(req.Metadata.CreatedAt)
+	}
+
+	// Adopt the value derived from the chunk's own lines above. Derivation is
+	// gated on the client having supplied nothing, so a client-supplied message
+	// always wins verbatim, and an empty derivation leaves the column NULL
+	// rather than writing an empty-string title. This sits outside the metadata
+	// block because a chunk may carry no metadata at all — exactly the case
+	// being repaired.
+	//
+	// Unlike the client-supplied value (length-validated on the way in), a
+	// derived one has never been bounded, so clamp it rather than reject it: a
+	// pasted log as the first message must not fail the write and leave the
+	// session invisible, the very bug this fixes.
+	if derivedFirstUserMessage != "" {
+		derived := validation.TruncateToByteLimit(derivedFirstUserMessage, validation.MaxFirstUserMessageLength)
+		firstUserMessage = &derived
 	}
 
 	if err := sessionStore.UpdateSyncFileState(updateCtx, req.SessionID, req.FileName, req.FileType, lastLine, latestTimestamp, createdAt, summary, firstUserMessage, gitInfo); err != nil {

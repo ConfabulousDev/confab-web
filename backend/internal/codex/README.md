@@ -10,6 +10,10 @@ CLI. This package normalizes those files into a structured representation
 recap, and the search index — the analogue of how `analytics.parser` parses
 Claude Code transcripts.
 
+The package also exposes a standalone user-message extractor (`firstuser.go`)
+for callers that need only the human prompt off a single line, without parsing
+the whole rollout — the sync ingest path uses it to derive `first_user_message`.
+
 The frontend has its own Codex parser (`frontend/src/services/codexTranscriptService.ts`)
 for transcript rendering. The Go parser here is independent and serves the
 backend pipelines.
@@ -20,6 +24,8 @@ backend pipelines.
 |------|------|
 | `parser.go` | `ParseRollout(io.Reader) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, and skill / `<skills_instructions>` / `<subagent_notification>` extraction. |
 | `types.go` | `ParsedRollout`, `Turn`, `Message`, `ToolCall`, `TokenUsage`, `CompactionEvent`, `ValidationError`, plus `SubagentSource`, `SkillInvocation`, `SubagentSpawn`, `SkillAvailable` (CF-443). Pure data types — no imports beyond `time`. |
+| `firstuser.go` | `EventMsgUserText(json.RawMessage) string` and `UserMessageFromLine(string) string` — extract the human-typed prompt from an `event_msg` line across both wire eras (`user_message` on <=0.130.0, `item_completed` → `UserMessage` on >=0.149.1). Reads the event_msg stream only; the user-role `response_item` stream is injected context (`<environment_context>`, AGENTS.md), never the prompt. Returns `""` for anything underivable. |
+| `firstuser_test.go` | Unit tests for the two extractors against wire shapes captured from real rollouts: both eras, mixed `text`/`skill` content parts, and the response_item / non-UserMessage lines that must yield `""`. |
 | `parser_test.go` | Unit tests against the fixtures below. Covers the legacy parser scenarios plus CF-443 (session_meta source variants, `<skills_instructions>` catalog, `<skill>` invocation extraction + stripping, `spawn_agent` / `wait_agent` routing, `<subagent_notification>` stripping, depth>1, completion-text truncation). |
 | `testdata/sample_rollout.jsonl` | Legacy fixture: session_meta, three completed turns (turn 3 carries an inline-failed `custom_tool_call` per CF-438), function_call + custom_tool_call, web_search_call, encrypted reasoning, non-null `token_count.info`, a compacted line, an unknown top-level type (forward-compat), and a trailing orphan `function_call_output`. |
 | `testdata/sample_rollout_with_skill_invocation.jsonl` | CF-443: developer message with `<skills_instructions>` catalog plus a user message wrapping a single `<skill>` invocation. |
@@ -108,6 +114,7 @@ and applies the following rules:
 
 | Consumer | Usage |
 |----------|-------|
+| `internal/api/sync.go` | `codex.UserMessageFromLine` derives `first_user_message` from the lines of a codex transcript chunk 1 when the CLI omitted the metadata field. Codex sessions have no summary, so a NULL `first_user_message` makes the session invisible in the list and in Trends (tgxn). |
 | `internal/analytics/codex_compute.go` | `ComputeFromCodexRollout([]*ParsedRollout)` maps the rollout slice (main + subagents) onto `ComputeResult` for card upsert. |
 | `internal/analytics/codex_search.go` | `ExtractCodexUserMessagesText([]*ParsedRollout)` flattens user / assistant-final / tool-call text across all rollouts into the search index Weight C content. |
 | `internal/analytics/analyzer_smart_recap_codex.go` | `PrepareCodexTranscript([]*ParsedRollout)` builds the XML transcript fed to the smart recap LLM (main turns first, then each subagent's turns inline). |

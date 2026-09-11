@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestValidateExternalID(t *testing.T) {
@@ -378,6 +379,40 @@ func TestValidateGitInfo(t *testing.T) {
 			}
 			if err := ValidateGitInfo(in); (err != nil) != tt.wantErr {
 				t.Errorf("ValidateGitInfo() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestTruncateToByteLimit(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		limit int
+		want  string
+	}{
+		{"under the limit is unchanged", "hello", 10, "hello"},
+		{"exactly at the limit is unchanged", "hello", 5, "hello"},
+		{"ascii over the limit is clipped", "hello world", 5, "hello"},
+		{"empty string", "", 5, ""},
+		{"zero limit returns input unchanged", "hello", 0, "hello"},
+		{"negative limit returns input unchanged", "hello", -1, "hello"},
+		// "é" is 2 bytes: a byte-exact cut at 3 would split the second rune.
+		{"multibyte cut backs off to a rune boundary", "ééé", 3, "é"},
+		{"multibyte cut on a boundary keeps the rune", "ééé", 4, "éé"},
+		// A 4-byte rune must not be sliced through either.
+		{"four-byte rune is dropped rather than split", "a😀", 3, "a"},
+		{"four-byte rune kept when it fits", "a😀", 5, "a😀"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TruncateToByteLimit(tt.input, tt.limit)
+			if got != tt.want {
+				t.Errorf("TruncateToByteLimit(%q, %d) = %q, want %q", tt.input, tt.limit, got, tt.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Errorf("TruncateToByteLimit(%q, %d) = %q, which is not valid UTF-8", tt.input, tt.limit, got)
 			}
 		})
 	}

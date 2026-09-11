@@ -6,7 +6,7 @@ Input validation and sanitization utilities for field length limits, email forma
 
 | File | Role |
 |------|------|
-| `input.go` | Field length constants (matching DB constraints), validation functions, provider constants and validator |
+| `input.go` | Field length constants (matching DB constraints), validation functions, `TruncateToByteLimit`, provider constants and validator |
 | `input_test.go` | Tests for `ValidateExternalID`, `ValidateHostname`, `ValidateUsername`, `ValidateProvider` |
 | `email.go` | Email format validation, domain allowlist checking, email normalization, and domain list validation |
 | `email_test.go` | Tests for email format validation, domain allowlist logic, `NormalizeEmail`, and domain list validation |
@@ -34,6 +34,10 @@ Each function returns `nil` if valid, or an error describing the violation:
 - **`ValidateHostname(hostname string) error`** -- Max 255 characters.
 - **`ValidateUsername(username string) error`** -- Max 255 characters.
 - **`ValidateProvider(provider string) error`** -- Strict exact-match against `ProviderClaudeCode` (`"claude-code"`) and `ProviderCodex` (`"codex"`). No trimming, no case folding. An empty string is rejected — the HTTP handler is responsible for defaulting a missing API field to `ProviderClaudeCode` before calling.
+
+### Truncation (`input.go`)
+
+- **`TruncateToByteLimit(s string, limit int) string`** -- Clips `s` to at most `limit` bytes, backing off to a rune boundary so the result stays valid UTF-8. Returns `s` unchanged when it already fits or when `limit <= 0`. For **server-derived** values that must fit a column rather than be rejected (e.g. the codex `first_user_message` derived in `internal/api/sync.go`) — client-supplied input is still refused outright by the `Validate*` functions.
 
 ### Provider validation (`input.go`)
 
