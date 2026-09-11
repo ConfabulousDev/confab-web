@@ -173,9 +173,10 @@ func TestComputeFromCodexRollout_ApplyPatch(t *testing.T) {
 	if out.LanguageBreakdown["python"] != 1 && out.LanguageBreakdown["py"] != 1 {
 		t.Errorf("LanguageBreakdown missing python/py entry: %v", out.LanguageBreakdown)
 	}
-	// Codex has no Read tool — FilesRead must stay zero.
+	// This rollout carries no ParsedCommandKinds (the <=0.130.0 shape), so
+	// FilesRead must stay zero (m2ky).
 	if out.FilesRead != 0 {
-		t.Errorf("FilesRead = %d, want 0 (Codex has no Read tool)", out.FilesRead)
+		t.Errorf("FilesRead = %d, want 0 (no parsed_cmd on this rollout)", out.FilesRead)
 	}
 }
 
