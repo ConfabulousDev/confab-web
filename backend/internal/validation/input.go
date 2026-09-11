@@ -113,6 +113,25 @@ func ValidateFirstUserMessage(msg string) error {
 	return nil
 }
 
+// TruncateToByteLimit clips s to at most limit bytes, cutting on a rune
+// boundary so the result stays valid UTF-8. Values already within the limit —
+// and any limit <= 0 — are returned unchanged.
+//
+// This is for values the server derives itself and must fit into a column
+// rather than reject: rejecting a server-derived value would drop data the
+// client never had a chance to shorten. Client-supplied input is still
+// validated and refused by the Validate* functions above.
+func TruncateToByteLimit(s string, limit int) string {
+	if limit <= 0 || len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
+}
+
 // ValidateAPIKeyName validates an API key name
 func ValidateAPIKeyName(name string) error {
 	if len(name) > MaxAPIKeyNameLength {

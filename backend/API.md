@@ -175,7 +175,7 @@ Content-Encoding: zstd  (optional, for compressed payloads)
 | `metadata` | object | No | Optional metadata (only processed for transcript files) |
 | `metadata.git_info` | object | No | Git repository metadata. See [`git_info` fields](#git_info-fields). |
 | `metadata.summary` | string | No | Session summary (nil=don't update, ""=clear) |
-| `metadata.first_user_message` | string | No | First user message (nil=don't update, ""=clear). For **cursor** sessions the value is unwrapped from its `<user_query>…</user_query>` envelope before validation/storage so the session-list title shows the human prompt, not the raw tags; a value with no envelope is stored verbatim, and an empty query is dropped (leaves the existing title unchanged). See [Cursor Metadata](#cursor-metadata) below. |
+| `metadata.first_user_message` | string | No | First user message (nil=don't update, ""=clear). For **cursor** sessions the value is unwrapped from its `<user_query>…</user_query>` envelope before validation/storage so the session-list title shows the human prompt, not the raw tags; a value with no envelope is stored verbatim, and an empty query is dropped (leaves the existing title unchanged). See [Cursor Metadata](#cursor-metadata) below. For **codex** sessions an omitted field is derived server-side from the chunk's own lines — see [Codex first user message](#codex-first-user-message) below. |
 | `metadata.latest_message_at` | string (RFC3339) | No | Explicit latest-message timestamp for providers whose transcript lines carry none (cursor). When present on a transcript chunk, it advances `session.last_message_at` the same way per-line timestamp extraction does for other providers. Values more than 48h in the future are silently dropped (the chunk still returns 200) to prevent sort-order abuse; `last_message_at` is left unchanged. Ignored for providers that already extract per-line timestamps. See [Cursor Metadata](#cursor-metadata) below. |
 | `metadata.created_at` | string (RFC3339) | No | Explicit session creation time, the start anchor for estimating a cursor session's duration (cursor lines carry no per-line timestamp). When present and earlier than the session's current `first_seen`, it lowers `first_seen` to refine the start anchor; a later value never raises it. Values more than 48h in the future are silently dropped (chunk still returns 200). Ignored for providers that already extract per-line timestamps. See [Cursor Metadata](#cursor-metadata) below. |
 | `metadata.model` | string | No | Model that produced a cursor session (the cursor JSONL has no model field). On a cursor transcript chunk a non-empty value is persisted (first non-empty wins) and surfaced as `cards.session.models_used`. Length capped at 255. See [Cursor Metadata](#cursor-metadata) below. |
@@ -212,6 +212,32 @@ exact names so the run grouping (`<runId>`) is recoverable from the path alone:
 - A backend's support for these files is discoverable via
   [`GET /api/v1/capabilities`](#capabilities); older backends omit that endpoint,
   and the CLI then skips workflow uploads.
+
+#### Codex first user message
+
+Codex sessions never carry a `summary` (a Claude-only concept), so their
+visibility in the session list — and their inclusion in Trends and
+cost-by-model — rests entirely on `first_user_message`. When a codex
+**transcript** chunk with `first_line: 1` arrives **without**
+`metadata.first_user_message`, the backend derives the value from the chunk's
+own lines instead of leaving the column NULL:
+
+- Read from the `event_msg` stream only, in both wire shapes Codex has emitted:
+  `payload.type: "user_message"` (CLI <= 0.130.0) and `payload.type:
+  "item_completed"` wrapping an `item.type: "UserMessage"` (CLI >= 0.149.1).
+  The user-role `response_item` stream is never read — it carries injected
+  context (`<environment_context>`, `AGENTS.md`), not the human prompt.
+- The first derivable line in the chunk wins; later user messages are ignored.
+- A client-supplied `metadata.first_user_message` always wins verbatim, and its
+  presence suppresses derivation entirely.
+- Derivation runs on the first chunk only (`first_line: 1`). Sessions whose
+  first chunk was uploaded before this behavior existed keep a NULL column.
+- An underivable or whitespace-only result leaves the column NULL — never an
+  empty-string title.
+- A derived value longer than the 8192-byte column limit is truncated on a rune
+  boundary rather than rejected (client-supplied values over the limit are still
+  a 400).
+- The stored JSONL is unchanged; this is read-side interpretation only.
 
 #### Codex Rollout Metadata
 
