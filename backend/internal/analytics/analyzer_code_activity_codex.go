@@ -8,13 +8,24 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/codex"
 )
 
-// computeCodexCodeActivity inspects apply_patch tool calls (the Codex
-// equivalent of Edit/Write). Codex doesn't have a Read tool, so FilesRead
-// stays at zero — intentional, not an omission.
+// computeCodexCodeActivity fills the Code Activity card from whichever stream
+// the rollout's CLI era used. Codex reshaped both signals at 0.149.1, so both
+// shapes are read per-event — a session that spans a CLI upgrade carries both
+// in one file.
 //
-// SearchCount is left at zero. Codex's web_search_call is semantically a
-// web search rather than the grep/glob "file search" that Claude's
-// SearchCount tracks.
+//	<=0.130.0  File edits arrive as apply_patch tool calls carrying a
+//	           `*** Begin Patch` envelope. FilesRead and SearchCount stay at
+//	           zero: exec_command records the shell line but nothing about what
+//	           it did, and reconstructing that from command text would be a
+//	           guess. Genuinely unavailable, not an omission.
+//	>=0.149.1  File edits arrive as event_msg item_completed FileChange items
+//	           carrying a per-file diff, and CommandExecution items carry
+//	           Codex's own parsed_cmd classification — which does populate
+//	           FilesRead and SearchCount.
+//
+// The asymmetry is deliberate and user-visible: the modern format states
+// something the old one never recorded, and backfilling the old era would mean
+// inventing a classifier for commands Codex itself never classified.
 func computeCodexCodeActivity(out *ComputeResult, r *codex.ParsedRollout) {
 	for _, turn := range r.Turns {
 		for _, tc := range turn.ToolCalls {
@@ -26,7 +37,54 @@ func computeCodexCodeActivity(out *ComputeResult, r *codex.ParsedRollout) {
 			out.LinesAdded += added
 			out.LinesRemoved += removed
 		}
+
+		for _, edit := range turn.FileEdits {
+			out.FilesModified++
+			if lang := languageFromPath(edit.Path); lang != "" {
+				out.LanguageBreakdown[lang]++
+			}
+			added, removed := countFileEditLines(edit)
+			out.LinesAdded += added
+			out.LinesRemoved += removed
+		}
+
+		for _, kind := range turn.ParsedCommandKinds {
+			// Bucket explicitly. "unknown" is the majority of real entries
+			// (159 of 214 across the sampled rollouts), so a default bucket
+			// would inflate the card wildly; "list_files" is neither a read
+			// nor a search.
+			switch kind {
+			case "read":
+				out.FilesRead++
+			case "search":
+				out.SearchCount++
+			}
+		}
 	}
+}
+
+// countFileEditLines returns the +/- line counts for one >=0.149.1 file change.
+// An `update` states them as a unified diff; an `add` carries the whole new
+// file, every line of which is added. This mirrors what parseApplyPatch derives
+// from the <=0.130.0 envelope, where an `*** Add File` block lists its content
+// as `+` lines — so the two eras count the same edit the same way.
+//
+// Edit status is deliberately ignored, matching the old-era path: both count a
+// reported change whether or not it ultimately applied.
+func countFileEditLines(edit codex.FileEdit) (added, removed int) {
+	if edit.UnifiedDiff == "" {
+		return countLines(edit.Content), 0
+	}
+	// Same +/- accounting as parseApplyPatch below, headers excluded.
+	for _, line := range strings.Split(edit.UnifiedDiff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+			added++
+		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+			removed++
+		}
+	}
+	return added, removed
 }
 
 // parseApplyPatch parses a Codex apply_patch envelope, returning the number

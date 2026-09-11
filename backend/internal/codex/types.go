@@ -115,6 +115,38 @@ type Turn struct {
 	AssistantMessages  []Message
 	ToolCalls          []ToolCall
 	ReasoningCount     int // count of reasoning items (encrypted or otherwise)
+
+	// FileEdits are the file changes reported by >=0.149.1 `item_completed`
+	// FileChange items, flattened from the item's per-path map and sorted by
+	// path so downstream accumulation never depends on map iteration order.
+	// Empty for <=0.130.0 rollouts, where edits arrive as `apply_patch` tool
+	// calls carrying a `*** Begin Patch` envelope instead.
+	FileEdits []FileEdit
+
+	// ParsedCommandKinds is Codex's own classification of each shell command in
+	// a >=0.149.1 `CommandExecution` item — `item.parsed_cmd[].type`, in
+	// rollout order. Observed values are "read", "search", "list_files" and
+	// "unknown", but the list is open, so consumers must bucket explicitly and
+	// never treat an unrecognized kind as a default. Empty for <=0.130.0
+	// rollouts, whose `exec_command` calls carry no equivalent signal.
+	ParsedCommandKinds []string
+}
+
+// FileEdit is one file touched by a >=0.149.1 `event_msg` FileChange item.
+// Which body field is populated follows the change type:
+//
+//	"update" → UnifiedDiff ("@@ …" hunks; no ---/+++ file header)
+//	"add"    → Content (the full new file text)
+//
+// No captured rollout contains a delete, so which body field one would carry
+// is unverified. An entry with neither field set still counts as a touched
+// file, contributing zero added and zero removed lines.
+type FileEdit struct {
+	Path        string    // absolute path — the key of item.changes
+	ChangeType  string    // raw change type: "add" | "update" | …
+	UnifiedDiff string    // set for "update"
+	Content     string    // set for "add"
+	Timestamp   time.Time // timestamp of the carrying event_msg
 }
 
 // Message is one user or assistant message from response_item.message.

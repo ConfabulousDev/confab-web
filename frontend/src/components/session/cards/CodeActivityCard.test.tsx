@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { CodeActivityCard } from './CodeActivityCard';
 import type { CodeActivityCardData } from '@/schemas/api';
+import { PROVIDER_METADATA } from '@/utils/providers';
+
+const CODEX_TOOLTIPS = PROVIDER_METADATA.codex.cardTooltips?.codeActivity;
 
 function makeData(overrides: Partial<CodeActivityCardData> = {}): CodeActivityCardData {
   return {
@@ -79,20 +82,35 @@ describe('CodeActivityCard', () => {
   });
 
   describe('provider-aware UX (CF-439)', () => {
-    it('hides Files read row when provider is codex', () => {
-      const { queryByText, getByText } = render(
+    // m2ky: the Files-read row used to be hidden for Codex because the value
+    // was structurally always 0. Codex >=0.149.1 reports it for real, so the
+    // row is shown for every provider and a tooltip explains the older-era 0.
+    it('shows Files read row with an era tooltip when provider is codex', () => {
+      const { getByText } = render(
         <CodeActivityCard
-          data={makeData({ files_read: 0, files_modified: 5 })}
+          data={makeData({ files_read: 17, files_modified: 5 })}
           loading={false}
           provider="codex"
         />
       );
-      expect(queryByText('Files read')).toBeNull();
+      expect(getByText('Files read')).toBeInTheDocument();
+      expect(getByText('17')).toBeInTheDocument();
+      expect(getByText('Files read').closest('[title]')).toHaveAttribute(
+        'title',
+        CODEX_TOOLTIPS?.filesRead
+      );
       // Other rows still render.
       expect(getByText('Files modified')).toBeInTheDocument();
       expect(getByText('Lines added')).toBeInTheDocument();
       expect(getByText('Lines removed')).toBeInTheDocument();
       expect(getByText('Searches')).toBeInTheDocument();
+    });
+
+    // The copy is the user's only explanation for a zero on an old session, so
+    // pin the one fact it must carry rather than the whole sentence.
+    it('names the Codex version that starts recording both figures', () => {
+      expect(CODEX_TOOLTIPS?.filesRead).toContain('0.149.1');
+      expect(CODEX_TOOLTIPS?.searches).toContain('0.149.1');
     });
 
     it('shows Files read row when provider is claude-code', () => {
@@ -106,7 +124,7 @@ describe('CodeActivityCard', () => {
       expect(getByText('Files read')).toBeInTheDocument();
     });
 
-    it('sets Codex web_search_call tooltip on Searches row when provider is codex', () => {
+    it('sets the Codex tooltip on the Searches row when provider is codex', () => {
       const { getByText } = render(
         <CodeActivityCard
           data={makeData({ files_modified: 5, search_count: 0 })}
@@ -116,10 +134,7 @@ describe('CodeActivityCard', () => {
       );
       // The StatRow places `title` on its outer wrapper (`.statRow`).
       const row = getByText('Searches').closest('[title]');
-      expect(row).toHaveAttribute(
-        'title',
-        "Codex's web_search_call is not counted as file search"
-      );
+      expect(row).toHaveAttribute('title', CODEX_TOOLTIPS?.searches);
     });
 
     it('does not set a Codex tooltip on Searches row when provider is claude-code', () => {

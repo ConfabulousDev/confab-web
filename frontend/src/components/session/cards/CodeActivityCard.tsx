@@ -120,14 +120,20 @@ export function CodeActivityCard({ data, loading, error, provider }: CodeActivit
   const yAxisWidth = Math.max(30, maxLabelLength * 8 + 8);
 
   const providerMeta = getProviderMetadataOrFallback(provider, 'claude');
-  const isCodex = providerMeta.id === 'codex';
   const searchesTooltip = providerMeta.cardTooltips?.codeActivity?.searches;
+  const filesReadTooltip = providerMeta.cardTooltips?.codeActivity?.filesRead;
 
   return (
     <CardWrapper title="Code Activity" icon={CodeIcon}>
-      {!isCodex && (
-        <StatRow label="Files read" value={data.files_read} icon={FileReadIcon} />
-      )}
+      {/* Codex used to hide this row because it was structurally always 0. As
+          of m2ky it is real for 0.149.1+ sessions, so the row is shown for
+          every provider and the tooltip explains the older-session zero. */}
+      <StatRow
+        label="Files read"
+        value={data.files_read}
+        icon={FileReadIcon}
+        tooltip={filesReadTooltip}
+      />
       <StatRow label="Files modified" value={data.files_modified} icon={FileEditIcon} />
       <StatRow
         label="Lines added"

@@ -36,6 +36,7 @@ export type ProviderId = (typeof PROVIDER_VALUES)[number];
 export interface ProviderCardTooltips {
   codeActivity?: {
     searches?: string;
+    filesRead?: string;
   };
 }
 
@@ -76,7 +77,13 @@ export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
     resumeCommand: { idLabel: 'Copy Codex ID', commandHint: 'for codex resume' },
     cardTooltips: {
       codeActivity: {
-        searches: "Codex's web_search_call is not counted as file search",
+        // Both figures come from Codex's own per-command classification
+        // (`parsed_cmd`), which it only started recording in 0.149.1. Older
+        // sessions logged the command line with no indication of its purpose,
+        // so they read 0 rather than a guess. Web searches are excluded from
+        // Searches either way — that's web, not file search (CF-439, m2ky).
+        searches: 'File searches, from Codex 0.149.1 onward; earlier sessions show 0. Web searches are counted as tools, not file searches.',
+        filesRead: 'From Codex 0.149.1 onward; earlier sessions did not record what a command was doing, so they show 0.',
       },
     },
   },

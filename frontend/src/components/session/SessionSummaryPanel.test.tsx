@@ -5,6 +5,7 @@ import type { SessionAnalytics } from '@/schemas/api';
 import { SessionAnalyticsSchema } from '@/schemas/api';
 import { analyticsAPI, APIError, APIValidationError } from '@/services/api';
 import { buildCursorAnalyticsFixture } from './cursorAnalyticsFixture';
+import { PROVIDER_METADATA } from '@/utils/providers';
 
 // Mock useAnalyticsPolling
 const mockForceRefetch = vi.fn();
@@ -368,7 +369,7 @@ describe('SessionSummaryPanel', () => {
   });
 
   describe('provider wiring for cards (CF-439)', () => {
-    it('passes provider through to CodeActivityCard (codex hides Files read + sets Searches tooltip)', () => {
+    it('passes provider through to CodeActivityCard (codex gets the era tooltips)', () => {
       const codexAnalytics: SessionAnalytics = {
         ...baseAnalytics,
         cards: {
@@ -393,15 +394,17 @@ describe('SessionSummaryPanel', () => {
         />
       );
 
-      // Files read row is hidden for Codex.
-      expect(screen.queryByText('Files read')).toBeNull();
+      // m2ky: the row is shown for Codex too, carrying the era tooltip.
+      const codexTooltips = PROVIDER_METADATA.codex.cardTooltips?.codeActivity;
+      expect(screen.getByText('Files read')).toBeInTheDocument();
+      expect(screen.getByText('Files read').closest('[title]')).toHaveAttribute(
+        'title',
+        codexTooltips?.filesRead
+      );
 
       // Searches row carries the Codex tooltip.
       const row = screen.getByText('Searches').closest('[title]');
-      expect(row).toHaveAttribute(
-        'title',
-        "Codex's web_search_call is not counted as file search"
-      );
+      expect(row).toHaveAttribute('title', codexTooltips?.searches);
     });
 
     it('claude-code provider keeps Files read row and omits Codex tooltip', () => {
