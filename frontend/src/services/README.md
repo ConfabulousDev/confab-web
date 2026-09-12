@@ -89,6 +89,21 @@ without re-fetching:
      `event_msg.token_count`, below — pnkh).
      (`session_meta` and `turn_context` are dropped from the render stream
      but their `payload.model` is plucked first — see below.)
+   - **px58 — 9 more recognized-but-silent `event_msg` types**, whitelisted
+     per Codex's own `should_persist_event_msg` rollout policy so they no
+     longer fall through to a misleading "Unrecognized line"
+     `CodexUnknownItem`: `thread_settings_applied` (config snapshot, not
+     conversation content — the originally reported bug),
+     `thread_goal_updated` / `thread_rolled_back` (internal thread
+     bookkeeping), `agent_reasoning` / `agent_reasoning_raw_content`
+     (legacy-history-mode mirrors of `response_item.reasoning`),
+     `sub_agent_activity` (subagent lifecycle telemetry; the parent-side
+     `spawn_agent`/`wait_agent` function_calls remain the analytics source),
+     `entered_review_mode` / `exited_review_mode` (review-mode markers, no
+     dedicated divider), and `image_generation_end` (its
+     `response_item.image_generation_call` sibling is itself unhandled today,
+     so there's no tool-call draft to enrich — real rendering is a separate
+     follow-up).
    - **CF-362 — `event_msg.token_count`**: never emits a render item, but
      walks `items` backwards to find the most-recent assistant item whose
      `usage` is still undefined and attaches `info.last_token_usage` to it
