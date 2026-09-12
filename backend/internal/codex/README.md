@@ -105,6 +105,21 @@ and applies the following rules:
     `ImageView` and unknown item types are deliberately **not** recorded — see
     "Wire-format eras" below. Items are never recorded as tool calls apart from
     that one synthesis.
+13. **`handleEventMsg`'s top-level `default:` branch** (px58): every other
+    `event_msg.payload.type` the parser sees falls here and is silently
+    ignored — no crash, no analytics impact. Mirrors the frontend's
+    `KNOWN_EVENT_PAYLOAD_TYPES` recognize-but-silent set: redundant with the
+    response_item stream (`user_message`, `agent_message`,
+    `agent_reasoning`, `agent_reasoning_raw_content`); redundant with the
+    top-level `compacted` line (`context_compacted`); redundant with a
+    call_id-paired response_item already resolved above (`web_search_end`,
+    `mcp_tool_call_end`); or internal thread bookkeeping with no analytics
+    use today (`thread_settings_applied`, `thread_goal_updated`,
+    `thread_rolled_back`, `sub_agent_activity`, `entered_review_mode`,
+    `exited_review_mode`, `image_generation_end`). Anything not on this list
+    also lands here — Codex's own `should_persist_event_msg` rollout policy
+    says nothing else should ever reach a rollout file, so an unrecognized
+    arrival here is a forward-compat signal, not a bug.
 
 ## Wire-format eras
 

@@ -724,6 +724,33 @@ function handleEventMsg(
       items.push(aborted);
       return {};
     }
+    case 'thread_settings_applied':
+      // px58: config snapshot (model, approval policy, sandbox, ...), not
+      // conversation content.
+      return {};
+    case 'thread_goal_updated':
+    case 'thread_rolled_back':
+      // px58: internal thread bookkeeping (goal-tracking / rollback), no
+      // transcript row.
+      return {};
+    case 'agent_reasoning':
+    case 'agent_reasoning_raw_content':
+      // px58: legacy-history-mode mirror of response_item.reasoning.
+      return {};
+    case 'sub_agent_activity':
+      // px58: subagent lifecycle telemetry. The parent-side spawn_agent /
+      // wait_agent function_calls are already the source for subagent
+      // analytics, so this event adds no transcript row.
+      return {};
+    case 'entered_review_mode':
+    case 'exited_review_mode':
+      // px58: review-mode markers; not worth a dedicated divider today.
+      return {};
+    case 'image_generation_end':
+      // px58: no paired response_item.image_generation_call draft exists yet
+      // (that type is itself unhandled) — nothing to enrich. Real rendering
+      // is a separate follow-up.
+      return {};
   }
 }
 

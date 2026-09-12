@@ -358,6 +358,89 @@ const CodexEventItemCompletedSchema = z
   })
   .passthrough();
 
+// px58: `event_msg` payload types that openai/codex's own
+// `should_persist_event_msg` policy (rollout/src/policy.rs) says CAN reach a
+// rollout file — either always, or under the legacy history mode still present
+// in older on-disk sessions — but that were previously outside
+// KNOWN_EVENT_PAYLOAD_TYPES, so they surfaced as misleading "Unrecognized line"
+// CodexUnknownItem rows. Recognized here and then dropped silently; the
+// per-type drop rationale lives with each `case` in handleEventMsg. Only
+// `thread_settings_applied` has been observed in a real session so far; the
+// rest are declared defensively per Codex's source-level contract, not because
+// we've seen them fire — see px58 for the full audit.
+
+// px58: config snapshot for the thread (model, approval policy, sandbox,
+// collaboration mode, ...). The nested `thread_settings` struct is large and
+// volatile, so only `thread_id` is declared; `.passthrough()` keeps the rest.
+const CodexEventThreadSettingsAppliedSchema = z
+  .object({
+    type: z.literal('thread_settings_applied'),
+    thread_id: z.string().optional(),
+  })
+  .passthrough();
+
+// px58: thread-goal bookkeeping. No fields we read.
+const CodexEventThreadGoalUpdatedSchema = z
+  .object({
+    type: z.literal('thread_goal_updated'),
+  })
+  .passthrough();
+
+// px58: thread-rollback bookkeeping. No fields we read.
+const CodexEventThreadRolledBackSchema = z
+  .object({
+    type: z.literal('thread_rolled_back'),
+  })
+  .passthrough();
+
+// px58: legacy-history-mode mirror of `response_item.reasoning`, redundant with
+// the canonical response_item just like `user_message` / `agent_message` above.
+const CodexEventAgentReasoningSchema = z
+  .object({
+    type: z.literal('agent_reasoning'),
+  })
+  .passthrough();
+
+// px58: raw-content variant of the above.
+const CodexEventAgentReasoningRawContentSchema = z
+  .object({
+    type: z.literal('agent_reasoning_raw_content'),
+  })
+  .passthrough();
+
+// px58: subagent lifecycle telemetry. No fields we read; the parent-side
+// spawn_agent / wait_agent function_calls are the analytics source (see the
+// backend codex parser's SubagentSpawns).
+const CodexEventSubAgentActivitySchema = z
+  .object({
+    type: z.literal('sub_agent_activity'),
+  })
+  .passthrough();
+
+// px58: `entered_review_mode` / `exited_review_mode` — review-mode entry and
+// exit markers. No fields we read.
+const CodexEventEnteredReviewModeSchema = z
+  .object({
+    type: z.literal('entered_review_mode'),
+  })
+  .passthrough();
+
+const CodexEventExitedReviewModeSchema = z
+  .object({
+    type: z.literal('exited_review_mode'),
+  })
+  .passthrough();
+
+// px58: completion of an image-generation tool call. Its response_item sibling
+// `image_generation_call` is itself unhandled today (absent from
+// KNOWN_RESPONSE_ITEM_PAYLOAD_TYPES), so no callIdToDraft entry exists for this
+// event to enrich.
+const CodexEventImageGenerationEndSchema = z
+  .object({
+    type: z.literal('image_generation_end'),
+  })
+  .passthrough();
+
 // Catch-all for unknown event_msg.payload.type variants.
 const CodexUnknownEventPayloadSchema = z
   .object({ type: z.string() })
@@ -375,6 +458,15 @@ const KnownEventPayloadSchema = z.union([
   CodexEventTurnAbortedSchema,
   CodexEventContextCompactedSchema,
   CodexEventItemCompletedSchema,
+  CodexEventThreadSettingsAppliedSchema,
+  CodexEventThreadGoalUpdatedSchema,
+  CodexEventThreadRolledBackSchema,
+  CodexEventAgentReasoningSchema,
+  CodexEventAgentReasoningRawContentSchema,
+  CodexEventSubAgentActivitySchema,
+  CodexEventEnteredReviewModeSchema,
+  CodexEventExitedReviewModeSchema,
+  CodexEventImageGenerationEndSchema,
 ]);
 
 const CodexEventPayloadSchema = z.union([
@@ -396,6 +488,16 @@ const KNOWN_EVENT_PAYLOAD_TYPES = new Set<string>([
   'turn_aborted',        // CF-368
   'context_compacted',   // CF-368
   'item_completed',      // pnkh
+  // px58 — recognized, then dropped silently (see the schemas above):
+  'thread_settings_applied',
+  'thread_goal_updated',
+  'thread_rolled_back',
+  'agent_reasoning',
+  'agent_reasoning_raw_content',
+  'sub_agent_activity',
+  'entered_review_mode',
+  'exited_review_mode',
+  'image_generation_end',
 ]);
 
 export function isKnownEventPayload(

@@ -330,6 +330,34 @@ describe('normalizeCodexLines', () => {
     expect(result).toHaveLength(0);
   });
 
+  // px58: `event_msg` payload types Codex's own `should_persist_event_msg`
+  // policy says CAN reach a rollout file but that were previously outside
+  // KNOWN_EVENT_PAYLOAD_TYPES, so they fell through to the CodexUnknownItem
+  // "Unrecognized line" fallback. Now known shapes that render nothing.
+  it.each([
+    { type: 'thread_settings_applied', payload: { type: 'thread_settings_applied', thread_id: 'thread_1' } },
+    { type: 'thread_goal_updated', payload: { type: 'thread_goal_updated' } },
+    { type: 'thread_rolled_back', payload: { type: 'thread_rolled_back' } },
+    { type: 'agent_reasoning', payload: { type: 'agent_reasoning' } },
+    { type: 'agent_reasoning_raw_content', payload: { type: 'agent_reasoning_raw_content' } },
+    { type: 'sub_agent_activity', payload: { type: 'sub_agent_activity' } },
+    { type: 'entered_review_mode', payload: { type: 'entered_review_mode' } },
+    { type: 'exited_review_mode', payload: { type: 'exited_review_mode' } },
+    { type: 'image_generation_end', payload: { type: 'image_generation_end' } },
+  ])('recognizes event_msg.$type as a known, silent shape (px58)', ({ payload }) => {
+    const jsonl = JSON.stringify({
+      timestamp: '2026-09-11T20:44:36.184Z',
+      type: 'event_msg',
+      payload,
+    });
+
+    const result = items(jsonl);
+    // Recognized-but-silent: no render item at all, and crucially never a
+    // CodexUnknownItem — that fallback is reserved for genuinely novel or
+    // never-persisted types per policy.rs.
+    expect(result).toHaveLength(0);
+  });
+
   it('drops top-level token_usage_record without altering event_msg.token_count attribution (pnkh)', () => {
     // All three token_usage_record scopes carry the same counters in a real
     // single-response rollout; the test only cares that none of them leak.
