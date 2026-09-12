@@ -863,10 +863,17 @@ func (p *parser) handleEventMsg(ts time.Time, raw json.RawMessage, lineNum int) 
 	case "item_completed":
 		p.handleItemCompleted(ts, raw)
 	default:
-		// <=0.130.0 events we deliberately drop: user_message / agent_message /
-		// web_search_end / mcp_tool_call_end are redundant with the
-		// response_item stream, and context_compacted is redundant with the
-		// top-level `compacted` line that handleCompacted records.
+		// px58: recognized-and-dropped event_msg types (mirrors the frontend's
+		// KNOWN_EVENT_PAYLOAD_TYPES recognize-but-silent set). Redundant with
+		// the response_item stream: user_message, agent_message,
+		// agent_reasoning, agent_reasoning_raw_content. Redundant with the
+		// top-level `compacted` line: context_compacted. Redundant with the
+		// paired response_item (already resolved via call_id pairing):
+		// web_search_end, mcp_tool_call_end. Internal thread bookkeeping, no
+		// analytics use today: thread_settings_applied, thread_goal_updated,
+		// thread_rolled_back, sub_agent_activity, entered_review_mode,
+		// exited_review_mode, image_generation_end. Anything else falls here
+		// too and is silently ignored — no crash, no analytics impact.
 	}
 }
 

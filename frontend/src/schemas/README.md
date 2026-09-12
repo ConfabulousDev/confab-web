@@ -97,11 +97,23 @@ unfamiliar future types parse without erroring.
   `web_search_call`) plus a catch-all. `CodexResponseMessage` is the
   only exported branch type (used by the normalizer); the others are
   composed via schema unions and don't need exported aliases.
-- `event_msg.payload` is a union with eleven known shapes
-  (`user_message`, `agent_message`, `task_started`, `task_complete`,
-  `token_count`, `patch_apply_end`, `mcp_tool_call_end`, `web_search_end`,
-  `turn_aborted`, `context_compacted`, `item_completed` — pnkh) plus a
-  catch-all. `CodexTokenUsageDetails` (CF-362 — typed `info.last_token_usage` /
+- `event_msg.payload` is a union with twenty known shapes plus a catch-all,
+  split three ways per Codex's own `should_persist_event_msg` rollout policy
+  (px58 — only these 20 of Codex's 81 `EventMsg` variants can ever reach a
+  rollout file; the other 61 are transient/in-memory and stay unmodeled on
+  purpose, so an unexpected one appearing is a real forward-compat signal):
+  - **Render** (6): `task_started`, `task_complete`, `token_count`,
+    `turn_aborted`, `patch_apply_end`, `mcp_tool_call_end`.
+  - **Recognized but silent** (14 — parsed as a known shape, produce zero
+    render items so they never surface as a "Unrecognized line"
+    `CodexUnknownItem`): `user_message`, `agent_message`, `web_search_end`,
+    `context_compacted`, `item_completed` (pnkh), plus px58's
+    `thread_settings_applied`, `thread_goal_updated`, `thread_rolled_back`,
+    `agent_reasoning`, `agent_reasoning_raw_content`, `sub_agent_activity`,
+    `entered_review_mode`, `exited_review_mode`, `image_generation_end`.
+  - **Genuinely unrecognized**: everything else falls to the catch-all.
+
+  `CodexTokenUsageDetails` (CF-362 — typed `info.last_token_usage` /
   `info.total_token_usage` shape) is exported and consumed by the
   normalizer to attach per-call usage to assistant render items.
 
