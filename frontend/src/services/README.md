@@ -84,9 +84,11 @@ without re-fetching:
      `event_msg.web_search_end`, `event_msg.context_compacted` (CF-368),
      `event_msg.item_completed` (every item subtype — the `AgentMessage` case
      mirrors the canonical `response_item.message` emitted moments later; no
-     other subtype has a distinct row), and the top-level `token_usage_record`
+     other subtype has a distinct row), the top-level `token_usage_record`
      (aggregate telemetry; usage attribution stays solely on
-     `event_msg.token_count`, below — pnkh).
+     `event_msg.token_count`, below — pnkh), and the top-level `world_state`
+     (periodic environment/instructions/skills snapshot; no analyzer or UI
+     consumes it — zgd6).
      (`session_meta` and `turn_context` are dropped from the render stream
      but their `payload.model` is plucked first — see below.)
    - **px58 — 9 more recognized-but-silent `event_msg` types**, whitelisted

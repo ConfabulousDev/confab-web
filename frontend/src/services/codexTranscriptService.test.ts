@@ -435,6 +435,19 @@ describe('normalizeCodexLines', () => {
     }
   });
 
+  it('drops top-level world_state without producing an unknown row (zgd6)', () => {
+    // Minimal synthesized payload — the real captured shape carries local
+    // paths and a large skills-catalog body that don't belong in a fixture.
+    const jsonl = JSON.stringify({
+      timestamp: '2026-09-11T18:39:23.934Z',
+      type: 'world_state',
+      payload: { full: true, state: {} },
+    });
+
+    const result = items(jsonl);
+    expect(result).toHaveLength(0);
+  });
+
   it('emits CodexTurnAbortedItem for event_msg.turn_aborted (CF-368)', () => {
     const jsonl = [
       {

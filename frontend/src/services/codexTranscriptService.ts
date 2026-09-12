@@ -393,6 +393,12 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
         // per-turn/thread counters overlap it and would double-count.
         break;
       }
+      case 'world_state': {
+        // zgd6: periodic environment/instructions/skills snapshot. No consumer
+        // here or in the backend analyzers, so drop it rather than surface a
+        // row the reader can't act on.
+        break;
+      }
     }
   });
 
