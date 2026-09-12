@@ -176,6 +176,7 @@ Key exports:
 - `extractClaudeTextContent(content)` -- Plain text extraction for search indexing and clipboard
 - `extractClaudeMessageText(message)` -- CF-359 — bridges a `TranscriptLine` to the generic `useTranscriptSearch` hook (composes `parseClaudeMessage` + `extractClaudeTextContent`). Stable module reference so passing it as an effect-dependency doesn't churn the search index
 - `getRoleLabel(role, isToolResult)` -- Display label for message role
+- `stringifyUnknownClaudeMessage(message)` -- btxt — 2-space-indented JSON for an unrecognized line, with a `String(value)` fallback if serialization throws. Used by `parseClaudeMessage` (the unknown branch embeds the raw payload after the `Unknown message type: …` line so it is searchable) and by `ClaudeTimelineMessage`'s raw-JSON view. Local twin of Codex's `stringifyForDisplay` (`components/transcript/codex/codexFormat.ts`)
 
 ## How to Extend
 

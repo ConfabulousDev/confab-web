@@ -29,6 +29,20 @@ interface ParsedMessageData {
 }
 
 /**
+ * Stringify an unrecognized transcript message for display and search, with a
+ * `String(value)` fallback if serialization throws (e.g. a circular structure).
+ * Local twin of Codex's `stringifyForDisplay` (codexFormat.ts), which lives in
+ * a Codex component module this service doesn't otherwise depend on.
+ */
+export function stringifyUnknownClaudeMessage(message: TranscriptLine): string {
+  try {
+    return JSON.stringify(message, null, 2);
+  } catch {
+    return String(message);
+  }
+}
+
+/**
  * Parse a transcript line into display-ready message data
  */
 export function parseClaudeMessage(message: TranscriptLine): ParsedMessageData {
@@ -83,7 +97,12 @@ export function parseClaudeMessage(message: TranscriptLine): ParsedMessageData {
     // Unknown message type — forward compatibility catch-all
     role = 'unknown';
     timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
-    content = [{ type: 'text', text: `Unknown message type: ${message.type}` }];
+    // btxt: the raw payload rides along after the type line so the whole line is
+    // searchable through extractClaudeMessageText below — Codex/OpenCode
+    // unknown rows already index their raw text this way.
+    content = [
+      { type: 'text', text: `Unknown message type: ${message.type}\n${stringifyUnknownClaudeMessage(message)}` },
+    ];
   }
 
   return {
