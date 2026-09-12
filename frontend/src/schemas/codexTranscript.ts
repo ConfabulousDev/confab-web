@@ -9,6 +9,7 @@
 //   response_item           OpenAI Responses items (messages, function_call, ...)
 //   event_msg               UI events (user_message, agent_message, token_count, ...)
 //   compacted               context compaction replacement
+//   token_usage_record      aggregate per-response/turn/thread usage telemetry
 //   (anything else)         caught by UnknownCodexLineSchema for forward-compat
 //
 // `response_item` and `event_msg` carry a nested discriminator `payload.type`.
@@ -341,6 +342,22 @@ const CodexEventContextCompactedSchema = z
   })
   .passthrough();
 
+// pnkh: `event_msg.item_completed` is a lifecycle mirror emitted for every
+// item type (AgentMessage, UserMessage, Reasoning, CommandExecution,
+// FileChange, Extension, ...). Drop as noise — see handleEventMsg. `item` is
+// deliberately generic so future subtypes parse here instead of falling
+// through to the unknown catch-all.
+const CodexEventItemCompletedSchema = z
+  .object({
+    type: z.literal('item_completed'),
+    thread_id: z.string().optional(),
+    turn_id: z.string().optional(),
+    item: z.object({ type: z.string() }).passthrough(),
+    started_at_ms: z.number().optional(),
+    completed_at_ms: z.number().optional(),
+  })
+  .passthrough();
+
 // Catch-all for unknown event_msg.payload.type variants.
 const CodexUnknownEventPayloadSchema = z
   .object({ type: z.string() })
@@ -357,6 +374,7 @@ const KnownEventPayloadSchema = z.union([
   CodexEventWebSearchEndSchema,
   CodexEventTurnAbortedSchema,
   CodexEventContextCompactedSchema,
+  CodexEventItemCompletedSchema,
 ]);
 
 const CodexEventPayloadSchema = z.union([
@@ -377,6 +395,7 @@ const KNOWN_EVENT_PAYLOAD_TYPES = new Set<string>([
   'web_search_end',      // CF-368
   'turn_aborted',        // CF-368
   'context_compacted',   // CF-368
+  'item_completed',      // pnkh
 ]);
 
 export function isKnownEventPayload(
@@ -458,6 +477,28 @@ const CodexCompactedLineSchema = z
   })
   .passthrough();
 
+// pnkh: top-level aggregate usage telemetry, distinct from the nested
+// `event_msg.token_count` that owns all usage attribution. Drop as noise —
+// see normalizeCodexLines. The payload's `usage`, `turn_token_usage` and
+// `thread_token_usage` counters are left undeclared on purpose: nothing reads
+// them, and declaring them would invite attaching them to a render item.
+const CodexTokenUsageRecordPayloadSchema = z
+  .object({
+    thread_id: z.string().optional(),
+    turn_id: z.string().optional(),
+    session_id: z.string().optional(),
+    response_id: z.string().optional(),
+  })
+  .passthrough();
+
+const CodexTokenUsageRecordLineSchema = z
+  .object({
+    timestamp: z.string(),
+    type: z.literal('token_usage_record'),
+    payload: CodexTokenUsageRecordPayloadSchema.optional(),
+  })
+  .passthrough();
+
 // Catch-all for unknown top-level types.
 const CodexUnknownLineSchema = z
   .object({
@@ -478,6 +519,7 @@ const KnownCodexLineSchema = z.union([
   CodexResponseItemLineSchema,
   CodexEventMsgLineSchema,
   CodexCompactedLineSchema,
+  CodexTokenUsageRecordLineSchema,
 ]);
 
 export const RawCodexLineSchema = z.union([
@@ -494,11 +536,12 @@ const KNOWN_LINE_TYPES = new Set<string>([
   'response_item',
   'event_msg',
   'compacted',
+  'token_usage_record',
 ]);
 
 /**
  * Type predicate: narrows away the catch-all so a subsequent `switch`
- * on `line.type` discriminates cleanly between the 5 known branches.
+ * on `line.type` discriminates cleanly between the known branches.
  */
 export function isKnownCodexLine(line: RawCodexLine): line is KnownCodexLine {
   return KNOWN_LINE_TYPES.has(line.type);

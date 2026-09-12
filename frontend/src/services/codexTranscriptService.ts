@@ -387,6 +387,12 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
         if (modelUpdate) currentModel = modelUpdate;
         break;
       }
+      case 'token_usage_record': {
+        // pnkh: aggregate usage telemetry. Usage attribution belongs to
+        // event_msg.token_count alone (see attachTokenCountToAssistant); these
+        // per-turn/thread counters overlap it and would double-count.
+        break;
+      }
     }
   });
 
@@ -698,6 +704,12 @@ function handleEventMsg(
       // CF-368: pre-event for the top-level `compacted` rollout line. The
       // top-level line already produces the CodexCompactedDivider, so this
       // sibling event is noise.
+      return {};
+    case 'item_completed':
+      // pnkh: lifecycle mirror for every item type. AgentMessage duplicates
+      // the canonical response_item.message emitted milliseconds later; no
+      // other subtype has a transcript row of its own. Drop all subtypes, so
+      // future ones don't surface as CodexUnknownItem rows.
       return {};
     case 'turn_aborted': {
       // CF-368: user-interrupted / replaced / review-ended / budget-limited
