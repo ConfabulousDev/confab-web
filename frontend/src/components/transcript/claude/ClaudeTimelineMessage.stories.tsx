@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { UserMessage, AssistantMessage, SystemMessage, TranscriptLine } from '@/types';
+import type { UserMessage, AssistantMessage, SystemMessage, TranscriptLine, UnknownMessage } from '@/types';
 import ClaudeTimelineMessage from './ClaudeTimelineMessage';
 
 const emptyToolNameMap = new Map<string, string>();
@@ -77,6 +77,19 @@ const mockFileSnapshot: TranscriptLine = {
     trackedFileBackups: {
       'src/analytics.ts': { backupFileName: 'analytics.ts.bak', version: 1, backupTime: '2025-01-15T10:00:00Z' },
     },
+  },
+};
+
+// btxt: a forward-compat catch-all line whose top-level `type` doesn't match
+// any known Claude message schema.
+const mockUnknownMessage: UnknownMessage = {
+  type: 'agent-handoff',
+  timestamp: '2025-01-15T10:00:15Z',
+  fromAgent: 'planner-agent',
+  toAgent: 'implementer-agent',
+  handoffContext: {
+    reason: 'delegation',
+    priority: 'high',
   },
 };
 
@@ -418,5 +431,34 @@ export const FastModeWithAllServerTools: Story = {
     message: mockAssistantFastWithSearch,
     toolNameMap: emptyToolNameMap,
     sessionId: 'test-session-id',
+  },
+};
+
+/**
+ * btxt: genuinely unrecognized message type (parser catch-all). Shows the
+ * "Raw JSON" collapsible — click to expand the raw payload — alongside the
+ * "Report bug" affordance, matching Codex/OpenCode's unknown-row parity.
+ */
+export const UnknownMessageStory: Story = {
+  name: 'Unknown Message (Raw JSON)',
+  args: {
+    message: mockUnknownMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+  },
+};
+
+/**
+ * Unknown message where the row is the active search match — the raw-JSON
+ * details auto-expand and the matching text is highlighted.
+ */
+export const UnknownMessageSearchMatch: Story = {
+  name: 'Unknown Message (Search Match, Auto-Expanded)',
+  args: {
+    message: mockUnknownMessage,
+    toolNameMap: emptyToolNameMap,
+    sessionId: 'test-session-id',
+    searchQuery: 'planner-agent',
+    isCurrentSearchMatch: true,
   },
 };

@@ -273,6 +273,17 @@
   overflow: hidden;
 }
 
+/* btxt: collapsible raw-JSON payload on an unknown message row. */
+.rawJson {
+  font-size: var(--font-xs);
+}
+
+.rawJson summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-semibold);
+}
+
 /* CF-574: "Report bug" affordance on an unknown message row. */
 .reportRow {
   display: flex;

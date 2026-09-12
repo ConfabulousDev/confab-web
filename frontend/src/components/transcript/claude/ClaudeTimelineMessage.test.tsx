@@ -1,21 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { UserMessage, AssistantMessage, TranscriptLine } from '@/types';
+import type { UserMessage, AssistantMessage, TranscriptLine, UnknownMessage } from '@/types';
 import ClaudeTimelineMessage from './ClaudeTimelineMessage';
 
-// Mock the useCopyToClipboard hook to capture copied text
+// Mock the useCopyToClipboard hook to capture copied text; keep the rest of
+// the barrel real (btxt: unknown-message rows render ReportUnknownButton,
+// which needs the real useAppConfig/AppConfigContext default).
 const copiedTexts: string[] = [];
-vi.mock('@/hooks', () => ({
-  useCopyToClipboard: () => ({
-    copy: (text: string) => {
-      copiedTexts.push(text);
-      return Promise.resolve();
-    },
-    copied: copiedTexts.length > 0,
-    message: null,
-  }),
-}));
+vi.mock('@/hooks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks')>();
+  return {
+    ...actual,
+    useCopyToClipboard: () => ({
+      copy: (text: string) => {
+        copiedTexts.push(text);
+        return Promise.resolve();
+      },
+      copied: copiedTexts.length > 0,
+      message: null,
+    }),
+  };
+});
 
 function createUserMessage(overrides: Partial<UserMessage> = {}): UserMessage {
   return {
@@ -61,6 +67,16 @@ function createAssistantMessage(overrides: Partial<AssistantMessage> = {}): Assi
         output_tokens: 50,
       },
     },
+    ...overrides,
+  };
+}
+
+function createUnknownMessage(overrides: Partial<UnknownMessage> = {}): UnknownMessage {
+  return {
+    type: 'agent-handoff',
+    fromAgent: 'agent-1',
+    toAgent: 'agent-2',
+    timestamp: '2025-01-15T10:00:00Z',
     ...overrides,
   };
 }
@@ -537,6 +553,70 @@ describe('ClaudeTimelineMessage', () => {
       );
 
       expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();
+    });
+  });
+
+  // UNKNOWN rows show the raw JSON payload behind a click-to-expand <details>,
+  // matching the convenience Codex/OpenCode rows get from UnknownRawDetails
+  // (without reusing that shell — this row has its own header chrome).
+  describe('unknown message raw JSON', () => {
+    function getRawJsonDetails(): HTMLElement | null {
+      return screen.getByText('Raw JSON').closest('details');
+    }
+
+    it('renders a collapsed "Raw JSON" details alongside the report button', () => {
+      const message = createUnknownMessage();
+      render(
+        <ClaudeTimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+        />
+      );
+
+      expect(getRawJsonDetails()).not.toHaveAttribute('open');
+      expect(screen.getByText('Report bug')).toBeInTheDocument();
+    });
+
+    it('shows the raw JSON payload text once expanded', async () => {
+      const user = userEvent.setup();
+      const message = createUnknownMessage({ fromAgent: 'agent-1', toAgent: 'agent-2' });
+      render(
+        <ClaudeTimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+        />
+      );
+
+      await user.click(screen.getByText('Raw JSON'));
+
+      expect(screen.getByText(/"fromAgent"/)).toBeInTheDocument();
+      expect(screen.getByText(/"agent-1"/)).toBeInTheDocument();
+    });
+
+    it('auto-opens the details when this row is the active search match', () => {
+      const message = createUnknownMessage({ fromAgent: 'agent-1' });
+      render(
+        <ClaudeTimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+          searchQuery="agent-1"
+          isCurrentSearchMatch={true}
+        />
+      );
+
+      expect(getRawJsonDetails()).toHaveAttribute('open');
+    });
+
+    it('does not render the raw JSON details for known message types', () => {
+      const message = createUserMessage();
+      render(
+        <ClaudeTimelineMessage
+          message={message}
+          toolNameMap={emptyToolNameMap}
+        />
+      );
+
+      expect(screen.queryByText('Raw JSON')).not.toBeInTheDocument();
     });
   });
 });

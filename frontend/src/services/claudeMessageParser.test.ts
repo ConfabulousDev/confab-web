@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   parseClaudeMessage,
   extractClaudeTextContent,
+  extractClaudeMessageText,
   getRoleLabel,
+  stringifyUnknownClaudeMessage,
 } from './claudeMessageParser';
 import type { UserMessage, AssistantMessage, PRLinkMessage, ContentBlock, UnknownMessage } from '@/types';
 
@@ -140,10 +142,12 @@ describe('claudeMessageParser', () => {
 
       const result = parseClaudeMessage(unknownMessage);
       expect(result.role).toBe('unknown');
-      expect(result.content[0]).toEqual({
-        type: 'text',
-        text: 'Unknown message type: agent-handoff',
-      });
+      expect(result.content).toHaveLength(1);
+      // One text block: the human-readable type line, then the raw JSON payload.
+      const text = extractClaudeTextContent(result.content);
+      expect(text).toMatch(/^Unknown message type: agent-handoff\n/);
+      expect(text).toContain('"fromAgent": "agent-1"');
+      expect(text).toContain('"toAgent": "agent-2"');
     });
 
     it('should extract timestamp from unknown message if available', () => {
@@ -155,6 +159,40 @@ describe('claudeMessageParser', () => {
       const result = parseClaudeMessage(unknownMessage);
       expect(result.role).toBe('unknown');
       expect(result.timestamp).toBe('2025-06-15T12:00:00Z');
+    });
+
+    it('should find payload-only text through extractClaudeMessageText', () => {
+      const unknownMessage: UnknownMessage = {
+        type: 'agent-handoff',
+        fromAgent: 'agent-1',
+        toAgent: 'agent-2',
+        payloadOnlyMarker: 'zzz-needle-zzz',
+      };
+
+      // A term that appears only inside the raw payload (never in the type
+      // line) still has to be searchable — the parity gap versus Codex.
+      expect(extractClaudeMessageText(unknownMessage)).toContain('zzz-needle-zzz');
+    });
+  });
+
+  describe('stringifyUnknownClaudeMessage', () => {
+    it('round-trips an unknown message as 2-space-indented JSON', () => {
+      const unknownMessage: UnknownMessage = {
+        type: 'agent-handoff',
+        fromAgent: 'agent-1',
+        toAgent: 'agent-2',
+      };
+
+      const json = stringifyUnknownClaudeMessage(unknownMessage);
+      expect(JSON.parse(json)).toEqual(unknownMessage);
+      expect(json).toContain('\n  "type": "agent-handoff"');
+    });
+
+    it('falls back to String() when the payload cannot be serialized', () => {
+      const circular: UnknownMessage = { type: 'future-type' };
+      circular.self = circular;
+
+      expect(stringifyUnknownClaudeMessage(circular)).toBe('[object Object]');
     });
   });
 });

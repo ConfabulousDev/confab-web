@@ -1,12 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
 import { BashToolResultSchema, type BashToolResult } from '@/schemas/claudeTranscript';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
 import ContentBlockComponent from '@/components/transcript/claude/ContentBlock';
+import CodeBlock from '@/components/transcript/CodeBlock';
 import ReportUnknownButton from '@/components/transcript/ReportUnknownButton';
 import { computeKeyFingerprint } from '@/utils/reportUnknown';
+import { stringifyUnknownClaudeMessage } from '@/services/claudeMessageParser';
 import { AttachmentContent, AwaySummary, InformationalBanner } from '@/components/transcript/claude/attachments';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed, cacheWriteTotal } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
@@ -192,6 +194,50 @@ function FileSnapshotContent({ message }: { message: TranscriptLine }) {
         })}
       </div>
     </div>
+  );
+}
+
+interface UnknownRawJsonProps {
+  message: TranscriptLine;
+  searchQuery?: string;
+  /** This row is the active (n-of-N) search match. */
+  isCurrentSearchMatch?: boolean;
+}
+
+/**
+ * btxt: collapsed-by-default raw JSON for an unrecognized message row.
+ *
+ * Deliberately not the shared `UnknownRawDetails` shell: this row already
+ * carries its own header chrome, so nesting that component's `<summary>` would
+ * duplicate it.
+ */
+function UnknownRawJson({ message, searchQuery, isCurrentSearchMatch }: UnknownRawJsonProps) {
+  // Controlled `open` so the user can still toggle, auto-opened on the rising
+  // edge of becoming the active match so the highlight is visible without an
+  // extra click (React "adjust state on prop change" pattern, same as
+  // UnknownRawDetails).
+  const [open, setOpen] = useState(false);
+  const [prevIsCurrentMatch, setPrevIsCurrentMatch] = useState(false);
+  const isCurrentMatch = !!isCurrentSearchMatch;
+  if (isCurrentMatch !== prevIsCurrentMatch) {
+    setPrevIsCurrentMatch(isCurrentMatch);
+    if (isCurrentMatch) setOpen(true);
+  }
+
+  return (
+    <details
+      className={styles.rawJson}
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>Raw JSON</summary>
+      <CodeBlock
+        code={stringifyUnknownClaudeMessage(message)}
+        language="json"
+        searchQuery={searchQuery}
+        isCurrentSearchMatch={isCurrentSearchMatch}
+      />
+    </details>
   );
 }
 
@@ -427,16 +473,23 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
           ))
         )}
         {isUnknownMessage && (
-          <div className={styles.reportRow}>
-            <ReportUnknownButton
-              descriptor={{
-                provider: 'claude',
-                surface: 'message',
-                type: String(message.type),
-                keyFingerprint: computeKeyFingerprint(message),
-              }}
+          <>
+            <UnknownRawJson
+              message={message}
+              searchQuery={searchQuery}
+              isCurrentSearchMatch={isCurrentSearchMatch}
             />
-          </div>
+            <div className={styles.reportRow}>
+              <ReportUnknownButton
+                descriptor={{
+                  provider: 'claude',
+                  surface: 'message',
+                  type: String(message.type),
+                  keyFingerprint: computeKeyFingerprint(message),
+                }}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>
