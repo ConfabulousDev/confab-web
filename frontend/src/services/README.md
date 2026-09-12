@@ -80,7 +80,13 @@ without re-fetching:
    `CodexRenderItem[]` for the timeline. Responsibilities:
    - Drop noise: `session_meta`, `turn_context`,
      `event_msg.task_started`, `event_msg.user_message`,
-     `event_msg.agent_message`, `response_item.message[role=developer]`.
+     `event_msg.agent_message`, `response_item.message[role=developer]`,
+     `event_msg.web_search_end`, `event_msg.context_compacted` (CF-368),
+     `event_msg.item_completed` (every item subtype — the `AgentMessage` case
+     mirrors the canonical `response_item.message` emitted moments later; no
+     other subtype has a distinct row), and the top-level `token_usage_record`
+     (aggregate telemetry; usage attribution stays solely on
+     `event_msg.token_count`, below — pnkh).
      (`session_meta` and `turn_context` are dropped from the render stream
      but their `payload.model` is plucked first — see below.)
    - **CF-362 — `event_msg.token_count`**: never emits a render item, but

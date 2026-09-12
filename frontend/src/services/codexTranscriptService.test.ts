@@ -264,6 +264,149 @@ describe('normalizeCodexLines', () => {
     expect(result.find((i) => i.kind === 'unknown')).toBeUndefined();
   });
 
+  it('drops event_msg.item_completed(AgentMessage) as redundant with response_item.message (pnkh)', () => {
+    const jsonl = [
+      {
+        timestamp: '2026-09-04T19:02:51.549Z',
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          thread_id: '01a06dcd-3260-7d00-983f-0fcd7a7bcff7',
+          turn_id: '01a06dcd-531b-77c0-b2b4-d57352d0113d',
+          item: {
+            type: 'AgentMessage',
+            id: 'msg_06622241b23d89df016a9b15da5d0c87d098ee4dab34f236de',
+            content: [{ type: 'Text', text: 'hello world' }],
+            phase: 'commentary',
+          },
+          started_at_ms: 1788548570355,
+          completed_at_ms: 1788548571549,
+        },
+      },
+      {
+        timestamp: '2026-09-04T19:02:51.552Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          id: 'msg_06622241b23d89df016a9b15da5d0c87d098ee4dab34f236de',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'hello world' }],
+          phase: 'commentary',
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    // Only the canonical response_item.message survives; the item_completed
+    // mirror must not create a duplicate assistant bubble or fall through
+    // to a CodexUnknownItem.
+    const assistantRows = result.filter((i) => i.kind === 'assistant' && i.text === 'hello world');
+    expect(assistantRows).toHaveLength(1);
+    expect(result.find((i) => i.kind === 'unknown')).toBeUndefined();
+  });
+
+  it('drops every event_msg.item_completed item subtype, not just AgentMessage (pnkh)', () => {
+    const subtypes = ['UserMessage', 'Reasoning', 'CommandExecution', 'FileChange', 'Extension'];
+    const jsonl = subtypes
+      .map((itemType, idx) =>
+        JSON.stringify({
+          timestamp: `2026-09-04T19:0${idx}:00.000Z`,
+          type: 'event_msg',
+          payload: {
+            type: 'item_completed',
+            thread_id: 't1',
+            turn_id: 'turn1',
+            item: { type: itemType, id: `item_${idx}` },
+          },
+        }),
+      )
+      .join('\n');
+
+    const result = items(jsonl);
+    // A general lifecycle envelope, not a second transcript source: every
+    // subtype is dropped, not just the ones we've special-cased elsewhere.
+    expect(result).toHaveLength(0);
+  });
+
+  it('drops top-level token_usage_record without altering event_msg.token_count attribution (pnkh)', () => {
+    // All three token_usage_record scopes carry the same counters in a real
+    // single-response rollout; the test only cares that none of them leak.
+    const recordUsage = {
+      input_tokens: 15662,
+      cached_input_tokens: 10880,
+      cache_write_input_tokens: 0,
+      output_tokens: 195,
+      reasoning_output_tokens: 38,
+      total_tokens: 15857,
+    };
+    const jsonl = [
+      {
+        timestamp: '2026-09-04T19:02:51.552Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          id: 'msg_a',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'answer' }],
+          phase: 'final',
+        },
+      },
+      {
+        timestamp: '2026-09-04T19:02:53.177Z',
+        type: 'token_usage_record',
+        payload: {
+          thread_id: '01a06dcd-3260-7d00-983f-0fcd7a7bcff7',
+          turn_id: '01a06dcd-531b-77c0-b2b4-d57352d0113d',
+          session_id: '01a06dcd-3260-7d00-983f-0fcd7a7bcff7',
+          root_turn_id: '01a06dcd-531b-77c0-b2b4-d57352d0113d',
+          response_id: 'resp_06622241b23d89df016a9b15d8cf3487d0a3a3acfe5101851a',
+          usage: recordUsage,
+          turn_token_usage: recordUsage,
+          thread_token_usage: recordUsage,
+        },
+      },
+      {
+        timestamp: '2026-09-04T19:02:54.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: {
+            last_token_usage: {
+              input_tokens: 100,
+              cached_input_tokens: 20,
+              output_tokens: 50,
+              reasoning_output_tokens: 0,
+              total_tokens: 150,
+            },
+          },
+        },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n');
+
+    const result = items(jsonl);
+    // token_usage_record produces no row of its own...
+    expect(result).toHaveLength(1);
+    expect(result.find((i) => i.kind === 'unknown')).toBeUndefined();
+    // ...and the assistant's usage is attributed solely from
+    // event_msg.token_count (100-20 input, 50 output, 20 cacheRead) — the
+    // token_usage_record's much larger `usage` (15662/195) must not leak in.
+    const assistant = result[0];
+    expect(assistant?.kind).toBe('assistant');
+    if (assistant?.kind === 'assistant') {
+      expect(assistant.usage).toEqual({
+        input: 80,
+        output: 50,
+        cacheWrite: 0,
+        cacheWrite1h: 0,
+        cacheRead: 20,
+      });
+    }
+  });
+
   it('emits CodexTurnAbortedItem for event_msg.turn_aborted (CF-368)', () => {
     const jsonl = [
       {

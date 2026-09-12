@@ -78,17 +78,17 @@ All types are inferred from Zod schemas via `z.infer<>`:
 ### codexTranscript.ts -- Codex Rollout Types
 
 Each on-disk Codex line has the envelope `{ timestamp, type, payload }`.
-`RawCodexLineSchema` is a `z.union` of the five known top-level branches
-(`session_meta`, `turn_context`, `response_item`, `event_msg`, `compacted`)
-plus a catch-all `CodexUnknownLineSchema` so unfamiliar future types parse
-without erroring.
+`RawCodexLineSchema` is a `z.union` of the six known top-level branches
+(`session_meta`, `turn_context`, `response_item`, `event_msg`, `compacted`,
+`token_usage_record` — pnkh) plus a catch-all `CodexUnknownLineSchema` so
+unfamiliar future types parse without erroring.
 
 **Top-level inferred types:**
 - `RawCodexLine` -- union of all branches (catch-all included)
 - `CodexResponseItemLine`, `CodexEventMsgLine` -- the two branches the
-  normalizer destructures; the other three (`session_meta`,
-  `turn_context`, `compacted`) parse through `RawCodexLine` but their
-  per-branch types are local to the schema module.
+  normalizer destructures; the other four (`session_meta`,
+  `turn_context`, `compacted`, `token_usage_record`) parse through
+  `RawCodexLine` but their per-branch types are local to the schema module.
 
 **Nested payload variants:**
 - `response_item.payload` is a union with seven known shapes
@@ -97,10 +97,11 @@ without erroring.
   `web_search_call`) plus a catch-all. `CodexResponseMessage` is the
   only exported branch type (used by the normalizer); the others are
   composed via schema unions and don't need exported aliases.
-- `event_msg.payload` is a union with six known shapes
+- `event_msg.payload` is a union with eleven known shapes
   (`user_message`, `agent_message`, `task_started`, `task_complete`,
-  `token_count`, `patch_apply_end`) plus a catch-all.
-  `CodexTokenUsageDetails` (CF-362 — typed `info.last_token_usage` /
+  `token_count`, `patch_apply_end`, `mcp_tool_call_end`, `web_search_end`,
+  `turn_aborted`, `context_compacted`, `item_completed` — pnkh) plus a
+  catch-all. `CodexTokenUsageDetails` (CF-362 — typed `info.last_token_usage` /
   `info.total_token_usage` shape) is exported and consumed by the
   normalizer to attach per-call usage to assistant render items.
 
