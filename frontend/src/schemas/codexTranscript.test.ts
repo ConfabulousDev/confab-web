@@ -59,6 +59,15 @@ describe('RawCodexLineSchema', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts world_state', () => {
+      const result = parse({
+        timestamp: '2026-05-13T01:00:00Z',
+        type: 'world_state',
+        payload: { full: true, state: {} },
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('accepts unknown top-level type via catch-all', () => {
       const result = parse({
         timestamp: '2026-05-13T01:00:00Z',

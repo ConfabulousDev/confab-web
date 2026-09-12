@@ -10,6 +10,7 @@
 //   event_msg               UI events (user_message, agent_message, token_count, ...)
 //   compacted               context compaction replacement
 //   token_usage_record      aggregate per-response/turn/thread usage telemetry
+//   world_state             periodic environment/instructions/skills snapshot (zgd6)
 //   (anything else)         caught by UnknownCodexLineSchema for forward-compat
 //
 // `response_item` and `event_msg` carry a nested discriminator `payload.type`.
@@ -601,6 +602,20 @@ const CodexTokenUsageRecordLineSchema = z
   })
   .passthrough();
 
+// zgd6: periodic environment/instructions/skills snapshot, dropped by
+// normalizeCodexLines — recognized here only so it doesn't fall through to
+// CodexUnknownLineSchema and render as an unrecognized line. The payload is
+// left unmodeled on purpose: nothing reads it here or in the backend (see
+// backend/internal/codex/README.md), and declaring fields would invite
+// attaching them to a render item.
+const CodexWorldStateLineSchema = z
+  .object({
+    timestamp: z.string(),
+    type: z.literal('world_state'),
+    payload: z.object({}).passthrough().optional(),
+  })
+  .passthrough();
+
 // Catch-all for unknown top-level types.
 const CodexUnknownLineSchema = z
   .object({
@@ -622,6 +637,7 @@ const KnownCodexLineSchema = z.union([
   CodexEventMsgLineSchema,
   CodexCompactedLineSchema,
   CodexTokenUsageRecordLineSchema,
+  CodexWorldStateLineSchema,
 ]);
 
 export const RawCodexLineSchema = z.union([
@@ -639,6 +655,7 @@ const KNOWN_LINE_TYPES = new Set<string>([
   'event_msg',
   'compacted',
   'token_usage_record',
+  'world_state',
 ]);
 
 /**

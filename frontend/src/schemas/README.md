@@ -78,17 +78,18 @@ All types are inferred from Zod schemas via `z.infer<>`:
 ### codexTranscript.ts -- Codex Rollout Types
 
 Each on-disk Codex line has the envelope `{ timestamp, type, payload }`.
-`RawCodexLineSchema` is a `z.union` of the six known top-level branches
+`RawCodexLineSchema` is a `z.union` of the seven known top-level branches
 (`session_meta`, `turn_context`, `response_item`, `event_msg`, `compacted`,
-`token_usage_record` — pnkh) plus a catch-all `CodexUnknownLineSchema` so
-unfamiliar future types parse without erroring.
+`token_usage_record` — pnkh, `world_state` — zgd6) plus a catch-all
+`CodexUnknownLineSchema` so unfamiliar future types parse without erroring.
 
 **Top-level inferred types:**
 - `RawCodexLine` -- union of all branches (catch-all included)
 - `CodexResponseItemLine`, `CodexEventMsgLine` -- the two branches the
-  normalizer destructures; the other four (`session_meta`,
-  `turn_context`, `compacted`, `token_usage_record`) parse through
-  `RawCodexLine` but their per-branch types are local to the schema module.
+  normalizer destructures; the other five (`session_meta`,
+  `turn_context`, `compacted`, `token_usage_record`, `world_state`) parse
+  through `RawCodexLine` but their per-branch types are local to the schema
+  module.
 
 **Nested payload variants:**
 - `response_item.payload` is a union with seven known shapes
