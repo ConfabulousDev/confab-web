@@ -81,7 +81,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	// Start MinIO container
 	t.Log("Starting MinIO container...")
 	minioContainer, err := minio.Run(ctx,
-		"minio/minio:RELEASE.2024-12-18T13-15-44Z",
+		"quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z",
 		minio.WithUsername("minioadmin"),
 		minio.WithPassword("minioadmin"),
 		testcontainers.WithWaitStrategy(MinioWaitStrategy()),
