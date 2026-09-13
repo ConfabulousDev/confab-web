@@ -50,7 +50,7 @@ function isTurnEnded(entry: RawCursorLine): entry is Extract<RawCursorLine, { ty
 // JSONL parsing
 // ============================================================================
 
-export interface CursorParseResult {
+interface CursorParseResult {
   rawLines: CursorRawEntry[];
   /** Count of non-empty lines (including those that failed to parse), so the
    *  line-offset incremental fetch stays in sync with the file. */
@@ -158,7 +158,7 @@ function humanizeTag(tag: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-export interface ParsedCursorUserText {
+interface ParsedCursorUserText {
   /** The human prompt: concatenated, trimmed `<user_query>` content. Falls back
    *  to the raw text (trimmed) when no well-formed `<user_query>` tag exists. */
   prompt: string;
@@ -268,7 +268,7 @@ export function extractCursorModel(): string | undefined {
 /** Session-level time bounds for estimating per-row timestamps. `start` is the
  *  session's `firstSeen` (which 5w7r already lowers to fold in `metadata.created_at`)
  *  and `end` its `lastSyncAt`. Either may be absent on a session detail. */
-export interface CursorTimestampBounds {
+interface CursorTimestampBounds {
   start?: string | null;
   end?: string | null;
 }
@@ -350,7 +350,7 @@ async function fetchWithCache(
   return entry;
 }
 
-export interface ParsedCursorTranscript {
+interface ParsedCursorTranscript {
   sessionId: string;
   items: CursorRenderItem[];
   rawLines: CursorRawEntry[];

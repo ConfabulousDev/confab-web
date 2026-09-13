@@ -33,14 +33,14 @@ export type ProviderId = (typeof PROVIDER_VALUES)[number];
  * undefined since its row labels are self-explanatory for that provider.
  * Added in CF-439 for the Code Activity card's Searches row.
  */
-export interface ProviderCardTooltips {
+interface ProviderCardTooltips {
   codeActivity?: {
     searches?: string;
     filesRead?: string;
   };
 }
 
-export interface ProviderMetadata {
+interface ProviderMetadata {
   id: ProviderId;
   /** Filter chip / dropdown label (e.g. "Claude Code"). */
   label: string;
@@ -131,24 +131,6 @@ function isProviderId(value: string): value is ProviderId {
 // display form that may slip through unnormalised on the wire.
 function normalizeProvider(value: string): string {
   return value.toLowerCase().replace(/\s+/g, '-');
-}
-
-/**
- * Mirrors the spirit of backend `models.LegacyAliases`: returns true when
- * `value` is a non-canonical spelling whose normalized form is the
- * canonical `claude-code` id. The classic case is the legacy DB display
- * form `'Claude Code'`.
- *
- * Functionally redundant with `normalizeProvider(value) === 'claude-code' &&
- * value !== 'claude-code'` — promoted to its own export (CF-366) so the
- * legacy-detection rule has one documented home, in case future callers
- * need to branch on "did we just rescue a legacy row?" without re-deriving
- * the rule. `getProviderMetadataOrFallback` handles the rescue
- * transparently via `normalizeProvider`, so most call sites do not need
- * this helper directly.
- */
-export function isLegacyClaudeCode(value: string): boolean {
-  return normalizeProvider(value) === 'claude-code' && value !== 'claude-code';
 }
 
 /**

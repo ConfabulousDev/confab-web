@@ -6,7 +6,7 @@ import { formatDurationMs } from './codexFormat';
 import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
-export interface CodexTurnSeparatorProps {
+interface CodexTurnSeparatorProps {
   item: CodexTurnSeparatorItem;
   /** Session ID for the per-row copy-link URL (CF-360). Optional in tests. */
   sessionId?: string;

@@ -6,7 +6,7 @@
 import type { CursorRenderItem } from './cursorCategories';
 
 /** Same-kind skip-nav neighbor maps, keyed by `filteredItems` index. */
-export interface CursorRowNav {
+interface CursorRowNav {
   /** index → index of the next row of the SAME kind (user/assistant/tool). */
   nextOfSameKind: Map<number, number>;
   /** index → index of the previous row of the SAME kind. */

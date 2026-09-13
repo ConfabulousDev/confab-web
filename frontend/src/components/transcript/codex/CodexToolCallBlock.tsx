@@ -28,7 +28,7 @@ import {
 } from './codexToolCallHelpers';
 import styles from './CodexToolCallBlock.module.css';
 
-export interface CodexToolCallBlockProps {
+interface CodexToolCallBlockProps {
   item: CodexToolCallItem;
   /**
    * Session ID for the per-row copy-link URL. Optional so the renderer can

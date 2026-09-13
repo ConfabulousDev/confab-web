@@ -9,7 +9,7 @@ import type { OpenCodeRenderItem } from './opencodeCategories';
 import { shouldShowDivider, formatDividerLabel } from '@/components/transcript/timelineUtils';
 
 /** Virtual-list item layer: real OpenCode rows + injected time/day separators. */
-export type VirtualItem =
+type VirtualItem =
   | { type: 'item'; item: OpenCodeRenderItem; index: number }
   | { type: 'separator'; label: string };
 

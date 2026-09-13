@@ -15,7 +15,7 @@ import { formatCodexTimestamp, stringifyForDisplay } from './codexFormat';
 import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
-export interface CodexUnknownItemProps {
+interface CodexUnknownItemProps {
   item: CodexUnknownItemType;
   /** Session ID for the per-row copy-link URL (CF-360). Optional in tests. */
   sessionId?: string;

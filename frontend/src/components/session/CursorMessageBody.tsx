@@ -21,7 +21,7 @@ import { getHighlightClass, highlightTextInHtml } from '@/utils/highlightSearch'
 import CodeBlock from '@/components/transcript/CodeBlock';
 import styles from './CursorMessageBody.module.css';
 
-export interface CursorMessageBodyProps {
+interface CursorMessageBodyProps {
   text: string;
   /** Transcript search query — when set, matches inside the rendered markdown
    *  HTML are wrapped in `<mark>` so Cmd-F + scroll-to-mark keeps working. */

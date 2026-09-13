@@ -14,7 +14,7 @@ import { formatDuration } from './timelineFormat';
 import type { BlendedSegmentLayout, SpeakerSegment } from './timelineSegments';
 import styles from './TimelineBar.module.css';
 
-export interface TimelineBarProps<S extends SpeakerSegment> {
+interface TimelineBarProps<S extends SpeakerSegment> {
   /**
    * Precomputed segment layout. The same layout instance can feed both
    * `TimelineBar` and `CostBar` so the two side-by-side rails line up

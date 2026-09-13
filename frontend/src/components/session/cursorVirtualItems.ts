@@ -13,7 +13,7 @@ import type { CursorRenderItem } from './cursorCategories';
 import { shouldShowDivider, formatDividerLabel } from '@/components/transcript/timelineUtils';
 
 /** Virtual-list item layer: real Cursor rows + injected time/day separators. */
-export type VirtualItem =
+type VirtualItem =
   | { type: 'item'; item: CursorRenderItem; index: number }
   | { type: 'separator'; label: string; estimated: true };
 

@@ -55,7 +55,7 @@ export const OpenCodePartSchema = z
   })
   .passthrough();
 
-export const OpenCodeInfoSchema = z
+const OpenCodeInfoSchema = z
   .object({
     id: z.string().optional(),
     sessionID: z.string().optional(),
@@ -75,4 +75,3 @@ export const RawOpenCodeLineSchema = z.object({
 
 export type RawOpenCodeLine = z.infer<typeof RawOpenCodeLineSchema>;
 export type OpenCodePart = z.infer<typeof OpenCodePartSchema>;
-export type OpenCodeToolState = z.infer<typeof OpenCodeToolStateSchema>;

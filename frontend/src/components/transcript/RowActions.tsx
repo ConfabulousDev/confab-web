@@ -19,7 +19,7 @@
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import styles from './RowActions.module.css';
 
-export interface RowActionsProps {
+interface RowActionsProps {
   sessionId: string;
   /**
    * The `?msg=` deep-link value — whatever the provider's resolver matches

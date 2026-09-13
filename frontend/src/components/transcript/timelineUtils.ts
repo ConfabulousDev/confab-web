@@ -21,7 +21,7 @@ export const TIME_GAP_THRESHOLD_MS = 5 * 60 * 1000;
 
 /** Result of `shouldShowDivider`: whether to inject a divider row, and
  *  whether it marks a calendar-day change (vs. a same-day idle gap). */
-export interface DividerDecision {
+interface DividerDecision {
   show: boolean;
   dayChanged: boolean;
 }

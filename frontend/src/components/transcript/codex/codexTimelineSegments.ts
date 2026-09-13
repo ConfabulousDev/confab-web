@@ -13,9 +13,7 @@ import {
   useBlendedSegmentLayout,
 } from '../timelineSegments';
 
-export type CodexSpeaker = 'user' | 'assistant';
-
-export type CodexTimelineSegment = SpeakerSegment;
+type CodexTimelineSegment = SpeakerSegment;
 
 /** Floor for user thinking-gap duration (also used for turn 1's synthetic gap). */
 const FIRST_TURN_USER_SEGMENT_MS = 1000;

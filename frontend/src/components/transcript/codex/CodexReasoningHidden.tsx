@@ -12,7 +12,7 @@ import { formatCodexTimestamp } from './codexFormat';
 import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
-export interface CodexReasoningHiddenProps {
+interface CodexReasoningHiddenProps {
   item: CodexReasoningHiddenItem;
   /** Session ID for the per-row copy-link URL (CF-360). Optional in tests. */
   sessionId?: string;

@@ -10,7 +10,7 @@ import type { TranscriptLine } from '@/types';
 import ClaudeMessageTimeline from '@/components/transcript/claude/ClaudeMessageTimeline';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 
-export interface ClaudeTranscriptPaneProps {
+interface ClaudeTranscriptPaneProps {
   loading: boolean;
   error: string | null;
   filteredMessages: TranscriptLine[];

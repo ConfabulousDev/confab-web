@@ -30,7 +30,7 @@ import OpenCodeUnknownItem from './OpenCodeUnknownItem';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 import styles from './OpenCodeTranscriptPane.module.css';
 
-export interface OpenCodeTranscriptPaneProps {
+interface OpenCodeTranscriptPaneProps {
   sessionId: string;
   /** Unfiltered render items — distinguishes "no transcript yet" from "filtered out". Drives bar segments. */
   items: OpenCodeRenderItem[];

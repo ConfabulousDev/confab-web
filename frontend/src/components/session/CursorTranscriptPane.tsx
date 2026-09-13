@@ -58,7 +58,7 @@ function EstimatedTime({ timestamp }: { timestamp?: string }) {
   );
 }
 
-export interface CursorTranscriptPaneProps {
+interface CursorTranscriptPaneProps {
   sessionId: string;
   /** Unfiltered render items — distinguishes "no transcript yet" from "filtered out". */
   items: CursorRenderItem[];

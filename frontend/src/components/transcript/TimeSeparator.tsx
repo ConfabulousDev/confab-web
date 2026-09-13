@@ -9,7 +9,7 @@
 
 import styles from './TimeSeparator.module.css';
 
-export interface TimeSeparatorProps {
+interface TimeSeparatorProps {
   /** Divider text — either the >5min idle-gap time text or the full
    *  "Weekday, Month Day" day-boundary date (see `formatDividerLabel`). */
   label: string;
@@ -40,5 +40,3 @@ export function TimeSeparator({ label, estimated }: TimeSeparatorProps) {
     </div>
   );
 }
-
-export default TimeSeparator;

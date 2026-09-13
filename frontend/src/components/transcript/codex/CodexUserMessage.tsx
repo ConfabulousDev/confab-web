@@ -10,7 +10,7 @@ import CodexMessageImages from './CodexMessageImages';
 import RowActions from '../RowActions';
 import styles from './CodexMessage.module.css';
 
-export interface CodexUserMessageProps {
+interface CodexUserMessageProps {
   item: CodexUserItem;
   /**
    * Session ID for the per-row copy-link URL. Optional so the renderer can

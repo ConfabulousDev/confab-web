@@ -5,7 +5,7 @@
 
 import styles from './TranscriptPaneStatus.module.css';
 
-export interface TranscriptPaneStatusProps {
+interface TranscriptPaneStatusProps {
   loading: boolean;
   error: string | null;
 }
