@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -63,12 +64,7 @@ func eqStrings(a, b []string) bool {
 }
 
 func hasLabel(card *TrendsCostDistributionCard, label string) bool {
-	for _, l := range labelsOf(card) {
-		if l == label {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(labelsOf(card), label)
 }
 
 // TestBuildCostDistribution_DecadesUpToMax: the first band merges the two sub-$1

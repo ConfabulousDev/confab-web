@@ -732,7 +732,7 @@ func TestCountUserSharesSince_CountsOnlyOwnerSharesInWindow(t *testing.T) {
 	}
 
 	// Owner creates 3 shares.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := store.CreateShare(ctx, ownerSession, owner.ID, true, nil, nil); err != nil {
 			t.Fatalf("CreateShare %d failed: %v", i, err)
 		}

@@ -16,9 +16,9 @@ func TestRedactionPattern(t *testing.T) {
 		{"[REDACTED:A] and [REDACTED:B]", []string{"A", "B"}},
 		{"[REDACTED:KEY1] and [REDACTED:KEY2] and [REDACTED:KEY1]", []string{"KEY1", "KEY2", "KEY1"}},
 		{"no redactions here", nil},
-		{"[REDACTED:lowercase]", nil},       // lowercase not matched
-		{"[NOT_REDACTED:FOO]", nil},         // wrong prefix
-		{"REDACTED:TOKEN", nil},             // no brackets
+		{"[REDACTED:lowercase]", nil}, // lowercase not matched
+		{"[NOT_REDACTED:FOO]", nil},   // wrong prefix
+		{"REDACTED:TOKEN", nil},       // no brackets
 	}
 
 	for _, tt := range tests {
@@ -45,7 +45,7 @@ func TestRedactionPattern(t *testing.T) {
 
 func TestRedactionsAnalyzer_NoRedactions(t *testing.T) {
 	content := []byte(makeUserMessage("u1", "2025-01-01T00:00:00Z", "Hello world") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{makeTextBlock("Hi there!")}))
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{makeTextBlock("Hi there!")}))
 
 	fc, err := NewFileCollection(content)
 	if err != nil {
@@ -67,7 +67,7 @@ func TestRedactionsAnalyzer_NoRedactions(t *testing.T) {
 
 func TestRedactionsAnalyzer_SingleType(t *testing.T) {
 	content := []byte(makeUserMessage("u1", "2025-01-01T00:00:00Z", "My token is [REDACTED:GITHUB_TOKEN]") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
 			makeTextBlock("I see your [REDACTED:GITHUB_TOKEN] token"),
 		}))
 
@@ -91,7 +91,7 @@ func TestRedactionsAnalyzer_SingleType(t *testing.T) {
 
 func TestRedactionsAnalyzer_MultipleTypes(t *testing.T) {
 	content := []byte(makeUserMessage("u1", "2025-01-01T00:00:00Z", "Token: [REDACTED:GITHUB_TOKEN], Key: [REDACTED:AWS_KEY]") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
 			makeTextBlock("Found [REDACTED:PASSWORD] and [REDACTED:AWS_KEY]"),
 		}))
 
@@ -121,8 +121,8 @@ func TestRedactionsAnalyzer_MultipleTypes(t *testing.T) {
 
 func TestRedactionsAnalyzer_NestedJSON(t *testing.T) {
 	// Redactions in nested structures (tool inputs, arrays, etc.)
-	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Bash", map[string]interface{}{"command": "export TOKEN=[REDACTED:API_KEY]"}),
+	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
+		makeToolUseBlock("toolu_1", "Bash", map[string]any{"command": "export TOKEN=[REDACTED:API_KEY]"}),
 	}))
 
 	fc, err := NewFileCollection(content)
@@ -145,10 +145,10 @@ func TestRedactionsAnalyzer_NestedJSON(t *testing.T) {
 
 func TestRedactionsAnalyzer_DeeplyNested(t *testing.T) {
 	// Redactions buried deep in nested objects and arrays - use tool_use with nested input
-	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "SomeAPI", map[string]interface{}{
-			"config": map[string]interface{}{
-				"nested": map[string]interface{}{
+	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
+		makeToolUseBlock("toolu_1", "SomeAPI", map[string]any{
+			"config": map[string]any{
+				"nested": map[string]any{
 					"secret": "[REDACTED:DEEP_SECRET]",
 				},
 			},
@@ -201,7 +201,7 @@ func TestRedactionsAnalyzer_MultipleInSameString(t *testing.T) {
 func TestRedactionsAnalyzer_WithAgentFiles(t *testing.T) {
 	mainContent := []byte(makeUserMessage("u1", "2025-01-01T00:00:00Z", "Main: [REDACTED:MAIN_TOKEN]"))
 	agentContents := map[string][]byte{
-		"agent-123": []byte(makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 10, 5, []map[string]interface{}{
+		"agent-123": []byte(makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 10, 5, []map[string]any{
 			makeTextBlock("Agent: [REDACTED:AGENT_SECRET]"),
 		}) + "\n" + makeUserMessage("au1", "2025-01-01T00:00:02Z", "More: [REDACTED:AGENT_SECRET]")),
 	}
@@ -230,8 +230,8 @@ func TestRedactionsAnalyzer_WithAgentFiles(t *testing.T) {
 func TestRedactionsAnalyzer_FieldNameRedaction(t *testing.T) {
 	// When an entire field value is redacted (field-based redaction)
 	// Put redactions in tool_use input to test field-level redactions
-	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Auth", map[string]interface{}{
+	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
+		makeToolUseBlock("toolu_1", "Auth", map[string]any{
 			"password": "[REDACTED:PASSWORD]",
 			"api_key":  "[REDACTED:API_KEY]",
 		}),
@@ -350,8 +350,8 @@ func TestRedactionsAnalyzer_EmptyContent(t *testing.T) {
 
 func TestRedactionsAnalyzer_ArrayOfStrings(t *testing.T) {
 	// Redactions in arrays of strings - use tool_use with array input
-	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "MultiToken", map[string]interface{}{
+	content := []byte(makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
+		makeToolUseBlock("toolu_1", "MultiToken", map[string]any{
 			"tokens": []string{"[REDACTED:TOKEN_A]", "normal", "[REDACTED:TOKEN_B]"},
 		}),
 	}))

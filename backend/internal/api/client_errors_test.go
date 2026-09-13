@@ -52,14 +52,14 @@ func TestHandleReportClientErrors(t *testing.T) {
 	})
 
 	t.Run("valid payload with 50 errors", func(t *testing.T) {
-		errors := make([]map[string]interface{}, 50)
+		errors := make([]map[string]any, 50)
 		for i := range errors {
-			errors[i] = map[string]interface{}{
+			errors[i] = map[string]any{
 				"line":    i + 1,
 				"details": []map[string]string{{"path": "root", "message": "bad"}},
 			}
 		}
-		payload := map[string]interface{}{
+		payload := map[string]any{
 			"category": "transcript_validation",
 			"errors":   errors,
 		}
@@ -95,14 +95,14 @@ func TestHandleReportClientErrors(t *testing.T) {
 	})
 
 	t.Run("too many errors", func(t *testing.T) {
-		errors := make([]map[string]interface{}, 51)
+		errors := make([]map[string]any, 51)
 		for i := range errors {
-			errors[i] = map[string]interface{}{
+			errors[i] = map[string]any{
 				"line":    i + 1,
 				"details": []map[string]string{{"path": "root", "message": "bad"}},
 			}
 		}
-		payload := map[string]interface{}{
+		payload := map[string]any{
 			"category": "transcript_validation",
 			"errors":   errors,
 		}

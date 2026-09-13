@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewAgentProvider_AllSucceed(t *testing.T) {
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Agent"),
 	}) + "\n"
 
@@ -47,7 +47,7 @@ func TestNewAgentProvider_AllSucceed(t *testing.T) {
 }
 
 func TestNewAgentProvider_DownloadError_Skipped(t *testing.T) {
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Agent"),
 	}) + "\n"
 
@@ -82,7 +82,7 @@ func TestNewAgentProvider_DownloadError_Skipped(t *testing.T) {
 }
 
 func TestNewAgentProvider_EmptyContent_Skipped(t *testing.T) {
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Agent"),
 	}) + "\n"
 
@@ -111,7 +111,7 @@ func TestNewAgentProvider_EmptyContent_Skipped(t *testing.T) {
 }
 
 func TestNewAgentProvider_Cap(t *testing.T) {
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Agent"),
 	}) + "\n"
 

@@ -1,5 +1,7 @@
 package anthropic
 
+import "strings"
+
 import "fmt"
 
 // MessagesRequest represents a request to the Messages API.
@@ -45,13 +47,13 @@ type Usage struct {
 
 // GetTextContent extracts all text content from the response.
 func (r *MessagesResponse) GetTextContent() string {
-	var text string
+	var text strings.Builder
 	for _, block := range r.Content {
 		if block.Type == "text" {
-			text += block.Text
+			text.WriteString(block.Text)
 		}
 	}
-	return text
+	return text.String()
 }
 
 // APIError represents an error response from the Anthropic API.

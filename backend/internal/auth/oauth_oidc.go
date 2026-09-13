@@ -28,11 +28,11 @@ type OIDCEndpoints struct {
 
 // oidcUser represents user info from the OIDC userinfo endpoint
 type oidcUser struct {
-	Sub           string      `json:"sub"`
-	Email         string      `json:"email"`
-	EmailVerified interface{} `json:"email_verified"` // bool or string "true"
-	Name          string      `json:"name"`
-	Picture       string      `json:"picture"`
+	Sub           string `json:"sub"`
+	Email         string `json:"email"`
+	EmailVerified any    `json:"email_verified"` // bool or string "true"
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
 }
 
 // IsEmailVerified returns true if email_verified is explicitly true.

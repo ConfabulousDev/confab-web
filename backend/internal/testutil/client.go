@@ -17,8 +17,8 @@ import (
 // to the test server.
 type TestClient struct {
 	*http.Client
-	t         *testing.T
-	ts        *TestServer
+	t       *testing.T
+	ts      *TestServer
 	apiKey  string         // For API key auth
 	cookies []*http.Cookie // For session auth
 }
@@ -73,12 +73,12 @@ func (c *TestClient) WithSession(sessionToken string) *TestClient {
 
 // Request makes an HTTP request to the test server.
 // Body can be nil, a struct (will be JSON encoded), or an io.Reader.
-func (c *TestClient) Request(method, path string, body interface{}) (*http.Response, error) {
+func (c *TestClient) Request(method, path string, body any) (*http.Response, error) {
 	return c.RequestWithHeaders(method, path, body, nil)
 }
 
 // RequestWithHeaders makes an HTTP request with custom headers.
-func (c *TestClient) RequestWithHeaders(method, path string, body interface{}, headers map[string]string) (*http.Response, error) {
+func (c *TestClient) RequestWithHeaders(method, path string, body any, headers map[string]string) (*http.Response, error) {
 	url := c.ts.URL + path
 
 	var bodyReader io.Reader
@@ -140,12 +140,12 @@ func (c *TestClient) Get(path string) (*http.Response, error) {
 }
 
 // Post makes a POST request to the test server with a JSON body.
-func (c *TestClient) Post(path string, body interface{}) (*http.Response, error) {
+func (c *TestClient) Post(path string, body any) (*http.Response, error) {
 	return c.Request(http.MethodPost, path, body)
 }
 
 // Patch makes a PATCH request to the test server with a JSON body.
-func (c *TestClient) Patch(path string, body interface{}) (*http.Response, error) {
+func (c *TestClient) Patch(path string, body any) (*http.Response, error) {
 	return c.Request(http.MethodPatch, path, body)
 }
 
@@ -163,7 +163,7 @@ func (c *TestClient) PostForm(path string, formData string) (*http.Response, err
 }
 
 // ParseJSON decodes the response body as JSON into v and closes the body.
-func ParseJSON(t *testing.T, resp *http.Response, v interface{}) {
+func ParseJSON(t *testing.T, resp *http.Response, v any) {
 	t.Helper()
 	defer resp.Body.Close()
 

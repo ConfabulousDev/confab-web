@@ -6,7 +6,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
-
 // =============================================================================
 // extractPRLinkFromLine Unit Tests
 // =============================================================================

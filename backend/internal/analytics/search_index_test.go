@@ -51,7 +51,7 @@ func TestExtractUserMessagesText_ExcludesToolResults(t *testing.T) {
 		Main: &TranscriptFile{
 			Lines: []*TranscriptLine{
 				{Type: "user", Message: &MessageContent{Content: "Hello"}},
-				{Type: "user", Message: &MessageContent{Content: []interface{}{map[string]interface{}{"type": "tool_result"}}}},
+				{Type: "user", Message: &MessageContent{Content: []any{map[string]any{"type": "tool_result"}}}},
 			},
 		},
 	}
@@ -96,7 +96,7 @@ func TestExtractUserMessagesText_TruncatesAt500KB(t *testing.T) {
 	var lines []*TranscriptLine
 	// Each message is 10KB, need 60 to exceed 500KB
 	bigMsg := strings.Repeat("x", 10*1024)
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		lines = append(lines, &TranscriptLine{
 			Type:    "user",
 			Message: &MessageContent{Content: bigMsg},
@@ -115,9 +115,9 @@ func TestExtractUserMessagesText_TruncationPreservesUTF8(t *testing.T) {
 	// Create messages with multi-byte UTF-8 characters near the truncation boundary.
 	// Each emoji is 4 bytes; we want the truncation point to land mid-character.
 	var lines []*TranscriptLine
-	emoji := "🔥" // 4-byte UTF-8
+	emoji := "🔥"                            // 4-byte UTF-8
 	bigMsg := strings.Repeat(emoji, 3*1024) // 12KB per message
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		lines = append(lines, &TranscriptLine{
 			Type:    "user",
 			Message: &MessageContent{Content: bigMsg},

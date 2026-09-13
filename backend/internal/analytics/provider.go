@@ -38,7 +38,7 @@ type ParseInput struct {
 }
 
 // Rollout is a provider-specific parsed session representation.
-type Rollout interface{}
+type Rollout any
 
 var providerRegistry = map[string]SessionProvider{}
 

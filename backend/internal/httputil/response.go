@@ -6,7 +6,7 @@ import (
 )
 
 // RespondJSON writes a JSON response with the given status code and data.
-func RespondJSON(w http.ResponseWriter, status int, data interface{}) {
+func RespondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)

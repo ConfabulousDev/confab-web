@@ -8,9 +8,9 @@ import (
 
 // parseRaw is a tiny test helper: parse a JSONL line into map form, as
 // loadOpenCodeMessages does before calling ValidateOpenCodeLine.
-func parseRaw(t *testing.T, line string) map[string]interface{} {
+func parseRaw(t *testing.T, line string) map[string]any {
 	t.Helper()
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		t.Fatalf("test fixture is not valid JSON: %v\n---\n%s", err, line)
 	}

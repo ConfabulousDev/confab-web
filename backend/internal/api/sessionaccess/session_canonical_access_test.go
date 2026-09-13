@@ -215,15 +215,15 @@ func TestHandleGetSession_RecipientShareExposesOwnerEmail(t *testing.T) {
 
 // gitInfoWithSecrets is a rich git_info blob carrying credential- and
 // host-bearing keys, used by the d29s git_info-redaction wire tests.
-func gitInfoWithSecrets() map[string]interface{} {
-	return map[string]interface{}{
+func gitInfoWithSecrets() map[string]any {
+	return map[string]any{
 		"repo_url":   "https://alice:ghp_secrettoken@github.com/acme/widget.git",
 		"branch":     "feature/login",
 		"author":     "Alice Owner <alice@example.com>",
 		"commit_sha": "deadbeefcafebabe",
-		"remotes": []interface{}{
-			map[string]interface{}{"name": "origin", "fetch_url": "https://alice:ghp_secrettoken@github.com/acme/widget.git"},
-			map[string]interface{}{"name": "upstream", "fetch_url": "https://internal.example.com/acme/widget.git"},
+		"remotes": []any{
+			map[string]any{"name": "origin", "fetch_url": "https://alice:ghp_secrettoken@github.com/acme/widget.git"},
+			map[string]any{"name": "upstream", "fetch_url": "https://internal.example.com/acme/widget.git"},
 		},
 		"tracking_remote": "upstream",
 	}
@@ -266,7 +266,7 @@ func TestHandleGetSession_OwnerSeesFullGitInfo(t *testing.T) {
 	var session db.SessionDetail
 	testutil.ParseJSONResponse(t, w, &session)
 
-	gi, ok := session.GitInfo.(map[string]interface{})
+	gi, ok := session.GitInfo.(map[string]any)
 	if !ok {
 		t.Fatalf("expected owner git_info map, got %T", session.GitInfo)
 	}
@@ -307,7 +307,7 @@ func TestHandleGetSession_PublicShareRedactsGitInfo(t *testing.T) {
 
 	var session db.SessionDetail
 	testutil.ParseJSONResponse(t, w, &session)
-	gi, ok := session.GitInfo.(map[string]interface{})
+	gi, ok := session.GitInfo.(map[string]any)
 	if !ok {
 		t.Fatalf("expected sanitized git_info map, got %T (%v)", session.GitInfo, session.GitInfo)
 	}
@@ -353,7 +353,7 @@ func TestHandleGetSession_RecipientRedactsGitInfo(t *testing.T) {
 
 	var session db.SessionDetail
 	testutil.ParseJSONResponse(t, w, &session)
-	gi, ok := session.GitInfo.(map[string]interface{})
+	gi, ok := session.GitInfo.(map[string]any)
 	if !ok {
 		t.Fatalf("expected sanitized git_info map, got %T", session.GitInfo)
 	}

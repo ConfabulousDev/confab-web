@@ -20,8 +20,8 @@ import (
 // AllowCredentials=true with Access-Control-Allow-Origin: *).
 func TestParseAllowedOrigins(t *testing.T) {
 	cases := []struct {
-		name              string
-		env               string
+		name               string
+		env                string
 		wantCORS, wantCSRF []string
 	}{
 		{

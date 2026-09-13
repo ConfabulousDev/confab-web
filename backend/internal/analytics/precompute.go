@@ -763,7 +763,7 @@ func (p *Precomputer) PrecomputeSmartRecapOnly(ctx context.Context, session Stal
 		return err
 	}
 
-	var cardStats map[string]interface{}
+	var cardStats map[string]any
 	if cards != nil {
 		cardStats = cards.ToResponse().Cards
 	}

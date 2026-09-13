@@ -459,7 +459,7 @@ func TestGenerateUserCode(t *testing.T) {
 		// Confusing chars: 0, O, I, L, 1
 		safeChars := "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			code, err := generateUserCode()
 			if err != nil {
 				t.Fatalf("generateUserCode failed: %v", err)
@@ -479,7 +479,7 @@ func TestGenerateUserCode(t *testing.T) {
 
 	t.Run("generates unique codes", func(t *testing.T) {
 		codes := make(map[string]bool)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			code, err := generateUserCode()
 			if err != nil {
 				t.Fatalf("generateUserCode failed: %v", err)
@@ -499,7 +499,7 @@ func TestGenerateUserCode(t *testing.T) {
 		const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 		counts := make(map[rune]int)
 		const iterations = 20000 // 160,000 sampled symbols
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			code, err := generateUserCode()
 			if err != nil {
 				t.Fatalf("generateUserCode failed: %v", err)
@@ -553,7 +553,7 @@ func TestGenerateDeviceCode(t *testing.T) {
 
 	t.Run("generates unique codes", func(t *testing.T) {
 		codes := make(map[string]bool)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			code, err := generateDeviceCode()
 			if err != nil {
 				t.Fatalf("generateDeviceCode failed: %v", err)

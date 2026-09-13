@@ -23,7 +23,7 @@ type LineValidationError struct {
 
 // ValidateLine validates a parsed transcript line against the schema.
 // Returns a slice of validation errors (empty if valid).
-func ValidateLine(raw map[string]interface{}) []ValidationError {
+func ValidateLine(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// Get the message type
@@ -60,7 +60,7 @@ func ValidateLine(raw map[string]interface{}) []ValidationError {
 }
 
 // validateUserMessage validates a user message.
-func validateUserMessage(raw map[string]interface{}) []ValidationError {
+func validateUserMessage(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// Validate base message fields
@@ -77,7 +77,7 @@ func validateUserMessage(raw map[string]interface{}) []ValidationError {
 	}
 
 	// message is required
-	msg, ok := raw["message"].(map[string]interface{})
+	msg, ok := raw["message"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "message",
@@ -113,10 +113,10 @@ func validateUserMessage(raw map[string]interface{}) []ValidationError {
 		switch c := content.(type) {
 		case string:
 			// Valid - human message
-		case []interface{}:
+		case []any:
 			// Validate each content block
 			for i, block := range c {
-				if blockMap, ok := block.(map[string]interface{}); ok {
+				if blockMap, ok := block.(map[string]any); ok {
 					blockErrors := validateContentBlock(blockMap)
 					for _, e := range blockErrors {
 						e.Path = fmt.Sprintf("message.content[%d].%s", i, e.Path)
@@ -145,7 +145,7 @@ func validateUserMessage(raw map[string]interface{}) []ValidationError {
 }
 
 // validateAssistantMessage validates an assistant message.
-func validateAssistantMessage(raw map[string]interface{}) []ValidationError {
+func validateAssistantMessage(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// Validate base message fields
@@ -162,7 +162,7 @@ func validateAssistantMessage(raw map[string]interface{}) []ValidationError {
 	}
 
 	// message is required
-	msg, ok := raw["message"].(map[string]interface{})
+	msg, ok := raw["message"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "message",
@@ -214,7 +214,7 @@ func validateAssistantMessage(raw map[string]interface{}) []ValidationError {
 	}
 
 	// message.content is required and must be array
-	content, ok := msg["content"].([]interface{})
+	content, ok := msg["content"].([]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "message.content",
@@ -225,7 +225,7 @@ func validateAssistantMessage(raw map[string]interface{}) []ValidationError {
 	} else {
 		// Validate each content block
 		for i, block := range content {
-			if blockMap, ok := block.(map[string]interface{}); ok {
+			if blockMap, ok := block.(map[string]any); ok {
 				blockErrors := validateContentBlock(blockMap)
 				for _, e := range blockErrors {
 					e.Path = fmt.Sprintf("message.content[%d].%s", i, e.Path)
@@ -263,7 +263,7 @@ func validateAssistantMessage(raw map[string]interface{}) []ValidationError {
 	}
 
 	// message.usage is required
-	usage, ok := msg["usage"].(map[string]interface{})
+	usage, ok := msg["usage"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "message.usage",
@@ -283,7 +283,7 @@ func validateAssistantMessage(raw map[string]interface{}) []ValidationError {
 }
 
 // validateSystemMessage validates a system message.
-func validateSystemMessage(raw map[string]interface{}) []ValidationError {
+func validateSystemMessage(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// Validate base message fields
@@ -327,7 +327,7 @@ func validateSystemMessage(raw map[string]interface{}) []ValidationError {
 	// slug is optional
 	// logicalParentUuid is optional
 	// compactMetadata is optional but if present, validate it
-	if cm, ok := raw["compactMetadata"].(map[string]interface{}); ok {
+	if cm, ok := raw["compactMetadata"].(map[string]any); ok {
 		// trigger is required within compactMetadata
 		if _, ok := cm["trigger"].(string); !ok {
 			errors = append(errors, ValidationError{
@@ -352,7 +352,7 @@ func validateSystemMessage(raw map[string]interface{}) []ValidationError {
 }
 
 // validateFileHistorySnapshot validates a file-history-snapshot message.
-func validateFileHistorySnapshot(raw map[string]interface{}) []ValidationError {
+func validateFileHistorySnapshot(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// type must be "file-history-snapshot"
@@ -386,7 +386,7 @@ func validateFileHistorySnapshot(raw map[string]interface{}) []ValidationError {
 	}
 
 	// snapshot is required
-	snapshot, ok := raw["snapshot"].(map[string]interface{})
+	snapshot, ok := raw["snapshot"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "snapshot",
@@ -414,7 +414,7 @@ func validateFileHistorySnapshot(raw map[string]interface{}) []ValidationError {
 			})
 		}
 		// snapshot.trackedFileBackups is required
-		if _, ok := snapshot["trackedFileBackups"].(map[string]interface{}); !ok {
+		if _, ok := snapshot["trackedFileBackups"].(map[string]any); !ok {
 			errors = append(errors, ValidationError{
 				Path:     "snapshot.trackedFileBackups",
 				Message:  "required field missing or invalid type",
@@ -428,7 +428,7 @@ func validateFileHistorySnapshot(raw map[string]interface{}) []ValidationError {
 }
 
 // validateSummaryMessage validates a summary message.
-func validateSummaryMessage(raw map[string]interface{}) []ValidationError {
+func validateSummaryMessage(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// type must be "summary"
@@ -465,7 +465,7 @@ func validateSummaryMessage(raw map[string]interface{}) []ValidationError {
 }
 
 // validateQueueOperationMessage validates a queue-operation message.
-func validateQueueOperationMessage(raw map[string]interface{}) []ValidationError {
+func validateQueueOperationMessage(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// type must be "queue-operation"
@@ -514,7 +514,7 @@ func validateQueueOperationMessage(raw map[string]interface{}) []ValidationError
 }
 
 // validatePRLinkMessage validates a pr-link message.
-func validatePRLinkMessage(raw map[string]interface{}) []ValidationError {
+func validatePRLinkMessage(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// type must be "pr-link"
@@ -581,7 +581,7 @@ func validatePRLinkMessage(raw map[string]interface{}) []ValidationError {
 }
 
 // validateBaseMessageFields validates fields common to user, assistant, and system messages.
-func validateBaseMessageFields(raw map[string]interface{}) []ValidationError {
+func validateBaseMessageFields(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// uuid is required
@@ -670,7 +670,7 @@ func validateBaseMessageFields(raw map[string]interface{}) []ValidationError {
 }
 
 // validateTokenUsage validates a token usage object.
-func validateTokenUsage(usage map[string]interface{}) []ValidationError {
+func validateTokenUsage(usage map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// input_tokens is required
@@ -702,7 +702,7 @@ func validateTokenUsage(usage map[string]interface{}) []ValidationError {
 }
 
 // validateContentBlock validates a single content block.
-func validateContentBlock(block map[string]interface{}) []ValidationError {
+func validateContentBlock(block map[string]any) []ValidationError {
 	blockType, _ := block["type"].(string)
 
 	switch blockType {
@@ -730,7 +730,7 @@ func validateContentBlock(block map[string]interface{}) []ValidationError {
 }
 
 // validateTextBlock validates a text content block.
-func validateTextBlock(block map[string]interface{}) []ValidationError {
+func validateTextBlock(block map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// text is required
@@ -747,7 +747,7 @@ func validateTextBlock(block map[string]interface{}) []ValidationError {
 }
 
 // validateThinkingBlock validates a thinking content block.
-func validateThinkingBlock(block map[string]interface{}) []ValidationError {
+func validateThinkingBlock(block map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// thinking is required
@@ -766,7 +766,7 @@ func validateThinkingBlock(block map[string]interface{}) []ValidationError {
 }
 
 // validateToolUseBlock validates a tool_use content block.
-func validateToolUseBlock(block map[string]interface{}) []ValidationError {
+func validateToolUseBlock(block map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// id is required
@@ -790,7 +790,7 @@ func validateToolUseBlock(block map[string]interface{}) []ValidationError {
 	}
 
 	// input is required (must be an object)
-	if _, ok := block["input"].(map[string]interface{}); !ok {
+	if _, ok := block["input"].(map[string]any); !ok {
 		errors = append(errors, ValidationError{
 			Path:     "input",
 			Message:  "required field missing or invalid type",
@@ -803,7 +803,7 @@ func validateToolUseBlock(block map[string]interface{}) []ValidationError {
 }
 
 // validateToolResultBlock validates a tool_result content block.
-func validateToolResultBlock(block map[string]interface{}) []ValidationError {
+func validateToolResultBlock(block map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// tool_use_id is required
@@ -829,10 +829,10 @@ func validateToolResultBlock(block map[string]interface{}) []ValidationError {
 		switch c := content.(type) {
 		case string:
 			// Valid - string content
-		case []interface{}:
+		case []any:
 			// Validate nested content blocks recursively
 			for i, nested := range c {
-				if nestedMap, ok := nested.(map[string]interface{}); ok {
+				if nestedMap, ok := nested.(map[string]any); ok {
 					nestedErrors := validateContentBlock(nestedMap)
 					for _, e := range nestedErrors {
 						e.Path = fmt.Sprintf("content[%d].%s", i, e.Path)
@@ -863,11 +863,11 @@ func validateToolResultBlock(block map[string]interface{}) []ValidationError {
 }
 
 // validateImageBlock validates an image content block.
-func validateImageBlock(block map[string]interface{}) []ValidationError {
+func validateImageBlock(block map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	// source is required
-	source, ok := block["source"].(map[string]interface{})
+	source, ok := block["source"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "source",
@@ -905,7 +905,7 @@ func validateImageBlock(block map[string]interface{}) []ValidationError {
 }
 
 // typeOf returns a string representation of the type for error messages.
-func typeOf(v interface{}) string {
+func typeOf(v any) string {
 	if v == nil {
 		return "undefined"
 	}
@@ -916,9 +916,9 @@ func typeOf(v interface{}) string {
 		return "number"
 	case bool:
 		return "boolean"
-	case []interface{}:
+	case []any:
 		return "array"
-	case map[string]interface{}:
+	case map[string]any:
 		return "object"
 	default:
 		return fmt.Sprintf("%T", v)
@@ -943,7 +943,7 @@ func FormatValidationErrors(errors []LineValidationError, maxErrors int) string 
 	sb.WriteString(fmt.Sprintf("Transcript validation errors (%d total):\n", len(errors)))
 
 	count := min(len(errors), maxErrors)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		err := errors[i]
 		sb.WriteString(fmt.Sprintf("  Line %d (type=%s):\n", err.Line, err.MessageType))
 		for _, ve := range err.Errors {

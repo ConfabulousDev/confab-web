@@ -53,7 +53,7 @@ func TestTrySessionAuthInactiveLogsStructuredLine(t *testing.T) {
 	}
 
 	var lines []map[string]any
-	for _, raw := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+	for raw := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}

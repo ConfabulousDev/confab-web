@@ -18,8 +18,8 @@ type OrgAnalyticsRequest struct {
 
 // OrgAnalyticsResponse is the API response for organization analytics.
 type OrgAnalyticsResponse struct {
-	ComputedAt time.Time          `json:"computed_at"`
-	DateRange  DateRange          `json:"date_range"` // Reuses existing DateRange type
+	ComputedAt time.Time `json:"computed_at"`
+	DateRange  DateRange `json:"date_range"` // Reuses existing DateRange type
 	// ProvidersPresent enumerates the distinct canonical providers with any
 	// qualifying session in the date range × repo filter (legacy session_type
 	// values are normalized via models.NormalizeProvider). Independent of the

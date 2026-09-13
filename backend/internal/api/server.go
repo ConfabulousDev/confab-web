@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +17,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/email"
+	"github.com/ConfabulousDev/confab-web/internal/httputil"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/pricingsource"
 	"github.com/ConfabulousDev/confab-web/internal/ratelimit"
@@ -146,7 +146,7 @@ func parseAllowedOrigins() ([]string, []string) {
 	var trustedOrigins []string
 
 	originsEnv := os.Getenv("ALLOWED_ORIGINS")
-	for _, origin := range strings.Split(originsEnv, ",") {
+	for origin := range strings.SplitSeq(originsEnv, ",") {
 		trimmed := strings.TrimSpace(origin)
 		if trimmed == "" || trimmed == "*" {
 			continue
@@ -168,7 +168,7 @@ func parseAllowedOrigins() ([]string, []string) {
 // headers from other sources are ignored.
 func parseTrustedProxyHeaders() []string {
 	var headers []string
-	for _, h := range strings.Split(os.Getenv("TRUSTED_PROXY_HEADERS"), ",") {
+	for h := range strings.SplitSeq(os.Getenv("TRUSTED_PROXY_HEADERS"), ",") {
 		if trimmed := strings.TrimSpace(h); trimmed != "" {
 			headers = append(headers, trimmed)
 		}
@@ -681,7 +681,7 @@ func (s *Server) handleValidateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"valid":   true,
 		"user_id": user.ID,
 		"email":   user.Email,
@@ -781,18 +781,13 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 }
 
 // respondJSON writes a JSON response
-func respondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+func respondJSON(w http.ResponseWriter, status int, data any) {
+	httputil.RespondJSON(w, status, data)
 }
 
 // respondError writes an error JSON response
 func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{
-		"error": message,
-	})
+	httputil.RespondError(w, status, message)
 }
 
 // respondStorageError returns an appropriate error response based on the storage error type
@@ -890,9 +885,9 @@ func wwwRedirectMiddleware() func(http.Handler) http.Handler {
 				host = host[:colonIdx]
 			}
 
-			if strings.HasPrefix(host, "www.") {
+			if after, ok := strings.CutPrefix(host, "www."); ok {
 				// Build redirect URL with apex domain
-				newHost := strings.TrimPrefix(host, "www.")
+				newHost := after
 				// Preserve port if original request had one
 				if colonIdx := strings.LastIndex(r.Host, ":"); colonIdx != -1 {
 					newHost += r.Host[colonIdx:]

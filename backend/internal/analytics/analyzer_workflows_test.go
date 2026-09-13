@@ -16,9 +16,9 @@ func agentFile(t *testing.T, agentID, jsonl string) *TranscriptFile {
 // agent files group by runId, tokens/cost sum per run, runs sort by start time.
 func TestWorkflowsAnalyzer_GroupsByRunAndAggregates(t *testing.T) {
 	// Run wf-1: two agents. Run wf-2: one agent, later start.
-	agentA := makeAssistantMessageFull("aa1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 10, 20, []map[string]interface{}{makeTextBlock("a")}) + "\n"
-	agentB := makeAssistantMessage("ab1", "2025-01-01T00:00:03Z", "claude-sonnet-4-20241022", 200, 100, []map[string]interface{}{makeTextBlock("b")}) + "\n"
-	agentC := makeAssistantMessage("ac1", "2025-01-01T00:01:00Z", "claude-sonnet-4-20241022", 300, 150, []map[string]interface{}{makeTextBlock("c")}) + "\n"
+	agentA := makeAssistantMessageFull("aa1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 10, 20, []map[string]any{makeTextBlock("a")}) + "\n"
+	agentB := makeAssistantMessage("ab1", "2025-01-01T00:00:03Z", "claude-sonnet-4-20241022", 200, 100, []map[string]any{makeTextBlock("b")}) + "\n"
+	agentC := makeAssistantMessage("ac1", "2025-01-01T00:01:00Z", "claude-sonnet-4-20241022", 300, 150, []map[string]any{makeTextBlock("c")}) + "\n"
 
 	wa := &WorkflowsAnalyzer{}
 	wa.ProcessAgent(agentFile(t, "a", agentA), "wf-1")
@@ -70,7 +70,7 @@ func TestWorkflowsAnalyzer_GroupsByRunAndAggregates(t *testing.T) {
 // TestWorkflowsAnalyzer_IgnoresNonWorkflowAgents: agents with an empty runId
 // (ordinary Task-tool subagents) form no workflow runs.
 func TestWorkflowsAnalyzer_IgnoresNonWorkflowAgents(t *testing.T) {
-	jsonl := makeAssistantMessage("x1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{makeTextBlock("x")}) + "\n"
+	jsonl := makeAssistantMessage("x1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{makeTextBlock("x")}) + "\n"
 	wa := &WorkflowsAnalyzer{}
 	wa.ProcessAgent(agentFile(t, "x", jsonl), "")
 	if got := wa.Result(); len(got) != 0 {
@@ -81,8 +81,8 @@ func TestWorkflowsAnalyzer_IgnoresNonWorkflowAgents(t *testing.T) {
 // TestWorkflowsAnalyzer_JournalStatus: succeeded = agents with a "result" line;
 // only-"started" agents are not counted; HasJournal flips true.
 func TestWorkflowsAnalyzer_JournalStatus(t *testing.T) {
-	agentA := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{makeTextBlock("a")}) + "\n"
-	agentB := makeAssistantMessage("ab1", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{makeTextBlock("b")}) + "\n"
+	agentA := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{makeTextBlock("a")}) + "\n"
+	agentB := makeAssistantMessage("ab1", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{makeTextBlock("b")}) + "\n"
 
 	wa := &WorkflowsAnalyzer{}
 	wa.ProcessAgent(agentFile(t, "a", agentA), "wf-1")
@@ -113,7 +113,7 @@ func TestWorkflowsAnalyzer_JournalStatus(t *testing.T) {
 // result for an agent that has no transcript file (capped/failed download) is
 // not counted, so SucceededAgents never exceeds AgentCount.
 func TestWorkflowsAnalyzer_JournalResultForFilelessAgentNotCounted(t *testing.T) {
-	agentA := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{makeTextBlock("a")}) + "\n"
+	agentA := makeAssistantMessage("aa1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{makeTextBlock("a")}) + "\n"
 
 	wa := &WorkflowsAnalyzer{}
 	wa.ProcessAgent(agentFile(t, "a", agentA), "wf-1") // only agent "a" has a file

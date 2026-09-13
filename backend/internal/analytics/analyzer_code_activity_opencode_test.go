@@ -19,9 +19,9 @@ func TestComputeOpenCodeCodeActivity_ReadTool(t *testing.T) {
 				},
 				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Read",
-						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/main.go"}}},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]any{"file_path": "src/main.go"}}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Read",
-						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/utils.py"}}},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]any{"file_path": "src/utils.py"}}},
 				},
 			},
 		},
@@ -56,7 +56,7 @@ func TestComputeOpenCodeCodeActivity_WriteTool(t *testing.T) {
 				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Write",
 						State: &OpenCodeToolState{Status: "completed",
-							Input: map[string]interface{}{
+							Input: map[string]any{
 								"file_path": "src/main.go",
 								"content":   "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n",
 							}}},
@@ -91,7 +91,7 @@ func TestComputeOpenCodeCodeActivity_EditTool(t *testing.T) {
 				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Edit",
 						State: &OpenCodeToolState{Status: "completed",
-							Input: map[string]interface{}{
+							Input: map[string]any{
 								"file_path":  "src/main.go",
 								"old_string": "old line\nanother old",
 								"new_string": "new line\nanother new\nextra line",
@@ -129,11 +129,11 @@ func TestComputeOpenCodeCodeActivity_SearchTools(t *testing.T) {
 				},
 				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Grep",
-						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "TODO"}}},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]any{"pattern": "TODO"}}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Glob",
-						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "**/*.go"}}},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]any{"pattern": "**/*.go"}}},
 					{ID: "prt_03", Type: "tool", CallID: "call_2", Tool: "Grep",
-						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"pattern": "FIXME"}}},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]any{"pattern": "FIXME"}}},
 				},
 			},
 		},
@@ -161,9 +161,9 @@ func TestComputeOpenCodeCodeActivity_PendingToolsExcluded(t *testing.T) {
 				},
 				Parts: []OpenCodePart{
 					{ID: "prt_01", Type: "tool", CallID: "call_0", Tool: "Read",
-						State: &OpenCodeToolState{Status: "pending", Input: map[string]interface{}{"file_path": "src/main.go"}}},
+						State: &OpenCodeToolState{Status: "pending", Input: map[string]any{"file_path": "src/main.go"}}},
 					{ID: "prt_02", Type: "tool", CallID: "call_1", Tool: "Read",
-						State: &OpenCodeToolState{Status: "completed", Input: map[string]interface{}{"file_path": "src/utils.go"}}},
+						State: &OpenCodeToolState{Status: "completed", Input: map[string]any{"file_path": "src/utils.go"}}},
 				},
 			},
 		},

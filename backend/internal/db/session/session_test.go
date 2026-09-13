@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1155,7 +1156,7 @@ func TestListUserSessionsPaginated_NoFilters(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "paginate@test.com", "Paginate User")
 
 	// Create 60 visible sessions
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("session-%03d", i), testutil.TestSessionFullOpts{
 			Summary: fmt.Sprintf("Session %d summary", i),
 		})
@@ -1213,19 +1214,19 @@ func TestListUserSessionsPaginated_RepoFilter(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "repofilter@test.com", "Repo Filter User")
 
 	// Create sessions in 3 repos
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("repo-a-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/repo-a.git",
 			Summary: "Repo A session",
 		})
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("repo-b-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "git@github.com:org/repo-b.git",
 			Summary: "Repo B session",
 		})
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("repo-c-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/repo-c",
 			Summary: "Repo C session",
@@ -1271,14 +1272,14 @@ func TestListUserSessionsPaginated_BranchFilter(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "branchfilter@test.com", "Branch Filter User")
 
 	// Create sessions on different branches
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("main-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/repo.git",
 			Branch:  "main",
 			Summary: "Main branch session",
 		})
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("feature-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/repo.git",
 			Branch:  "feature/new-thing",
@@ -1316,13 +1317,13 @@ func TestListUserSessionsPaginated_OwnerFilter(t *testing.T) {
 	bob := testutil.CreateTestUser(t, env, "bob@test.com", "Bob")
 
 	// Alice creates 3 sessions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, alice.ID, fmt.Sprintf("alice-session-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Alice session",
 		})
 	}
 	// Bob creates 2 sessions
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, bob.ID, fmt.Sprintf("bob-session-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Bob session",
 		})
@@ -1718,7 +1719,7 @@ func TestListUserSessionsPaginated_MultipleFilters(t *testing.T) {
 	bob := testutil.CreateTestUser(t, env, "bob@multi.com", "Bob")
 
 	// Alice: repo-a/main (2 sessions), repo-a/feature (1 session)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, alice.ID, fmt.Sprintf("alice-main-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/repo-a.git",
 			Branch:  "main",
@@ -1770,14 +1771,14 @@ func TestListUserSessionsPaginated_FilterOptions(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "facets@test.com", "Facets User")
 
 	// Create sessions across repos and branches
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("fa-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/frontend.git",
 			Branch:  "main",
 			Summary: "Frontend main session",
 		})
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("fb-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/backend.git",
 			Branch:  "main",
@@ -1876,7 +1877,7 @@ func TestListUserSessionsPaginated_CursorBeyondResults(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "beyond@test.com", "Beyond Cursor User")
 
 	// Create 3 sessions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("beyond-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Session content",
 		})
@@ -1916,13 +1917,13 @@ func TestListUserSessionsPaginated_MultiSelect(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "multiselect@test.com", "Multi Select User")
 
 	// 3 repos
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ms-a-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/alpha.git",
 			Summary: "Alpha session",
 		})
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ms-b-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/beta.git",
 			Summary: "Beta session",
@@ -1967,14 +1968,14 @@ func TestListUserSessionsPaginated_NonShareAll_OwnedOnly(t *testing.T) {
 	bob := testutil.CreateTestUser(t, env, "bob@nonshare.com", "Bob")
 
 	// Alice creates 3 sessions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, alice.ID, fmt.Sprintf("alice-ns-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Alice session",
 			RepoURL: "https://github.com/org/alice-repo.git",
 		})
 	}
 	// Bob creates 2 sessions (Alice should NOT see these)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, bob.ID, fmt.Sprintf("bob-ns-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Bob session",
 			RepoURL: "https://github.com/org/bob-repo.git",
@@ -2427,14 +2428,14 @@ func TestListUserSessionsPaginated_NonShareAll_WithFilters(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "filter@nonshare.com", "Filter User")
 
 	// Create sessions with different repos
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ns-frontend-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Frontend work",
 			RepoURL: "https://github.com/org/frontend.git",
 			Branch:  "main",
 		})
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("ns-backend-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Backend work",
 			RepoURL: "https://github.com/org/backend.git",
@@ -2638,12 +2639,7 @@ func TestListUserSessionsPaginated_EstimatedCostUSD_ReadsV2(t *testing.T) {
 // =============================================================================
 
 func containsStr(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
 // TestFilterOptions_ExcludesNonListableRepoBranchOwner asserts that a

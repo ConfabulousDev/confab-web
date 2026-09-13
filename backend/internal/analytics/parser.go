@@ -37,7 +37,7 @@ type TranscriptLine struct {
 
 	// RawData holds the full parsed JSON for analyzers that need to walk the entire structure
 	// (e.g., redaction counting). Not serialized.
-	RawData interface{} `json:"-"`
+	RawData any `json:"-"`
 }
 
 // MessageContent contains message details for user/assistant messages.
@@ -46,7 +46,7 @@ type MessageContent struct {
 	Role    string      `json:"role,omitempty"`    // "user" or "assistant"
 	Model   string      `json:"model,omitempty"`   // Model ID (assistant only)
 	Usage   *TokenUsage `json:"usage,omitempty"`   // Token usage (assistant only)
-	Content interface{} `json:"content,omitempty"` // String or []ContentBlock
+	Content any         `json:"content,omitempty"` // String or []ContentBlock
 
 	// Assistant-specific fields
 	StopReason string `json:"stop_reason,omitempty"` // "end_turn", "tool_use", "max_tokens"
@@ -91,13 +91,13 @@ type CompactMetadata struct {
 
 // ContentBlock represents a content block in assistant messages.
 type ContentBlock struct {
-	Type          string                 `json:"type"`                    // "text", "tool_use", "thinking", etc.
-	Name          string                 `json:"name,omitempty"`          // Tool name (for tool_use)
-	ID            string                 `json:"id,omitempty"`            // Tool use ID (for tool_use)
-	Input         map[string]interface{} `json:"input,omitempty"`         // Tool input parameters (for tool_use)
-	ToolUseID     string                 `json:"tool_use_id,omitempty"`   // Reference to tool_use ID (for tool_result)
-	IsError       bool                   `json:"is_error,omitempty"`      // For tool_result blocks
-	ToolUseResult *ToolUseResult         `json:"toolUseResult,omitempty"` // For tool_result blocks (agent results)
+	Type          string         `json:"type"`                    // "text", "tool_use", "thinking", etc.
+	Name          string         `json:"name,omitempty"`          // Tool name (for tool_use)
+	ID            string         `json:"id,omitempty"`            // Tool use ID (for tool_use)
+	Input         map[string]any `json:"input,omitempty"`         // Tool input parameters (for tool_use)
+	ToolUseID     string         `json:"tool_use_id,omitempty"`   // Reference to tool_use ID (for tool_result)
+	IsError       bool           `json:"is_error,omitempty"`      // For tool_result blocks
+	ToolUseResult *ToolUseResult `json:"toolUseResult,omitempty"` // For tool_result blocks (agent results)
 }
 
 // ToolUseResult contains metadata from tool executions, embedded in tool_result
@@ -128,7 +128,7 @@ func ParseLine(data []byte) (*TranscriptLine, error) {
 	}
 
 	// Also parse into raw interface{} for analyzers that need to walk the full structure
-	var rawData interface{}
+	var rawData any
 	if err := json.Unmarshal(data, &rawData); err == nil {
 		line.RawData = rawData
 	}
@@ -196,14 +196,14 @@ func (l *TranscriptLine) GetContentBlocks() []ContentBlock {
 	}
 
 	// Content can be a string or array of blocks
-	contentArray, ok := l.Message.Content.([]interface{})
+	contentArray, ok := l.Message.Content.([]any)
 	if !ok {
 		return nil
 	}
 
 	var blocks []ContentBlock
 	for _, item := range contentArray {
-		blockMap, ok := item.(map[string]interface{})
+		blockMap, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -218,7 +218,7 @@ func (l *TranscriptLine) GetContentBlocks() []ContentBlock {
 		if id, ok := blockMap["id"].(string); ok {
 			block.ID = id
 		}
-		if input, ok := blockMap["input"].(map[string]interface{}); ok {
+		if input, ok := blockMap["input"].(map[string]any); ok {
 			block.Input = input
 		}
 		if toolUseID, ok := blockMap["tool_use_id"].(string); ok {
@@ -228,7 +228,7 @@ func (l *TranscriptLine) GetContentBlocks() []ContentBlock {
 			block.IsError = isErr
 		}
 		// Parse toolUseResult for tool_result blocks (contains agent usage data)
-		if tur, ok := blockMap["toolUseResult"].(map[string]interface{}); ok {
+		if tur, ok := blockMap["toolUseResult"].(map[string]any); ok {
 			block.ToolUseResult = parseToolUseResult(tur)
 		}
 		blocks = append(blocks, block)
@@ -282,7 +282,7 @@ func (l *TranscriptLine) IsToolResultMessage() bool {
 	if l.Message == nil || l.Message.Content == nil {
 		return false
 	}
-	_, isArray := l.Message.Content.([]interface{})
+	_, isArray := l.Message.Content.([]any)
 	return isArray
 }
 
@@ -368,7 +368,7 @@ func (l *TranscriptLine) GetAgentResults() []*ToolUseResult {
 }
 
 // parseToolUseResult extracts ToolUseResult from a map.
-func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
+func parseToolUseResult(m map[string]any) *ToolUseResult {
 	result := &ToolUseResult{}
 
 	if agentID, ok := m["agentId"].(string); ok {
@@ -404,7 +404,7 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 	}
 
 	// Parse usage sub-object
-	if usageMap, ok := m["usage"].(map[string]interface{}); ok {
+	if usageMap, ok := m["usage"].(map[string]any); ok {
 		result.Usage = &TokenUsage{}
 		if v, ok := usageMap["input_tokens"].(float64); ok {
 			result.Usage.InputTokens = int64(v)
@@ -420,7 +420,7 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 		}
 		// The subagent path is hand-parsed (not json-tag unmarshalled), so the
 		// nested cache_creation tier object needs explicit extraction (rd9v).
-		if ccMap, ok := usageMap["cache_creation"].(map[string]interface{}); ok {
+		if ccMap, ok := usageMap["cache_creation"].(map[string]any); ok {
 			cc := &CacheCreationBreakdown{}
 			if v, ok := ccMap["ephemeral_5m_input_tokens"].(float64); ok {
 				cc.Ephemeral5m = int64(v)
@@ -433,7 +433,7 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 		if v, ok := usageMap["speed"].(string); ok {
 			result.Usage.Speed = v
 		}
-		if stuMap, ok := usageMap["server_tool_use"].(map[string]interface{}); ok {
+		if stuMap, ok := usageMap["server_tool_use"].(map[string]any); ok {
 			result.Usage.ServerToolUse = parseServerToolUse(stuMap)
 		}
 	}
@@ -442,7 +442,7 @@ func parseToolUseResult(m map[string]interface{}) *ToolUseResult {
 }
 
 // parseServerToolUse extracts ServerToolUse from a map.
-func parseServerToolUse(m map[string]interface{}) *ServerToolUse {
+func parseServerToolUse(m map[string]any) *ServerToolUse {
 	stu := &ServerToolUse{}
 	if v, ok := m["web_search_requests"].(float64); ok {
 		stu.WebSearchRequests = int(v)

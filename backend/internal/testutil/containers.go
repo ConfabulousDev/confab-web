@@ -100,7 +100,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	t.Log("Creating test bucket...")
 	const testBucket = "confab-test"
 	maxRetries := 20
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		mc, mcErr := minioclient.New(minioEndpoint, &minioclient.Options{
 			Creds:  miniocreds.NewStaticV4("minioadmin", "minioadmin", ""),
 			Secure: false,

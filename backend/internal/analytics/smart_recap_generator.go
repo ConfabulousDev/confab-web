@@ -71,7 +71,7 @@ type GenerateInput struct {
 	FileCollection *FileCollection // used when all files are in memory
 	Transcript     string          // pre-built XML transcript (streaming path)
 	IDMap          map[int]string  // sequential ID -> UUID map (streaming path)
-	CardStats      map[string]interface{}
+	CardStats      map[string]any
 }
 
 // GenerateResult contains the result of a generation attempt.

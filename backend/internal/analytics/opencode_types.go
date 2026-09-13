@@ -88,9 +88,9 @@ type OpenCodePart struct {
 }
 
 type OpenCodeToolState struct {
-	Status string                 `json:"status"`
-	Input  map[string]interface{} `json:"input,omitempty"`
-	Output string                 `json:"output,omitempty"`
-	Error  string                 `json:"error,omitempty"`
-	Title  string                 `json:"title,omitempty"`
+	Status string         `json:"status"`
+	Input  map[string]any `json:"input,omitempty"`
+	Output string         `json:"output,omitempty"`
+	Error  string         `json:"error,omitempty"`
+	Title  string         `json:"title,omitempty"`
 }

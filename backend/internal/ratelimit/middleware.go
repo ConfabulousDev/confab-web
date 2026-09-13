@@ -62,7 +62,7 @@ func HandlerFunc(limiter RateLimiter, handler http.HandlerFunc) http.HandlerFunc
 
 // UserKeyFunc extracts user ID from context for rate limiting by user
 // Use with MiddlewareWithKey for authenticated endpoints
-func UserKeyFunc(userIDKey interface{}) func(*http.Request) string {
+func UserKeyFunc(userIDKey any) func(*http.Request) string {
 	return func(r *http.Request) string {
 		if userID, ok := r.Context().Value(userIDKey).(int64); ok {
 			return fmt.Sprintf("user:%d", userID)

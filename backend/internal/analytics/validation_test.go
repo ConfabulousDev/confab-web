@@ -7,13 +7,13 @@ import (
 func TestValidateLine_UserMessage(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 		wantPaths  []string
 	}{
 		{
 			name: "valid user message with string content",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "user",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -23,7 +23,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role":    "user",
 					"content": "Hello, world!",
 				},
@@ -32,7 +32,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 		},
 		{
 			name: "valid user message with content blocks",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "user",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -42,10 +42,10 @@ func TestValidateLine_UserMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role": "user",
-					"content": []interface{}{
-						map[string]interface{}{
+					"content": []any{
+						map[string]any{
 							"type":        "tool_result",
 							"tool_use_id": "tool-123",
 							"content":     "result data",
@@ -57,7 +57,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 		},
 		{
 			name: "missing uuid",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "user",
 				"timestamp":   "2025-01-01T00:00:00Z",
 				"parentUuid":  nil,
@@ -66,7 +66,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role":    "user",
 					"content": "Hello",
 				},
@@ -76,7 +76,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 		},
 		{
 			name: "missing message",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "user",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -92,7 +92,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 		},
 		{
 			name: "wrong message role",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "user",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -102,7 +102,7 @@ func TestValidateLine_UserMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Hello",
 				},
@@ -112,9 +112,9 @@ func TestValidateLine_UserMessage(t *testing.T) {
 		},
 		{
 			name: "missing multiple base fields",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type": "user",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role":    "user",
 					"content": "Hello",
 				},
@@ -151,13 +151,13 @@ func TestValidateLine_UserMessage(t *testing.T) {
 func TestValidateLine_AssistantMessage(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 		wantPaths  []string
 	}{
 		{
 			name: "valid assistant message",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "assistant",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -167,20 +167,20 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"model":         "claude-3-5-sonnet",
 					"id":            "msg-123",
 					"type":          "message",
 					"role":          "assistant",
 					"stop_reason":   "end_turn",
 					"stop_sequence": nil,
-					"content": []interface{}{
-						map[string]interface{}{
+					"content": []any{
+						map[string]any{
 							"type": "text",
 							"text": "Hello!",
 						},
 					},
-					"usage": map[string]interface{}{
+					"usage": map[string]any{
 						"input_tokens":  float64(100),
 						"output_tokens": float64(50),
 					},
@@ -190,7 +190,7 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 		},
 		{
 			name: "missing model",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "assistant",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -200,14 +200,14 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"id":            "msg-123",
 					"type":          "message",
 					"role":          "assistant",
 					"stop_reason":   "end_turn",
 					"stop_sequence": nil,
-					"content":       []interface{}{},
-					"usage": map[string]interface{}{
+					"content":       []any{},
+					"usage": map[string]any{
 						"input_tokens":  float64(100),
 						"output_tokens": float64(50),
 					},
@@ -218,7 +218,7 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 		},
 		{
 			name: "missing usage",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "assistant",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -228,14 +228,14 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"model":         "claude-3-5-sonnet",
 					"id":            "msg-123",
 					"type":          "message",
 					"role":          "assistant",
 					"stop_reason":   "end_turn",
 					"stop_sequence": nil,
-					"content":       []interface{}{},
+					"content":       []any{},
 				},
 			},
 			wantErrors: 1,
@@ -243,7 +243,7 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 		},
 		{
 			name: "invalid content block in array",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "assistant",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -253,20 +253,20 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 				"cwd":         "/home/user",
 				"sessionId":   "session-123",
 				"version":     "1.0.0",
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"model":         "claude-3-5-sonnet",
 					"id":            "msg-123",
 					"type":          "message",
 					"role":          "assistant",
 					"stop_reason":   "end_turn",
 					"stop_sequence": nil,
-					"content": []interface{}{
-						map[string]interface{}{
+					"content": []any{
+						map[string]any{
 							"type": "text",
 							// missing "text" field
 						},
 					},
-					"usage": map[string]interface{}{
+					"usage": map[string]any{
 						"input_tokens":  float64(100),
 						"output_tokens": float64(50),
 					},
@@ -304,13 +304,13 @@ func TestValidateLine_AssistantMessage(t *testing.T) {
 func TestValidateLine_SystemMessage(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 		wantPaths  []string
 	}{
 		{
 			name: "valid system message with content",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "system",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -329,7 +329,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 		},
 		{
 			name: "valid turn_duration system message (no content/level)",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "system",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -348,7 +348,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 		},
 		{
 			name: "valid compact_boundary system message",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "system",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -360,7 +360,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 				"version":     "1.0.0",
 				"subtype":     "compact_boundary",
 				"isMeta":      true,
-				"compactMetadata": map[string]interface{}{
+				"compactMetadata": map[string]any{
 					"trigger":   "auto",
 					"preTokens": float64(50000),
 				},
@@ -374,7 +374,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 			// subtype be a string, so this validates cleanly — pinned here so
 			// the forward-compat behavior can't silently regress.
 			name: "valid informational system message (auto-mode banner)",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "system",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -393,7 +393,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 		},
 		{
 			name: "missing subtype",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "system",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -410,7 +410,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 		},
 		{
 			name: "invalid compactMetadata (missing trigger)",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":        "system",
 				"uuid":        "test-uuid",
 				"timestamp":   "2025-01-01T00:00:00Z",
@@ -422,7 +422,7 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 				"version":     "1.0.0",
 				"subtype":     "compact_boundary",
 				"isMeta":      true,
-				"compactMetadata": map[string]interface{}{
+				"compactMetadata": map[string]any{
 					"preTokens": float64(50000),
 				},
 			},
@@ -458,26 +458,26 @@ func TestValidateLine_SystemMessage(t *testing.T) {
 func TestValidateLine_FileHistorySnapshot(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid file history snapshot",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":             "file-history-snapshot",
 				"messageId":        "msg-123",
 				"isSnapshotUpdate": true,
-				"snapshot": map[string]interface{}{
+				"snapshot": map[string]any{
 					"messageId":          "msg-123",
 					"timestamp":          "2025-01-01T00:00:00Z",
-					"trackedFileBackups": map[string]interface{}{},
+					"trackedFileBackups": map[string]any{},
 				},
 			},
 			wantErrors: 0,
 		},
 		{
 			name: "missing snapshot",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":             "file-history-snapshot",
 				"messageId":        "msg-123",
 				"isSnapshotUpdate": true,
@@ -502,12 +502,12 @@ func TestValidateLine_FileHistorySnapshot(t *testing.T) {
 func TestValidateLine_SummaryMessage(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid summary message",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":     "summary",
 				"summary":  "This is a summary",
 				"leafUuid": "leaf-123",
@@ -516,7 +516,7 @@ func TestValidateLine_SummaryMessage(t *testing.T) {
 		},
 		{
 			name: "missing summary field",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":     "summary",
 				"leafUuid": "leaf-123",
 			},
@@ -524,7 +524,7 @@ func TestValidateLine_SummaryMessage(t *testing.T) {
 		},
 		{
 			name: "missing leafUuid",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":    "summary",
 				"summary": "This is a summary",
 			},
@@ -548,12 +548,12 @@ func TestValidateLine_SummaryMessage(t *testing.T) {
 func TestValidateLine_QueueOperationMessage(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid queue operation",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":      "queue-operation",
 				"operation": "enqueue",
 				"timestamp": "2025-01-01T00:00:00Z",
@@ -563,7 +563,7 @@ func TestValidateLine_QueueOperationMessage(t *testing.T) {
 		},
 		{
 			name: "missing operation",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":      "queue-operation",
 				"timestamp": "2025-01-01T00:00:00Z",
 				"sessionId": "session-123",
@@ -588,13 +588,13 @@ func TestValidateLine_QueueOperationMessage(t *testing.T) {
 func TestValidateLine_PRLinkMessage(t *testing.T) {
 	tests := []struct {
 		name       string
-		input      map[string]interface{}
+		input      map[string]any
 		wantErrors int
 		wantPaths  []string
 	}{
 		{
 			name: "valid pr-link message",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":         "pr-link",
 				"prNumber":     float64(22),
 				"prRepository": "ConfabulousDev/confab-web",
@@ -606,7 +606,7 @@ func TestValidateLine_PRLinkMessage(t *testing.T) {
 		},
 		{
 			name: "missing prNumber",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":         "pr-link",
 				"prRepository": "ConfabulousDev/confab-web",
 				"prUrl":        "https://github.com/ConfabulousDev/confab-web/pull/22",
@@ -618,7 +618,7 @@ func TestValidateLine_PRLinkMessage(t *testing.T) {
 		},
 		{
 			name: "missing prRepository",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":      "pr-link",
 				"prNumber":  float64(22),
 				"prUrl":     "https://github.com/ConfabulousDev/confab-web/pull/22",
@@ -630,7 +630,7 @@ func TestValidateLine_PRLinkMessage(t *testing.T) {
 		},
 		{
 			name: "missing prUrl",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type":         "pr-link",
 				"prNumber":     float64(22),
 				"prRepository": "ConfabulousDev/confab-web",
@@ -642,7 +642,7 @@ func TestValidateLine_PRLinkMessage(t *testing.T) {
 		},
 		{
 			name: "missing all required fields except type",
-			input: map[string]interface{}{
+			input: map[string]any{
 				"type": "pr-link",
 			},
 			wantErrors: 5,
@@ -676,7 +676,7 @@ func TestValidateLine_PRLinkMessage(t *testing.T) {
 
 func TestValidateLine_UnknownType(t *testing.T) {
 	// Unknown types should be allowed for forward compatibility
-	input := map[string]interface{}{
+	input := map[string]any{
 		"type": "some-future-type",
 		"data": "whatever",
 	}
@@ -687,7 +687,7 @@ func TestValidateLine_UnknownType(t *testing.T) {
 }
 
 func TestValidateLine_MissingType(t *testing.T) {
-	input := map[string]interface{}{
+	input := map[string]any{
 		"uuid": "test",
 	}
 	errors := ValidateLine(input)
@@ -702,12 +702,12 @@ func TestValidateLine_MissingType(t *testing.T) {
 func TestValidateContentBlock_Text(t *testing.T) {
 	tests := []struct {
 		name       string
-		block      map[string]interface{}
+		block      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid text block",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "text",
 				"text": "Hello, world!",
 			},
@@ -715,7 +715,7 @@ func TestValidateContentBlock_Text(t *testing.T) {
 		},
 		{
 			name: "missing text field",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "text",
 			},
 			wantErrors: 1,
@@ -735,12 +735,12 @@ func TestValidateContentBlock_Text(t *testing.T) {
 func TestValidateContentBlock_Thinking(t *testing.T) {
 	tests := []struct {
 		name       string
-		block      map[string]interface{}
+		block      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid thinking block",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":     "thinking",
 				"thinking": "Let me think...",
 			},
@@ -748,7 +748,7 @@ func TestValidateContentBlock_Thinking(t *testing.T) {
 		},
 		{
 			name: "valid thinking block with signature",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":      "thinking",
 				"thinking":  "Let me think...",
 				"signature": "abc123",
@@ -757,7 +757,7 @@ func TestValidateContentBlock_Thinking(t *testing.T) {
 		},
 		{
 			name: "missing thinking field",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "thinking",
 			},
 			wantErrors: 1,
@@ -777,40 +777,40 @@ func TestValidateContentBlock_Thinking(t *testing.T) {
 func TestValidateContentBlock_ToolUse(t *testing.T) {
 	tests := []struct {
 		name       string
-		block      map[string]interface{}
+		block      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid tool_use block",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":  "tool_use",
 				"id":    "tool-123",
 				"name":  "Read",
-				"input": map[string]interface{}{"file_path": "/tmp/test.txt"},
+				"input": map[string]any{"file_path": "/tmp/test.txt"},
 			},
 			wantErrors: 0,
 		},
 		{
 			name: "missing id",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":  "tool_use",
 				"name":  "Read",
-				"input": map[string]interface{}{},
+				"input": map[string]any{},
 			},
 			wantErrors: 1,
 		},
 		{
 			name: "missing name",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":  "tool_use",
 				"id":    "tool-123",
-				"input": map[string]interface{}{},
+				"input": map[string]any{},
 			},
 			wantErrors: 1,
 		},
 		{
 			name: "missing input",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "tool_use",
 				"id":   "tool-123",
 				"name": "Read",
@@ -832,12 +832,12 @@ func TestValidateContentBlock_ToolUse(t *testing.T) {
 func TestValidateContentBlock_ToolResult(t *testing.T) {
 	tests := []struct {
 		name       string
-		block      map[string]interface{}
+		block      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid tool_result with string content",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": "tool-123",
 				"content":     "result data",
@@ -846,11 +846,11 @@ func TestValidateContentBlock_ToolResult(t *testing.T) {
 		},
 		{
 			name: "valid tool_result with nested blocks",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": "tool-123",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						"text": "nested result",
 					},
@@ -860,7 +860,7 @@ func TestValidateContentBlock_ToolResult(t *testing.T) {
 		},
 		{
 			name: "valid tool_result with is_error",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": "tool-123",
 				"content":     "error message",
@@ -870,7 +870,7 @@ func TestValidateContentBlock_ToolResult(t *testing.T) {
 		},
 		{
 			name: "missing tool_use_id",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":    "tool_result",
 				"content": "result",
 			},
@@ -878,7 +878,7 @@ func TestValidateContentBlock_ToolResult(t *testing.T) {
 		},
 		{
 			name: "missing content",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": "tool-123",
 			},
@@ -886,11 +886,11 @@ func TestValidateContentBlock_ToolResult(t *testing.T) {
 		},
 		{
 			name: "invalid nested block",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": "tool-123",
-				"content": []interface{}{
-					map[string]interface{}{
+				"content": []any{
+					map[string]any{
 						"type": "text",
 						// missing "text" field
 					},
@@ -916,14 +916,14 @@ func TestValidateContentBlock_ToolResult(t *testing.T) {
 func TestValidateContentBlock_Image(t *testing.T) {
 	tests := []struct {
 		name       string
-		block      map[string]interface{}
+		block      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid image block with base64",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "image",
-				"source": map[string]interface{}{
+				"source": map[string]any{
 					"type":       "base64",
 					"media_type": "image/png",
 					"data":       "base64data...",
@@ -933,9 +933,9 @@ func TestValidateContentBlock_Image(t *testing.T) {
 		},
 		{
 			name: "valid image block with url",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "image",
-				"source": map[string]interface{}{
+				"source": map[string]any{
 					"type":       "url",
 					"media_type": "image/jpeg",
 					"url":        "https://example.com/image.jpg",
@@ -945,16 +945,16 @@ func TestValidateContentBlock_Image(t *testing.T) {
 		},
 		{
 			name: "missing source",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "image",
 			},
 			wantErrors: 1,
 		},
 		{
 			name: "missing source.type",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "image",
-				"source": map[string]interface{}{
+				"source": map[string]any{
 					"media_type": "image/png",
 				},
 			},
@@ -962,9 +962,9 @@ func TestValidateContentBlock_Image(t *testing.T) {
 		},
 		{
 			name: "missing source.media_type",
-			block: map[string]interface{}{
+			block: map[string]any{
 				"type": "image",
-				"source": map[string]interface{}{
+				"source": map[string]any{
 					"type": "base64",
 				},
 			},
@@ -987,7 +987,7 @@ func TestValidateContentBlock_Image(t *testing.T) {
 
 func TestValidateContentBlock_UnknownType(t *testing.T) {
 	// Unknown block types should be allowed for forward compatibility
-	block := map[string]interface{}{
+	block := map[string]any{
 		"type": "some-future-block-type",
 		"data": "whatever",
 	}
@@ -1000,12 +1000,12 @@ func TestValidateContentBlock_UnknownType(t *testing.T) {
 func TestValidateTokenUsage(t *testing.T) {
 	tests := []struct {
 		name       string
-		usage      map[string]interface{}
+		usage      map[string]any
 		wantErrors int
 	}{
 		{
 			name: "valid minimal usage",
-			usage: map[string]interface{}{
+			usage: map[string]any{
 				"input_tokens":  float64(100),
 				"output_tokens": float64(50),
 			},
@@ -1013,32 +1013,32 @@ func TestValidateTokenUsage(t *testing.T) {
 		},
 		{
 			name: "valid full usage",
-			usage: map[string]interface{}{
-				"input_tokens":                 float64(100),
-				"output_tokens":                float64(50),
-				"cache_creation_input_tokens":  float64(10),
-				"cache_read_input_tokens":      float64(20),
-				"service_tier":                 "default",
+			usage: map[string]any{
+				"input_tokens":                float64(100),
+				"output_tokens":               float64(50),
+				"cache_creation_input_tokens": float64(10),
+				"cache_read_input_tokens":     float64(20),
+				"service_tier":                "default",
 			},
 			wantErrors: 0,
 		},
 		{
 			name: "missing input_tokens",
-			usage: map[string]interface{}{
+			usage: map[string]any{
 				"output_tokens": float64(50),
 			},
 			wantErrors: 1,
 		},
 		{
 			name: "missing output_tokens",
-			usage: map[string]interface{}{
+			usage: map[string]any{
 				"input_tokens": float64(100),
 			},
 			wantErrors: 1,
 		},
 		{
 			name:       "missing both required fields",
-			usage:      map[string]interface{}{},
+			usage:      map[string]any{},
 			wantErrors: 2,
 		},
 	}
@@ -1058,15 +1058,15 @@ func TestValidateTokenUsage(t *testing.T) {
 
 func TestTypeOf(t *testing.T) {
 	tests := []struct {
-		input interface{}
+		input any
 		want  string
 	}{
 		{nil, "undefined"},
 		{"hello", "string"},
 		{float64(42), "number"},
 		{true, "boolean"},
-		{[]interface{}{}, "array"},
-		{map[string]interface{}{}, "object"},
+		{[]any{}, "array"},
+		{map[string]any{}, "object"},
 	}
 
 	for _, tt := range tests {
@@ -1129,7 +1129,7 @@ func TestFormatValidationErrors(t *testing.T) {
 func TestFormatValidationErrors_Truncation(t *testing.T) {
 	// Create more errors than maxErrors
 	var errors []LineValidationError
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		errors = append(errors, LineValidationError{
 			Line:        i + 1,
 			MessageType: "user",

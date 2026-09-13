@@ -997,10 +997,7 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 	// Download chunks and parse their line ranges.
 	// Scale the timeout for large sessions: 10 parallel downloads at ~100ms each
 	// means ~100ms amortized per chunk. Use 500ms/chunk for headroom, capped at 5 min.
-	downloadTimeout := StorageTimeout + time.Duration(len(chunkKeys))*500*time.Millisecond
-	if downloadTimeout > 5*time.Minute {
-		downloadTimeout = 5 * time.Minute
-	}
+	downloadTimeout := min(StorageTimeout+time.Duration(len(chunkKeys))*500*time.Millisecond, 5*time.Minute)
 	// Extend the HTTP write deadline so the server doesn't kill the connection
 	// before the download+merge+write completes for large sessions.
 	rc := http.NewResponseController(w)
@@ -1062,8 +1059,8 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 
 // extractTextFromMessage extracts the first text content from a message entry
 // Handles both string content and array content (multimodal messages)
-func extractTextFromMessage(entry map[string]interface{}) string {
-	message, ok := entry["message"].(map[string]interface{})
+func extractTextFromMessage(entry map[string]any) string {
+	message, ok := entry["message"].(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -1079,9 +1076,9 @@ func extractTextFromMessage(entry map[string]interface{}) string {
 	}
 
 	// Case 2: content is an array of content blocks (multimodal)
-	if arr, ok := content.([]interface{}); ok {
+	if arr, ok := content.([]any); ok {
 		for _, block := range arr {
-			if blockMap, ok := block.(map[string]interface{}); ok {
+			if blockMap, ok := block.(map[string]any); ok {
 				if blockType, _ := blockMap["type"].(string); blockType == "text" {
 					if text, ok := blockMap["text"].(string); ok && text != "" {
 						return text

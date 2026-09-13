@@ -15,8 +15,8 @@ type TranscriptFile struct {
 	TotalLines       int // Total lines processed (including invalid ones)
 
 	// Cached result of AssistantMessageGroups (computed on first call)
-	cachedGroups    []AssistantMessageGroup
-	groupsComputed  bool
+	cachedGroups   []AssistantMessageGroup
+	groupsComputed bool
 }
 
 // FileCollection contains all transcript data for a session.
@@ -130,7 +130,7 @@ func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error
 		}
 
 		// First, parse into a raw map for validation
-		var rawMap map[string]interface{}
+		var rawMap map[string]any
 		if err := json.Unmarshal(lineData, &rawMap); err != nil {
 			// JSON parse error - add as validation error
 			validationErrors = append(validationErrors, LineValidationError{
@@ -206,13 +206,13 @@ func (tf *TranscriptFile) BuildTimestampMap() map[string]time.Time {
 // and the same message.id can reappear later via context replay.
 // This struct merges all occurrences into a single logical response.
 type AssistantMessageGroup struct {
-	MessageID  string      // API message ID (empty for lines without one)
-	FinalUsage *TokenUsage // Usage from the last occurrence (final output_tokens)
-	Model      string      // Model from the first occurrence
-	HasText    bool        // True if ANY line in the group has text content
-	HasToolUse bool        // True if ANY line in the group has tool_use
-	HasThinking bool       // True if ANY line in the group has thinking
-	IsFastMode bool        // True if any line has speed="fast"
+	MessageID   string      // API message ID (empty for lines without one)
+	FinalUsage  *TokenUsage // Usage from the last occurrence (final output_tokens)
+	Model       string      // Model from the first occurrence
+	HasText     bool        // True if ANY line in the group has text content
+	HasToolUse  bool        // True if ANY line in the group has tool_use
+	HasThinking bool        // True if ANY line in the group has thinking
+	IsFastMode  bool        // True if any line has speed="fast"
 }
 
 // AssistantMessageGroups groups assistant lines by message.id and returns

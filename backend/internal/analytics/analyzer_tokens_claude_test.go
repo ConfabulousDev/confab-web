@@ -11,14 +11,14 @@ import (
 // via the toolUseResult.usage on the main line. No agent file is provided, so the
 // Finalize fallback handles it.
 func filelessSubagentFixture(agentInput, agentOutput int64) (*FileCollection, error) {
-	mainJSONL := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	mainJSONL := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{"subagent_type": "Explore"}),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"agentId": "agent1",
-			"usage":   map[string]interface{}{"input_tokens": float64(agentInput), "output_tokens": float64(agentOutput)},
+			"usage":   map[string]any{"input_tokens": float64(agentInput), "output_tokens": float64(agentOutput)},
 		}) + "\n"
 	return NewFileCollection([]byte(mainJSONL)) // no agent files → file-less path
 }
@@ -79,9 +79,9 @@ func TestTokensAnalyzer_FilelessSubagentNoWarn(t *testing.T) {
 // precompute_test), so they flow into fc.Agents and TokensAnalyzer sums them with
 // the main transcript. This test guards that end-to-end accumulation.
 func TestTokensAnalyzer_IncludesWorkflowAgentTokens(t *testing.T) {
-	mainJSONL := makeAssistantMessageFull("m1", "2025-01-01T00:00:00Z", "claude-sonnet-4-20241022", 100, 50, 0, 0, []map[string]interface{}{makeTextBlock("main")}) + "\n"
+	mainJSONL := makeAssistantMessageFull("m1", "2025-01-01T00:00:00Z", "claude-sonnet-4-20241022", 100, 50, 0, 0, []map[string]any{makeTextBlock("main")}) + "\n"
 	// A workflow subagent transcript (keyed by its extracted agent id).
-	workflowAgentJSONL := makeAssistantMessageFull("w1", "2025-01-01T00:00:05Z", "claude-sonnet-4-20241022", 200, 100, 0, 0, []map[string]interface{}{makeTextBlock("agent")}) + "\n"
+	workflowAgentJSONL := makeAssistantMessageFull("w1", "2025-01-01T00:00:05Z", "claude-sonnet-4-20241022", 200, 100, 0, 0, []map[string]any{makeTextBlock("agent")}) + "\n"
 
 	fc, err := NewFileCollectionWithAgents([]byte(mainJSONL), map[string][]byte{
 		"abc123": []byte(workflowAgentJSONL),
@@ -126,11 +126,11 @@ func TestTokensAnalyzer_IncludesWorkflowAgentTokens(t *testing.T) {
 // EstimatedCostUSD.
 func TestTokensAnalyzer_V2Tree(t *testing.T) {
 	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 0, 0,
-		[]map[string]interface{}{makeTextBlock("sonnet normal")}) + "\n" +
+		[]map[string]any{makeTextBlock("sonnet normal")}) + "\n" +
 		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "claude-opus-4-1-20250805", 200, 100, 0, 0,
-			[]map[string]interface{}{makeTextBlock("opus normal")}) + "\n" +
+			[]map[string]any{makeTextBlock("opus normal")}) + "\n" +
 		makeAssistantMessageWithMsgIDAndSpeed("a3", "2025-01-01T00:00:03Z", "claude-sonnet-4-20241022", "msg-fast", 300, 150,
-			[]map[string]interface{}{makeTextBlock("sonnet fast")}, "fast") + "\n"
+			[]map[string]any{makeTextBlock("sonnet fast")}, "fast") + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -201,9 +201,9 @@ func TestTokensAnalyzer_V2Tree(t *testing.T) {
 func TestTokensAnalyzer_V2Tree_CacheTotals(t *testing.T) {
 	// Two models, each with distinct cache creation/read counts.
 	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 10, 20,
-		[]map[string]interface{}{makeTextBlock("sonnet")}) + "\n" +
+		[]map[string]any{makeTextBlock("sonnet")}) + "\n" +
 		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "claude-opus-4-1-20250805", 200, 100, 30, 40,
-			[]map[string]interface{}{makeTextBlock("opus")}) + "\n"
+			[]map[string]any{makeTextBlock("opus")}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -239,7 +239,7 @@ func TestTokensAnalyzer_V2Tree_CacheTotals(t *testing.T) {
 // counted and $0 cost, keeping the v2 totals equal to the flat card's totals.
 func TestTokensAnalyzer_V2Tree_UnknownModelBucket(t *testing.T) {
 	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "", 100, 50, 0, 0,
-		[]map[string]interface{}{makeTextBlock("no model")}) + "\n"
+		[]map[string]any{makeTextBlock("no model")}) + "\n"
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("NewFileCollection: %v", err)
@@ -289,9 +289,9 @@ func TestTokensAnalyzer_V2Tree_NilWhenNoTokens(t *testing.T) {
 // is unpriced → $0, so the flat total is unchanged).
 func TestTokensAnalyzer_V2Tree_ExcludesSynthetic(t *testing.T) {
 	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-opus-4-1-20250805", 200, 100, 0, 0,
-		[]map[string]interface{}{makeTextBlock("opus normal")}) + "\n" +
+		[]map[string]any{makeTextBlock("opus normal")}) + "\n" +
 		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "<synthetic>", 100, 50, 0, 0,
-			[]map[string]interface{}{makeTextBlock("synthetic turn")}) + "\n"
+			[]map[string]any{makeTextBlock("synthetic turn")}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -329,7 +329,7 @@ func TestTokensAnalyzer_V2Tree_ExcludesSynthetic(t *testing.T) {
 // token-less case (xz6g).
 func TestTokensAnalyzer_V2Tree_SyntheticOnlyYieldsNilTree(t *testing.T) {
 	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "<synthetic>", 100, 50, 0, 0,
-		[]map[string]interface{}{makeTextBlock("synthetic turn")}) + "\n"
+		[]map[string]any{makeTextBlock("synthetic turn")}) + "\n"
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("NewFileCollection: %v", err)

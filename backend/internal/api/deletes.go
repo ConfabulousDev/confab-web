@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/go-chi/chi/v5"
 )
 
 // HandleDeleteSession deletes an entire session and all associated S3 chunks
@@ -87,7 +87,7 @@ func HandleDeleteSession(database *db.DB, store *storage.S3Storage) http.Handler
 			"external_id", externalID)
 
 		// Return success response
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"success":    true,
 			"session_id": sessionID,
 			"message":    "Session deleted successfully",

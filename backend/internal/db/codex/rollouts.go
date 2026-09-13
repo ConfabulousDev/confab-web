@@ -55,7 +55,7 @@ const rolloutColumns = `thread_uuid, user_id, parent_thread_uuid, hosted_session
 
 // scanRollout reads one row in the rolloutColumns order.
 func scanRollout(scanner interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }) (*Rollout, error) {
 	var r Rollout
 	if err := scanner.Scan(

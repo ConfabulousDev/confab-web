@@ -73,8 +73,8 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
 - **Content-Type validation is enforced on all `/api/v1` POST/PUT/PATCH requests.** Must be `application/json`.
 - **Auth checks happen in middleware, not handlers.** Handlers assume `auth.GetUserID(ctx)` will work if reached. The exception is `OptionalAuth` routes where handlers check the return value.
 - **Canonical access model (CF-132) is the single access control path for session data.** All session read endpoints (detail, sync file, analytics, GitHub links) go through `CheckCanonicalAccess`, which checks owner > recipient > system > public > none.
-- **JSON responses always use `respondJSON`** which sets `Content-Type: application/json` and `Cache-Control: no-store`.
-- **Errors use `respondError`** which returns `{"error": "message"}` format.
+- **JSON responses always use `respondJSON`** which sets `Content-Type: application/json` and `Cache-Control: no-store`. It delegates to `httputil.RespondJSON` (shared with `admin`), so the two packages cannot drift.
+- **Errors use `respondError`** which returns `{"error": "message"}` format (delegates to `httputil.RespondError`).
 - **Rate limiting is layered.** Global limiter (100 req/s) applies to all requests. Auth endpoints get a stricter limiter (1 req/s burst 30). Uploads are rate-limited per user ID (not IP). Validation and client error endpoints have their own limiters.
 - **Compression is Brotli-preferred, gzip-fallback.** Both at level 5. Applied globally via middleware.
 

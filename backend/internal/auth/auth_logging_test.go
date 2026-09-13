@@ -25,7 +25,7 @@ func captureLogs(r *http.Request) (*http.Request, *bytes.Buffer) {
 func decodeLogLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	t.Helper()
 	var lines []map[string]any
-	for _, raw := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+	for raw := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}

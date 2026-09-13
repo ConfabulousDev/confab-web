@@ -39,8 +39,8 @@ func (a *AnnotatedItem) UnmarshalJSON(data []byte) error {
 
 	// Try object format
 	type annotatedItemRaw struct {
-		Text      string      `json:"text"`
-		MessageID interface{} `json:"message_id,omitempty"`
+		Text      string `json:"text"`
+		MessageID any    `json:"message_id,omitempty"`
 	}
 	var raw annotatedItemRaw
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -119,7 +119,7 @@ func NewSmartRecapAnalyzer(llm recapLLM, model string, cfg SmartRecapAnalyzerCon
 // Analyze generates a smart recap for the given transcript and analytics stats.
 // cardStats contains the computed analytics cards (tokens, session, conversation, etc.)
 // which are included in the prompt for additional context.
-func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, cardStats map[string]interface{}) (*SmartRecapResult, error) {
+func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, cardStats map[string]any) (*SmartRecapResult, error) {
 	// Use pre-built transcript if provided (streaming path), otherwise build from FileCollection
 	transcript := input.Transcript
 	idMap := input.IDMap
@@ -223,7 +223,7 @@ func (c FormatConfig) truncate(s string, limit int) string {
 // This provides additional context about session metrics for pattern detection.
 // Provider-agnostic: works on the canonical *CardData types produced by both
 // Claude and Codex compute paths.
-func PrepareStats(cardStats map[string]interface{}) string {
+func PrepareStats(cardStats map[string]any) string {
 	if len(cardStats) == 0 {
 		return ""
 	}

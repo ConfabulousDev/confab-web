@@ -147,7 +147,7 @@ func TestDeviceCode_HTTP_Integration(t *testing.T) {
 		userCodes := make(map[string]bool)
 
 		// Create multiple device codes
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			resp, err := client.Post("/auth/device/code", auth.DeviceCodeRequest{KeyName: "Test"})
 			if err != nil {
 				t.Fatalf("request failed: %v", err)

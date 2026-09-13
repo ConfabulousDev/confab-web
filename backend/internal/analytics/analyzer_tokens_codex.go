@@ -32,10 +32,7 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 			continue
 		}
 		tu := r.TokenUsage
-		uncached := tu.InputTokens - tu.CachedInputTokens
-		if uncached < 0 {
-			uncached = 0
-		}
+		uncached := max(tu.InputTokens-tu.CachedInputTokens, 0)
 		totalUncached += uncached
 		totalCached += tu.CachedInputTokens
 		totalOutput += tu.OutputTokens

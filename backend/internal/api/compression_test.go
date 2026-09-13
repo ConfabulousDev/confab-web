@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andybalholm/brotli"
-	"github.com/klauspost/compress/zstd"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 )
 
 // TestCompressionMiddleware tests that gzip compression is applied to responses
@@ -391,7 +391,7 @@ func TestZstdRequestDecompression(t *testing.T) {
 
 	t.Run("decompresses zstd-encoded request body", func(t *testing.T) {
 		// Create test payload
-		payload := map[string]interface{}{
+		payload := map[string]any{
 			"session_id": "test-session",
 			"lines":      []string{"line1", "line2", "line3"},
 		}
@@ -414,7 +414,7 @@ func TestZstdRequestDecompression(t *testing.T) {
 		}
 
 		// Verify the handler received decompressed JSON
-		var received map[string]interface{}
+		var received map[string]any
 		if err := json.Unmarshal(receivedBody, &received); err != nil {
 			t.Fatalf("failed to parse received body as JSON: %v", err)
 		}

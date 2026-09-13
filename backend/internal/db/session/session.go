@@ -17,20 +17,20 @@ import (
 
 // paramBuilder tracks $N indices for dynamic SQL parameter construction.
 type paramBuilder struct {
-	args    []interface{}
+	args    []any
 	nextIdx int
 }
 
 // newParamBuilder creates a paramBuilder with $1 = userID.
 func newParamBuilder(userID int64) *paramBuilder {
 	return &paramBuilder{
-		args:    []interface{}{userID},
+		args:    []any{userID},
 		nextIdx: 2,
 	}
 }
 
 // add appends a value and returns its $N placeholder.
-func (pb *paramBuilder) add(val interface{}) string {
+func (pb *paramBuilder) add(val any) string {
 	placeholder := fmt.Sprintf("$%d", pb.nextIdx)
 	pb.args = append(pb.args, val)
 	pb.nextIdx++
@@ -356,7 +356,7 @@ const dedupedVisibleCTE = `
 // same column projection. Owner filter applied uniformly on the deduped
 // visible CTE (d.owner_email). access_type / shared_by_email come from the
 // helper rather than per-branch CASE expressions.
-func (s *Store) buildFilteredSessionsQuery(userID int64, params db.SessionListParams) (string, []interface{}) {
+func (s *Store) buildFilteredSessionsQuery(userID int64, params db.SessionListParams) (string, []any) {
 	pb := newParamBuilder(userID)
 	commonFilters, ownerFilter, searchJoin := buildPushdownFilters(pb, params)
 	limitP := pb.add(params.PageSize + 1)

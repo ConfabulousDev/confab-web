@@ -32,7 +32,7 @@ func TestRedactForSharing_Completeness(t *testing.T) {
 
 		fv := v.Field(i)
 		// PII fields should be *string — check they are nil after redaction
-		if fv.Kind() == reflect.Ptr && !fv.IsNil() {
+		if fv.Kind() == reflect.Pointer && !fv.IsNil() {
 			t.Errorf("PII field %q (tagged pii:\"redact\") is not nil after RedactForSharing", field.Name)
 		}
 	}
@@ -65,9 +65,9 @@ func TestSessionDetail_InterfaceFieldsAreClassified(t *testing.T) {
 		"GitInfo": "sanitized for all non-owners via SanitizeGitInfoForSharing in access.GetSessionDetailWithAccess (whitelist: branch + derived owner/repo display name)",
 	}
 
-	typ := reflect.TypeOf(SessionDetail{})
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
+	typ := reflect.TypeFor[SessionDetail]()
+	for field := range typ.Fields() {
+		field := field
 		if field.Type.Kind() != reflect.Interface {
 			continue
 		}

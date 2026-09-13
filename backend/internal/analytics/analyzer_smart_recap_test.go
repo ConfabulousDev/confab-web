@@ -240,10 +240,10 @@ func TestTruncateAnnotatedSlice(t *testing.T) {
 
 func TestResolveMessageIDs_ValidMapping(t *testing.T) {
 	result := &SmartRecapResult{
-		WentWell:     []AnnotatedItem{{Text: "good", MessageID: "1"}, {Text: "also good", MessageID: "3"}},
-		WentBad:      []AnnotatedItem{{Text: "bad", MessageID: "2"}},
-		HumanSuggestions: []AnnotatedItem{},
-		EnvironmentSuggestions: []AnnotatedItem{},
+		WentWell:                  []AnnotatedItem{{Text: "good", MessageID: "1"}, {Text: "also good", MessageID: "3"}},
+		WentBad:                   []AnnotatedItem{{Text: "bad", MessageID: "2"}},
+		HumanSuggestions:          []AnnotatedItem{},
+		EnvironmentSuggestions:    []AnnotatedItem{},
 		DefaultContextSuggestions: []AnnotatedItem{},
 	}
 	idMap := map[int]string{1: "uuid-aaa", 2: "uuid-bbb", 3: "uuid-ccc"}
@@ -263,10 +263,10 @@ func TestResolveMessageIDs_ValidMapping(t *testing.T) {
 
 func TestResolveMessageIDs_InvalidID(t *testing.T) {
 	result := &SmartRecapResult{
-		WentWell:     []AnnotatedItem{{Text: "good", MessageID: "999"}},
-		WentBad:      []AnnotatedItem{},
-		HumanSuggestions: []AnnotatedItem{},
-		EnvironmentSuggestions: []AnnotatedItem{},
+		WentWell:                  []AnnotatedItem{{Text: "good", MessageID: "999"}},
+		WentBad:                   []AnnotatedItem{},
+		HumanSuggestions:          []AnnotatedItem{},
+		EnvironmentSuggestions:    []AnnotatedItem{},
 		DefaultContextSuggestions: []AnnotatedItem{},
 	}
 	idMap := map[int]string{1: "uuid-aaa"}
@@ -285,10 +285,10 @@ func TestResolveMessageIDs_InvalidID(t *testing.T) {
 
 func TestResolveMessageIDs_NonIntegerID(t *testing.T) {
 	result := &SmartRecapResult{
-		WentWell:     []AnnotatedItem{{Text: "good", MessageID: "not-a-number"}},
-		WentBad:      []AnnotatedItem{},
-		HumanSuggestions: []AnnotatedItem{},
-		EnvironmentSuggestions: []AnnotatedItem{},
+		WentWell:                  []AnnotatedItem{{Text: "good", MessageID: "not-a-number"}},
+		WentBad:                   []AnnotatedItem{},
+		HumanSuggestions:          []AnnotatedItem{},
+		EnvironmentSuggestions:    []AnnotatedItem{},
 		DefaultContextSuggestions: []AnnotatedItem{},
 	}
 	idMap := map[int]string{1: "uuid-aaa"}
@@ -302,10 +302,10 @@ func TestResolveMessageIDs_NonIntegerID(t *testing.T) {
 
 func TestResolveMessageIDs_EmptyID(t *testing.T) {
 	result := &SmartRecapResult{
-		WentWell:     []AnnotatedItem{{Text: "good", MessageID: ""}},
-		WentBad:      []AnnotatedItem{},
-		HumanSuggestions: []AnnotatedItem{},
-		EnvironmentSuggestions: []AnnotatedItem{},
+		WentWell:                  []AnnotatedItem{{Text: "good", MessageID: ""}},
+		WentBad:                   []AnnotatedItem{},
+		HumanSuggestions:          []AnnotatedItem{},
+		EnvironmentSuggestions:    []AnnotatedItem{},
 		DefaultContextSuggestions: []AnnotatedItem{},
 	}
 	idMap := map[int]string{1: "uuid-aaa"}
@@ -415,8 +415,6 @@ func TestAnnotatedItem_UnmarshalJSON_BoolMessageID(t *testing.T) {
 // BuildSmartRecapSystemPrompt tests
 // =============================================================================
 
-func ptr(s string) *string { return &s }
-
 func TestBuildSmartRecapSystemPrompt_NilUsesDefault(t *testing.T) {
 	prompt := BuildSmartRecapSystemPrompt(nil)
 
@@ -440,7 +438,7 @@ func TestBuildSmartRecapSystemPrompt_NilUsesDefault(t *testing.T) {
 }
 
 func TestBuildSmartRecapSystemPrompt_EmptyStringOmitsInstructions(t *testing.T) {
-	prompt := BuildSmartRecapSystemPrompt(ptr(""))
+	prompt := BuildSmartRecapSystemPrompt(new(""))
 
 	// Should NOT contain default instructions
 	defaultInstructions := DefaultSmartRecapInstructions()
@@ -463,7 +461,7 @@ func TestBuildSmartRecapSystemPrompt_EmptyStringOmitsInstructions(t *testing.T) 
 
 func TestBuildSmartRecapSystemPrompt_CustomInstructions(t *testing.T) {
 	custom := "You are a pirate analyst. Analyze sessions with nautical metaphors."
-	prompt := BuildSmartRecapSystemPrompt(ptr(custom))
+	prompt := BuildSmartRecapSystemPrompt(new(custom))
 
 	// Should contain custom instructions
 	if !strings.Contains(prompt, custom) {

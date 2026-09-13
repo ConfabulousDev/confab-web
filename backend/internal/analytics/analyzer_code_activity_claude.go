@@ -19,12 +19,12 @@ type CodeActivityResult struct {
 // It tracks file operations from Read, Write, Edit, Glob, and Grep tools.
 // It processes all files (main + agents) to get complete activity.
 type CodeActivityAnalyzer struct {
-	filesRead    map[string]bool
+	filesRead     map[string]bool
 	filesModified map[string]bool
-	extensions   map[string]int
-	linesAdded   int
-	linesRemoved int
-	searchCount  int
+	extensions    map[string]int
+	linesAdded    int
+	linesRemoved  int
+	searchCount   int
 }
 
 // ProcessFile accumulates code activity from a single file.
@@ -108,7 +108,7 @@ func (a *CodeActivityAnalyzer) Analyze(fc *FileCollection) (*CodeActivityResult,
 }
 
 // getFilePath extracts the file_path from tool input.
-func getFilePath(input map[string]interface{}) string {
+func getFilePath(input map[string]any) string {
 	path, _ := input["file_path"].(string)
 	return path
 }

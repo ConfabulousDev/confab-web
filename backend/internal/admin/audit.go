@@ -30,7 +30,7 @@ const (
 
 // AuditLog logs an admin action with full context for security audit trail.
 // All admin actions should be logged through this function.
-func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details map[string]interface{}) {
+func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details map[string]any) {
 	log := logger.Ctx(ctx)
 
 	// Extract admin user ID from context (set by RequireSession middleware)
@@ -56,7 +56,7 @@ func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details 
 	}
 
 	// Build log arguments: always include admin identity and action
-	logArgs := []interface{}{
+	logArgs := []any{
 		"audit", true, // marker for filtering audit logs
 		"action", string(action),
 		"admin_user_id", adminUserID,
@@ -72,6 +72,6 @@ func AuditLog(ctx context.Context, database *db.DB, action AdminAction, details 
 }
 
 // AuditLogFromRequest is a convenience wrapper that extracts context from request
-func AuditLogFromRequest(r *http.Request, database *db.DB, action AdminAction, details map[string]interface{}) {
+func AuditLogFromRequest(r *http.Request, database *db.DB, action AdminAction, details map[string]any) {
 	AuditLog(r.Context(), database, action, details)
 }

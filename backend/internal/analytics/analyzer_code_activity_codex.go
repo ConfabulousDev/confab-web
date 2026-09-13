@@ -76,7 +76,7 @@ func countFileEditLines(edit codex.FileEdit) (added, removed int) {
 		return countLines(edit.Content), 0
 	}
 	// Same +/- accounting as parseApplyPatch below, headers excluded.
-	for _, line := range strings.Split(edit.UnifiedDiff, "\n") {
+	for line := range strings.SplitSeq(edit.UnifiedDiff, "\n") {
 		switch {
 		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
 			added++

@@ -245,11 +245,11 @@ func TestTokensV2CardRecordIsValid(t *testing.T) {
 // AllValid is not updated, this test fails.
 func TestCardsAllValid_Exhaustive(t *testing.T) {
 	// Use reflect.TypeOf(Cards{}) to find all *XxxCardRecord fields
-	cardsType := reflect.TypeOf(Cards{})
+	cardsType := reflect.TypeFor[Cards]()
 	var cardFields []string
-	for i := 0; i < cardsType.NumField(); i++ {
-		field := cardsType.Field(i)
-		if field.Type.Kind() == reflect.Ptr && strings.HasSuffix(field.Type.Elem().Name(), "CardRecord") {
+	for field := range cardsType.Fields() {
+		field := field
+		if field.Type.Kind() == reflect.Pointer && strings.HasSuffix(field.Type.Elem().Name(), "CardRecord") {
 			cardFields = append(cardFields, field.Name)
 		}
 	}

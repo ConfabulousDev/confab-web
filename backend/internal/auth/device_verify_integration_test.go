@@ -47,7 +47,7 @@ func TestHandleDeviceVerify_LocksOutAfterRepeatedFailures(t *testing.T) {
 	// The first run of wrong attempts returns the ordinary invalid-code page.
 	// deviceVerifyMaxFailures is 5; submit that many, all rejected as invalid.
 	const maxFailures = 5
-	for i := 0; i < maxFailures; i++ {
+	for i := range maxFailures {
 		rec := postDeviceVerify(t, handler, sessionID, "WXYZ-2345")
 		if rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("attempt %d locked out too early (before %d failures)", i+1, maxFailures)
@@ -92,7 +92,7 @@ func TestHandleDeviceVerify_SuccessAuthorizesAndIsNotThrottled(t *testing.T) {
 	handler := auth.HandleDeviceVerify(env.DB, nil)
 
 	// Two fumbles, then the correct code.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_ = postDeviceVerify(t, handler, sessionID, "WXYZ-2345")
 	}
 	rec := postDeviceVerify(t, handler, sessionID, userCode)

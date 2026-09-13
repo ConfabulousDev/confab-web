@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"slices"
 	"time"
 )
 
@@ -22,12 +23,7 @@ var AllCardTableNames = []string{
 
 // IsKnownCardTableName reports whether name is one of AllCardTableNames.
 func IsKnownCardTableName(name string) bool {
-	for _, n := range AllCardTableNames {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(AllCardTableNames, name)
 }
 
 // Card version constants - increment when compute logic changes
@@ -165,10 +161,10 @@ type ConversationCardRecord struct {
 	Version                  int       `json:"version"`
 	ComputedAt               time.Time `json:"computed_at"`
 	UpToLine                 int64     `json:"up_to_line"`
-	UserTurns                int       `json:"user_turns"`                           // Count of human prompts
-	AssistantTurns           int       `json:"assistant_turns"`                      // Count of text responses
-	AvgAssistantTurnMs       *int64    `json:"avg_assistant_turn_ms,omitempty"`      // Average assistant turn duration
-	AvgUserThinkingMs        *int64    `json:"avg_user_thinking_ms,omitempty"`       // Average user thinking time
+	UserTurns                int       `json:"user_turns"`                            // Count of human prompts
+	AssistantTurns           int       `json:"assistant_turns"`                       // Count of text responses
+	AvgAssistantTurnMs       *int64    `json:"avg_assistant_turn_ms,omitempty"`       // Average assistant turn duration
+	AvgUserThinkingMs        *int64    `json:"avg_user_thinking_ms,omitempty"`        // Average user thinking time
 	TotalAssistantDurationMs *int64    `json:"total_assistant_duration_ms,omitempty"` // Total assistant turn duration
 	TotalUserDurationMs      *int64    `json:"total_user_duration_ms,omitempty"`      // Total user thinking time
 	AssistantUtilizationPct  *float64  `json:"assistant_utilization_pct,omitempty"`   // % of time Claude was working (0-100)
@@ -200,12 +196,12 @@ type AgentsAndSkillsCardRecord struct {
 
 // RedactionsCardRecord is the DB record for the redactions card.
 type RedactionsCardRecord struct {
-	SessionID        string         `json:"session_id"`
-	Version          int            `json:"version"`
-	ComputedAt       time.Time      `json:"computed_at"`
-	UpToLine         int64          `json:"up_to_line"`
-	TotalRedactions  int            `json:"total_redactions"`
-	RedactionCounts  map[string]int `json:"redaction_counts"` // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
+	SessionID       string         `json:"session_id"`
+	Version         int            `json:"version"`
+	ComputedAt      time.Time      `json:"computed_at"`
+	UpToLine        int64          `json:"up_to_line"`
+	TotalRedactions int            `json:"total_redactions"`
+	RedactionCounts map[string]int `json:"redaction_counts"` // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
 }
 
 // WorkflowRun is a single workflow run's aggregate. It is both the JSONB

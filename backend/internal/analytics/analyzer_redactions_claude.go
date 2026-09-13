@@ -57,15 +57,15 @@ func (a *RedactionsAnalyzer) Analyze(fc *FileCollection) (*RedactionsResult, err
 }
 
 // walkValue recursively walks a JSON value and counts redaction markers in strings.
-func (a *RedactionsAnalyzer) walkValue(v interface{}) {
+func (a *RedactionsAnalyzer) walkValue(v any) {
 	switch val := v.(type) {
 	case string:
 		a.countRedactionsInString(val)
-	case map[string]interface{}:
+	case map[string]any:
 		for _, elem := range val {
 			a.walkValue(elem)
 		}
-	case []interface{}:
+	case []any:
 		for _, elem := range val {
 			a.walkValue(elem)
 		}

@@ -103,12 +103,12 @@ func (db *DB) Close() error {
 }
 
 // Exec executes a query without returning rows (for testing/migrations)
-func (db *DB) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (db *DB) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return db.conn.ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a query that returns at most one row (for testing)
-func (db *DB) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (db *DB) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return db.conn.QueryRowContext(ctx, query, args...)
 }
 

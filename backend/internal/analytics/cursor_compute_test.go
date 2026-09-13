@@ -229,8 +229,8 @@ func TestComputeFromCursorRolloutDurationFromBounds(t *testing.T) {
 	t1 := t0.Add(90 * time.Minute)
 
 	result := ComputeFromCursorRollout(context.Background(), mainOnly(messages), CursorSessionBounds{
-		FirstSeen:     ptrTime(t0),
-		LastMessageAt: ptrTime(t1),
+		FirstSeen:     new(t0),
+		LastMessageAt: new(t1),
 	})
 
 	if result.DurationMs == nil {
@@ -339,10 +339,10 @@ func TestComputeCursorBoundsStartPrecedence(t *testing.T) {
 	lastSync := time.Date(2026, 6, 15, 11, 30, 0, 0, time.UTC)
 
 	start, end := cursorSessionWindow(CursorSessionBounds{
-		CreatedAt:     ptrTime(createdAt),
-		FirstSeen:     ptrTime(firstSeen),
-		LastMessageAt: ptrTime(lastMessage),
-		LastSyncAt:    ptrTime(lastSync),
+		CreatedAt:     new(createdAt),
+		FirstSeen:     new(firstSeen),
+		LastMessageAt: new(lastMessage),
+		LastSyncAt:    new(lastSync),
 	})
 	if start == nil || !start.Equal(createdAt) {
 		t.Errorf("start = %v, want created_at %v (created_at preferred over first_seen)", start, createdAt)
@@ -353,8 +353,8 @@ func TestComputeCursorBoundsStartPrecedence(t *testing.T) {
 
 	// Fallbacks: no created_at → first_seen; no last_message_at → last_sync_at.
 	start, end = cursorSessionWindow(CursorSessionBounds{
-		FirstSeen:  ptrTime(firstSeen),
-		LastSyncAt: ptrTime(lastSync),
+		FirstSeen:  new(firstSeen),
+		LastSyncAt: new(lastSync),
 	})
 	if start == nil || !start.Equal(firstSeen) {
 		t.Errorf("start = %v, want first_seen fallback %v", start, firstSeen)
@@ -377,10 +377,10 @@ func TestComputeFromCursorRolloutDurationDegrades(t *testing.T) {
 		bounds CursorSessionBounds
 	}{
 		{"no bounds at all", noBounds},
-		{"start only", CursorSessionBounds{FirstSeen: ptrTime(t0)}},
-		{"end only", CursorSessionBounds{LastMessageAt: ptrTime(t1)}},
-		{"end before start", CursorSessionBounds{FirstSeen: ptrTime(t1), LastMessageAt: ptrTime(t0)}},
-		{"zero-length window", CursorSessionBounds{FirstSeen: ptrTime(t0), LastMessageAt: ptrTime(t0)}},
+		{"start only", CursorSessionBounds{FirstSeen: new(t0)}},
+		{"end only", CursorSessionBounds{LastMessageAt: new(t1)}},
+		{"end before start", CursorSessionBounds{FirstSeen: new(t1), LastMessageAt: new(t0)}},
+		{"zero-length window", CursorSessionBounds{FirstSeen: new(t0), LastMessageAt: new(t0)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -490,7 +490,7 @@ func TestComputeFromCursorRolloutBoundsMainOnly(t *testing.T) {
 	sub := loadCursorSubagentMessages(t)
 	t0 := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 	t1 := t0.Add(30 * time.Minute)
-	bounds := CursorSessionBounds{FirstSeen: ptrTime(t0), LastMessageAt: ptrTime(t1)}
+	bounds := CursorSessionBounds{FirstSeen: new(t0), LastMessageAt: new(t1)}
 
 	merged := ComputeFromCursorRollout(context.Background(), [][]*CursorMessage{main, sub}, bounds)
 

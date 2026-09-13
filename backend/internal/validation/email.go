@@ -3,6 +3,7 @@ package validation
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -27,12 +28,7 @@ func IsAllowedEmailDomain(email string, allowedDomains []string) bool {
 	}
 	domain := strings.ToLower(domainPart)
 
-	for _, allowed := range allowedDomains {
-		if domain == allowed {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowedDomains, domain)
 }
 
 // ValidateDomainList validates a list of domain entries for correctness.

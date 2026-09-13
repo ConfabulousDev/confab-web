@@ -335,7 +335,7 @@ func TestValidateGitInfo(t *testing.T) {
 	manyRemotes := func(n int) string {
 		var sb strings.Builder
 		sb.WriteString(`{"remotes":[`)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if i > 0 {
 				sb.WriteString(",")
 			}

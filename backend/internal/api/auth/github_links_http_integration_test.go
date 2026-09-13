@@ -1,8 +1,8 @@
 package auth_test
 
 import (
-	"github.com/ConfabulousDev/confab-web/internal/api"
 	"fmt"
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"net/http"
 	"os"
 	"testing"

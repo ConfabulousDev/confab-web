@@ -8,7 +8,7 @@ import (
 
 func TestFileCollection_LineCount(t *testing.T) {
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hi")}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:00:02Z", "world") + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -23,7 +23,7 @@ func TestFileCollection_LineCount(t *testing.T) {
 
 func TestFileCollection_TimestampMap(t *testing.T) {
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n"
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hi")}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -40,8 +40,8 @@ func TestFileCollection_TimestampMap(t *testing.T) {
 }
 
 func TestTokensAnalyzer(t *testing.T) {
-	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 20, 30, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
-		makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 200, 100, []map[string]interface{}{makeTextBlock("Hello")}) + "\n"
+	jsonl := makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 20, 30, []map[string]any{makeTextBlock("Hi")}) + "\n" +
+		makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 200, 100, []map[string]any{makeTextBlock("Hello")}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -73,9 +73,9 @@ func TestTokensAnalyzer(t *testing.T) {
 func TestSessionAnalyzer(t *testing.T) {
 	// Modern transcript format with content arrays
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hello! How can I help?")}) + "\n" +
+		makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hello! How can I help?")}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
-		makeAssistantMessage("a2", "2025-01-01T00:02:00Z", "claude-opus-4", 200, 100, []map[string]interface{}{makeTextBlock("Continuing...")}) + "\n" +
+		makeAssistantMessage("a2", "2025-01-01T00:02:00Z", "claude-opus-4", 200, 100, []map[string]any{makeTextBlock("Continuing...")}) + "\n" +
 		makeUserMessage("u3", "2025-01-01T00:03:00Z", "done") + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -134,9 +134,9 @@ func TestSessionAnalyzer_NoDuration(t *testing.T) {
 }
 
 func TestSessionAnalyzer_Compaction(t *testing.T) {
-	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
+	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hi")}) + "\n" +
 		makeCompactBoundaryMessage("c1", "2025-01-01T00:00:15Z", "auto", 50000) + "\n" +
-		makeAssistantMessage("a2", "2025-01-01T00:01:00Z", "claude-sonnet-4", 80, 40, []map[string]interface{}{makeTextBlock("Hello")}) + "\n" +
+		makeAssistantMessage("a2", "2025-01-01T00:01:00Z", "claude-sonnet-4", 80, 40, []map[string]any{makeTextBlock("Hello")}) + "\n" +
 		makeCompactBoundaryMessage("c2", "2025-01-01T00:02:00Z", "manual", 60000) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -168,33 +168,33 @@ func TestSessionAnalyzer_MessageBreakdown(t *testing.T) {
 	// - 1 thinking only (assistant with only thinking)
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "Hello, please read a file") + "\n" +
 		// Text response with tool_use (counts as text response, not tool call)
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 			makeTextBlock("I'll read that file for you"),
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
 		}) + "\n" +
-		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n" +
 		// Tool call only (no text)
-		makeAssistantMessage("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_2", "Write", map[string]interface{}{}),
+		makeAssistantMessage("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_2", "Write", map[string]any{}),
 		}) + "\n" +
-		makeUserMessageWithToolResults("u3", "2025-01-01T00:00:04Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u3", "2025-01-01T00:00:04Z", []map[string]any{
 			makeToolResultBlock("toolu_2", "ok", false),
 		}) + "\n" +
 		// Tool call only (no text)
-		makeAssistantMessage("a3", "2025-01-01T00:00:05Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_3", "Bash", map[string]interface{}{}),
+		makeAssistantMessage("a3", "2025-01-01T00:00:05Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_3", "Bash", map[string]any{}),
 		}) + "\n" +
-		makeUserMessageWithToolResults("u4", "2025-01-01T00:00:06Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u4", "2025-01-01T00:00:06Z", []map[string]any{
 			makeToolResultBlock("toolu_3", "done", false),
 		}) + "\n" +
 		// Thinking only
-		makeAssistantMessage("a4", "2025-01-01T00:00:07Z", "claude-opus-4", 100, 50, []map[string]interface{}{
+		makeAssistantMessage("a4", "2025-01-01T00:00:07Z", "claude-opus-4", 100, 50, []map[string]any{
 			makeThinkingBlock("Let me think about this..."),
 		}) + "\n" +
 		// Text response only
-		makeAssistantMessage("a5", "2025-01-01T00:00:08Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+		makeAssistantMessage("a5", "2025-01-01T00:00:08Z", "claude-sonnet-4", 100, 50, []map[string]any{
 			makeTextBlock("All done! The task is complete."),
 		}) + "\n" +
 		makeUserMessage("u5", "2025-01-01T00:00:09Z", "Thanks!") + "\n"
@@ -261,19 +261,19 @@ func TestSessionAnalyzer_MessageBreakdown(t *testing.T) {
 func TestTokensAnalyzer_AgentUsage(t *testing.T) {
 	// JSONL with assistant message and a tool_result containing agent usage
 	// NOTE: toolUseResult is at the top level of the transcript line, not inside the content block
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{
 			"prompt":        "Do something",
 			"subagent_type": "Explore",
 		}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
-			{"type": "tool_result", "tool_use_id": "toolu_1", "content": []map[string]interface{}{{"type": "text", "text": "Agent completed"}}},
-		}, map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
+			{"type": "tool_result", "tool_use_id": "toolu_1", "content": []map[string]any{{"type": "text", "text": "Agent completed"}}},
+		}, map[string]any{
 			"status":      "completed",
 			"agentId":     "abc123",
 			"totalTokens": float64(1000),
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"input_tokens":                float64(50),
 				"output_tokens":               float64(200),
 				"cache_creation_input_tokens": float64(100),
@@ -309,10 +309,10 @@ func TestTokensAnalyzer_AgentUsage(t *testing.T) {
 
 func TestTokensAnalyzer_NonAgentToolResult(t *testing.T) {
 	// JSONL with a regular tool_result (no agentId) - should NOT count extra tokens
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/test.txt"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/test.txt"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n"
 
@@ -336,18 +336,18 @@ func TestTokensAnalyzer_NonAgentToolResult(t *testing.T) {
 }
 
 func TestToolsAnalyzer(t *testing.T) {
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Reading file"),
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/tmp/test.txt"}),
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/tmp/test.txt"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n" +
-		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_2", "Read", map[string]interface{}{}),
-			makeToolUseBlock("toolu_3", "Write", map[string]interface{}{}),
+		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_2", "Read", map[string]any{}),
+			makeToolUseBlock("toolu_3", "Write", map[string]any{}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:04Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:04Z", []map[string]any{
 			makeToolResultBlock("toolu_2", "ok", false),
 			makeToolResultBlock("toolu_3", "error", true),
 		}) + "\n"
@@ -394,17 +394,17 @@ func TestToolsAnalyzer_ContextReplayDedup(t *testing.T) {
 	// msg-001 (containing tool_use toolu_1/toolu_2) is replayed verbatim during
 	// context management. Tool counts must dedup by tool_use.id so the replay is
 	// not double-counted (a3y3). WITHOUT dedup TotalCalls would be 5.
-	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
-		makeToolUseBlock("toolu_2", "Write", map[string]interface{}{}),
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{}),
+		makeToolUseBlock("toolu_2", "Write", map[string]any{}),
 	}) + "\n" +
 		// Context replay of msg-001 with the same tool_use ids.
-		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
-			makeToolUseBlock("toolu_2", "Write", map[string]interface{}{}),
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
+			makeToolUseBlock("toolu_2", "Write", map[string]any{}),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:02:01Z", "claude-sonnet-4", "msg-002", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_3", "Bash", map[string]interface{}{}),
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:02:01Z", "claude-sonnet-4", "msg-002", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_3", "Bash", map[string]any{}),
 		}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -434,9 +434,9 @@ func TestToolsAnalyzer_ContextReplayDedup(t *testing.T) {
 func TestToolsAnalyzer_CountsToolUseWithoutID(t *testing.T) {
 	// tool_use blocks without an id cannot be deduped; they must still be counted
 	// (dedup is skipped when the id is empty) so we never under-count (a3y3).
-	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("", "Read", map[string]interface{}{}),
-		makeToolUseBlock("", "Read", map[string]interface{}{}),
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
+		makeToolUseBlock("", "Read", map[string]any{}),
+		makeToolUseBlock("", "Read", map[string]any{}),
 	}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -459,20 +459,20 @@ func TestToolsAnalyzer_CountsToolUseWithoutID(t *testing.T) {
 func TestToolsAnalyzer_AgentToolCalls(t *testing.T) {
 	// JSONL with a main tool call (Read) and a Task tool that spawned an agent with 25 tool calls
 	// NOTE: toolUseResult is at the top level of the user message, not inside content blocks
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/test.txt"}),
-		makeToolUseBlock("toolu_2", "Task", map[string]interface{}{"prompt": "Do something", "subagent_type": "Explore"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/test.txt"}),
+		makeToolUseBlock("toolu_2", "Task", map[string]any{"prompt": "Do something", "subagent_type": "Explore"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1a", "2025-01-01T00:00:01.5Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1a", "2025-01-01T00:00:01.5Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
-			{"type": "tool_result", "tool_use_id": "toolu_2", "content": []map[string]interface{}{{"type": "text", "text": "Done"}}},
-		}, map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
+			{"type": "tool_result", "tool_use_id": "toolu_2", "content": []map[string]any{{"type": "text", "text": "Done"}}},
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "abc123",
 			"totalToolUseCount": float64(25),
-			"usage":             map[string]interface{}{"input_tokens": float64(500), "output_tokens": float64(1000)},
+			"usage":             map[string]any{"input_tokens": float64(500), "output_tokens": float64(1000)},
 		}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -501,7 +501,7 @@ func TestToolsAnalyzer_AgentToolCalls(t *testing.T) {
 
 func TestComputeFromJSONL(t *testing.T) {
 	// Integration test using the main entry point
-	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n" +
 		makeCompactBoundaryMessageWithParent("c1", "2025-01-01T00:00:15Z", "auto", 50000, "a1") + "\n"
@@ -521,21 +521,21 @@ func TestComputeFromJSONL(t *testing.T) {
 }
 
 func TestFileCollectionWithAgents(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{}),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent1",
 			"totalToolUseCount": float64(10),
-			"usage":             map[string]interface{}{"input_tokens": float64(200), "output_tokens": float64(100)},
+			"usage":             map[string]any{"input_tokens": float64(200), "output_tokens": float64(100)},
 		}) + "\n"
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 200, 100, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1", "Read", map[string]interface{}{}),
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 200, 100, []map[string]any{
+		makeToolUseBlock("toolu_a1", "Read", map[string]any{}),
 	}) + "\n" +
-		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]any{
 			makeToolResultBlock("toolu_a1", "file contents", false),
 		}) + "\n"
 
@@ -575,22 +575,22 @@ func TestFileCollectionWithAgents(t *testing.T) {
 
 func TestTokensAnalyzer_WithAgentFile(t *testing.T) {
 	// Main transcript with Task tool and toolUseResult
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{}),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent1",
 			"totalToolUseCount": float64(5),
-			"usage":             map[string]interface{}{"input_tokens": float64(200), "output_tokens": float64(100)},
+			"usage":             map[string]any{"input_tokens": float64(200), "output_tokens": float64(100)},
 		}) + "\n"
 	// Agent file with actual token usage
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 150, 75, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 150, 75, []map[string]any{
 		makeTextBlock("Thinking..."),
 	}) + "\n" +
-		makeAssistantMessage("aa2", "2025-01-01T00:00:01.6Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+		makeAssistantMessage("aa2", "2025-01-01T00:00:01.6Z", "claude-haiku-3", 50, 25, []map[string]any{
 			makeTextBlock("Done"),
 		}) + "\n"
 
@@ -619,16 +619,16 @@ func TestTokensAnalyzer_WithAgentFile(t *testing.T) {
 func TestTokensAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 	// Main transcript with Task tool and toolUseResult, but NO agent file
 	// NOTE: toolUseResult is at the top level of the user message
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{"subagent_type": "Explore"}),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent1",
 			"totalToolUseCount": float64(5),
-			"usage":             map[string]interface{}{"input_tokens": float64(200), "output_tokens": float64(100)},
+			"usage":             map[string]any{"input_tokens": float64(200), "output_tokens": float64(100)},
 		}) + "\n"
 
 	// Without agent file: should use toolUseResult fallback
@@ -656,31 +656,31 @@ func TestTokensAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 func TestToolsAnalyzer_WithAgentFile(t *testing.T) {
 	// Main transcript with Task tool
 	// NOTE: toolUseResult is at the top level of the user message
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
-		makeToolUseBlock("toolu_2", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{}),
+		makeToolUseBlock("toolu_2", "Task", map[string]any{"subagent_type": "Explore"}),
 	}) + "\n" +
-		makeUserMessageWithToolResults("u1a", "2025-01-01T00:00:01.5Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1a", "2025-01-01T00:00:01.5Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_2", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent1",
 			"totalToolUseCount": float64(10),
-			"usage":             map[string]interface{}{},
+			"usage":             map[string]any{},
 		}) + "\n"
 	// Agent file with 3 tool calls
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1", "Read", map[string]interface{}{}),
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_a1", "Read", map[string]any{}),
 	}) + "\n" +
-		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]any{
 			makeToolResultBlock("toolu_a1", "ok", false),
 		}) + "\n" +
-		makeAssistantMessage("aa2", "2025-01-01T00:00:01.7Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-			makeToolUseBlock("toolu_a2", "Write", map[string]interface{}{}),
-			makeToolUseBlock("toolu_a3", "Grep", map[string]interface{}{}),
+		makeAssistantMessage("aa2", "2025-01-01T00:00:01.7Z", "claude-haiku-3", 50, 25, []map[string]any{
+			makeToolUseBlock("toolu_a2", "Write", map[string]any{}),
+			makeToolUseBlock("toolu_a3", "Grep", map[string]any{}),
 		}) + "\n"
 
 	// With agent file: should count agent tool calls directly (not use totalToolUseCount)
@@ -716,20 +716,20 @@ func TestToolsAnalyzer_WithAgentFile(t *testing.T) {
 func TestToolsAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 	// Main transcript with Task tool, but NO agent file
 	// NOTE: toolUseResult is at the top level of the user message
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
-		makeToolUseBlock("toolu_2", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{}),
+		makeToolUseBlock("toolu_2", "Task", map[string]any{"subagent_type": "Explore"}),
 	}) + "\n" +
-		makeUserMessageWithToolResults("u1a", "2025-01-01T00:00:01.5Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1a", "2025-01-01T00:00:01.5Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_2", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent1",
 			"totalToolUseCount": float64(10),
-			"usage":             map[string]interface{}{},
+			"usage":             map[string]any{},
 		}) + "\n"
 
 	// Without agent file: should use totalToolUseCount fallback
@@ -751,16 +751,16 @@ func TestToolsAnalyzer_FallbackWithoutAgentFile(t *testing.T) {
 
 func TestSessionAnalyzer_AgentModels(t *testing.T) {
 	// Main transcript uses sonnet
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"agentId": "agent1",
 		}) + "\n"
 	// Agent uses haiku
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Agent response"),
 	}) + "\n"
 
@@ -799,12 +799,12 @@ func TestSessionAnalyzer_AgentModels(t *testing.T) {
 
 func TestCodeActivityAnalyzer_WithAgentFile(t *testing.T) {
 	// Main transcript reads one file
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/main.go"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/main.go"}),
 	}) + "\n"
 	// Agent reads another file
-	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1", "Read", map[string]interface{}{"file_path": "/agent.go"}),
+	agentJsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_a1", "Read", map[string]any{"file_path": "/agent.go"}),
 	}) + "\n"
 
 	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{"agent1": []byte(agentJsonl)})
@@ -825,16 +825,16 @@ func TestCodeActivityAnalyzer_WithAgentFile(t *testing.T) {
 
 func TestAgentsAnalyzer_BasicAgentInvocation(t *testing.T) {
 	// Real JSONL format: Task tool_use followed by tool_result with top-level toolUseResult
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_01ABC123", "Task", map[string]interface{}{
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_01ABC123", "Task", map[string]any{
 			"description":   "Explore codebase",
 			"prompt":        "Find the main function",
 			"subagent_type": "Explore",
 		}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:10Z", []map[string]interface{}{
-			{"type": "tool_result", "tool_use_id": "toolu_01ABC123", "content": []map[string]interface{}{{"type": "text", "text": "Found main function in main.go"}}},
-		}, map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:10Z", []map[string]any{
+			{"type": "tool_result", "tool_use_id": "toolu_01ABC123", "content": []map[string]any{{"type": "text", "text": "Found main function in main.go"}}},
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent_xyz",
 			"totalTokens":       float64(5000),
@@ -868,24 +868,24 @@ func TestAgentsAnalyzer_BasicAgentInvocation(t *testing.T) {
 
 func TestAgentsAnalyzer_MultipleAgentTypes(t *testing.T) {
 	// Multiple agent invocations of different types
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_explore", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_explore", "Task", map[string]any{"subagent_type": "Explore"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_explore", "Done", false),
-		}, map[string]interface{}{"agentId": "agent1"}) + "\n" +
-		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_plan", "Task", map[string]interface{}{"subagent_type": "Plan"}),
+		}, map[string]any{"agentId": "agent1"}) + "\n" +
+		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_plan", "Task", map[string]any{"subagent_type": "Plan"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u2", "2025-01-01T00:00:04Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u2", "2025-01-01T00:00:04Z", []map[string]any{
 			makeToolResultBlock("toolu_plan", "Done", false),
-		}, map[string]interface{}{"agentId": "agent2"}) + "\n" +
-		makeAssistantMessageWithStopReason("a3", "2025-01-01T00:00:05Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_explore2", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+		}, map[string]any{"agentId": "agent2"}) + "\n" +
+		makeAssistantMessageWithStopReason("a3", "2025-01-01T00:00:05Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_explore2", "Task", map[string]any{"subagent_type": "Explore"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u3", "2025-01-01T00:00:06Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u3", "2025-01-01T00:00:06Z", []map[string]any{
 			makeToolResultBlock("toolu_explore2", "error", true),
-		}, map[string]interface{}{"agentId": "agent3"}) + "\n"
+		}, map[string]any{"agentId": "agent3"}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -923,10 +923,10 @@ func TestAgentsAnalyzer_MultipleAgentTypes(t *testing.T) {
 
 func TestAgentsAnalyzer_NoAgentInvocations(t *testing.T) {
 	// Regular tool usage without agent invocations
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/test.txt"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/test.txt"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n"
 
@@ -950,12 +950,12 @@ func TestAgentsAnalyzer_NoAgentInvocations(t *testing.T) {
 
 func TestAgentsAnalyzer_AgentToolName(t *testing.T) {
 	// The tool was renamed from "Task" to "Agent" — both names should be recognized
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Agent", map[string]interface{}{"subagent_type": "Explore", "prompt": "Find something", "description": "test"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Agent", map[string]any{"subagent_type": "Explore", "prompt": "Find something", "description": "test"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Found it", false),
-		}, map[string]interface{}{"agentId": "agent_1"}) + "\n"
+		}, map[string]any{"agentId": "agent_1"}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -981,12 +981,12 @@ func TestAgentsAnalyzer_AgentToolName(t *testing.T) {
 
 func TestAgentsAnalyzer_UnknownAgentType(t *testing.T) {
 	// Agent tool without subagent_type but with agentId in result (should count as "unknown")
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{"prompt": "Do something"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{"prompt": "Do something"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{"agentId": "agent_orphan"}) + "\n"
+		}, map[string]any{"agentId": "agent_orphan"}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -1053,10 +1053,10 @@ func TestAgentsAnalyzer_RealSession(t *testing.T) {
 
 func TestSkillsAnalyzer_BasicSkillInvocation(t *testing.T) {
 	// Skill tool_use followed by tool_result
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_skill1", "Skill", map[string]interface{}{"skill": "commit", "args": "-m 'test'"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_skill1", "Skill", map[string]any{"skill": "commit", "args": "-m 'test'"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_skill1", "Skill executed successfully", false),
 		}) + "\n"
 
@@ -1087,22 +1087,22 @@ func TestSkillsAnalyzer_BasicSkillInvocation(t *testing.T) {
 
 func TestSkillsAnalyzer_MultipleSkillTypes(t *testing.T) {
 	// Multiple skill invocations of different types
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_s1", "Skill", map[string]interface{}{"skill": "commit"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_s1", "Skill", map[string]any{"skill": "commit"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_s1", "Done", false),
 		}) + "\n" +
-		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_s2", "Skill", map[string]interface{}{"skill": "codebase-maintenance"}),
+		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_s2", "Skill", map[string]any{"skill": "codebase-maintenance"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:04Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:04Z", []map[string]any{
 			makeToolResultBlock("toolu_s2", "Done", false),
 		}) + "\n" +
-		makeAssistantMessageWithStopReason("a3", "2025-01-01T00:00:05Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_s3", "Skill", map[string]interface{}{"skill": "commit"}),
+		makeAssistantMessageWithStopReason("a3", "2025-01-01T00:00:05Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_s3", "Skill", map[string]any{"skill": "commit"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u3", "2025-01-01T00:00:06Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u3", "2025-01-01T00:00:06Z", []map[string]any{
 			makeToolResultBlock("toolu_s3", "error", true),
 		}) + "\n"
 
@@ -1142,10 +1142,10 @@ func TestSkillsAnalyzer_MultipleSkillTypes(t *testing.T) {
 
 func TestSkillsAnalyzer_NoSkillInvocations(t *testing.T) {
 	// Regular tool usage without Skills
-	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/test.txt"}),
+	jsonl := makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/test.txt"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "file contents", false),
 		}) + "\n"
 
@@ -1174,14 +1174,14 @@ func TestSkillsAnalyzer_NoSkillInvocations(t *testing.T) {
 func TestAssistantMessageGroups_MultiLinePerResponse(t *testing.T) {
 	// Same message ID appears 3 times (thinking, text, tool_use) — one API response
 	// Output tokens grow incrementally: 10 → 50 → 80 (last is final)
-	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]any{
 		makeThinkingBlock("Let me think..."),
 	}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("Here's my response"),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
 		}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -1226,14 +1226,14 @@ func TestAssistantMessageGroups_MultiLinePerResponse(t *testing.T) {
 func TestAssistantMessageGroups_ContextReplay(t *testing.T) {
 	// msg-001 appears, then msg-002, then msg-001 again (context replay).
 	// Replayed message has identical usage to original — shouldn't be double-counted.
-	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 		makeTextBlock("First response"),
 	}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]any{
 			makeTextBlock("Second response"),
 		}) + "\n" +
 		// Context replay of msg-001 (hundreds of lines later in practice)
-		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:03Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:03Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("First response"),
 		}) + "\n"
 
@@ -1260,17 +1260,17 @@ func TestTokensAnalyzer_Dedup(t *testing.T) {
 	// Same message ID with 3 lines (incremental output_tokens: 10, 50, 80)
 	// Plus a distinct message
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 10, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 10, []map[string]any{
 			makeThinkingBlock("thinking..."),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 80, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 100, 80, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
 		}) + "\n" +
 		// Second distinct message
-		makeAssistantMessageWithMsgID("a4", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", "msg-002", 200, 60, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a4", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", "msg-002", 200, 60, []map[string]any{
 			makeTextBlock("another response"),
 		}) + "\n"
 
@@ -1299,14 +1299,14 @@ func TestTokensAnalyzer_Dedup(t *testing.T) {
 func TestSessionAnalyzer_Dedup(t *testing.T) {
 	// 3 lines with same message ID → should count as 1 assistant message
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]any{
 			makeThinkingBlock("thinking..."),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
 		}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -1344,14 +1344,14 @@ func TestSessionAnalyzer_Dedup(t *testing.T) {
 func TestConversationAnalyzer_Dedup(t *testing.T) {
 	// User prompt → 3 assistant lines (same msg ID) → should be 1 assistant turn
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]any{
 			makeThinkingBlock("thinking..."),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		makeAssistantMessageWithMsgID("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
 		}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "thanks") + "\n"
 
@@ -1379,14 +1379,14 @@ func TestConversationAnalyzer_ContextReplayDedup(t *testing.T) {
 	// msg-001 appears, then later replayed by context management
 	// Should still count as 1 assistant turn
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
 		// Context replay of msg-001
-		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:00:02Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:00:02Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]any{
 			makeTextBlock("another response"),
 		}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "bye") + "\n"
@@ -1415,16 +1415,16 @@ func TestConversationAnalyzer_CrossTurnContextReplay(t *testing.T) {
 	// Turn 2 should count as an assistant turn (has new msg-002),
 	// but msg-001 replay should not inflate the count.
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response 1"),
 		}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
 		// Context replay of msg-001 (re-logged by context management)
-		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response 1"),
 		}) + "\n" +
 		// Actual new response to u2
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:01:02Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:01:02Z", "claude-sonnet-4", "msg-002", 200, 100, []map[string]any{
 			makeTextBlock("response 2"),
 		}) + "\n"
 
@@ -1451,12 +1451,12 @@ func TestConversationAnalyzer_CrossTurnReplayOnly(t *testing.T) {
 	// msg-001 in turn 1, then replayed in turn 2 with NO new response.
 	// Turn 2 should NOT count as an assistant turn.
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "thanks") + "\n" +
 		// Context replay of msg-001 only — no new assistant response
-		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n"
 
@@ -1482,15 +1482,15 @@ func TestConversationAnalyzer_CrossTurnReplayOnly(t *testing.T) {
 func TestTokensAnalyzer_ContextReplayDedup(t *testing.T) {
 	// msg-001 appears twice (context replay). Tokens should not be double-counted.
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 500, 200, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", "msg-001", 500, 200, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
 		// Context replay of msg-001
-		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4-20241022", "msg-001", 500, 200, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a1r", "2025-01-01T00:01:01Z", "claude-sonnet-4-20241022", "msg-001", 500, 200, []map[string]any{
 			makeTextBlock("response"),
 		}) + "\n" +
-		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:01:02Z", "claude-sonnet-4-20241022", "msg-002", 300, 100, []map[string]interface{}{
+		makeAssistantMessageWithMsgID("a2", "2025-01-01T00:01:02Z", "claude-sonnet-4-20241022", "msg-002", 300, 100, []map[string]any{
 			makeTextBlock("new response"),
 		}) + "\n"
 
@@ -1581,14 +1581,14 @@ func TestAssistantMessageGroups_NoMessageID(t *testing.T) {
 
 func TestAssistantMessageGroups_FastModeFlag(t *testing.T) {
 	// Only one of three lines has speed="fast". The group should have IsFastMode=true.
-	jsonl := makeAssistantMessageWithMsgIDAndSpeed("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]interface{}{
+	jsonl := makeAssistantMessageWithMsgIDAndSpeed("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 10, []map[string]any{
 		makeThinkingBlock("thinking..."),
 	}, "") + "\n" +
-		makeAssistantMessageWithMsgIDAndSpeed("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithMsgIDAndSpeed("a2", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 			makeTextBlock("response"),
 		}, "fast") + "\n" +
-		makeAssistantMessageWithMsgIDAndSpeed("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{}),
+		makeAssistantMessageWithMsgIDAndSpeed("a3", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 80, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{}),
 		}, "") + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -1606,7 +1606,7 @@ func TestAssistantMessageGroups_FastModeFlag(t *testing.T) {
 }
 
 func TestAssistantMessageGroups_CacheConsistency(t *testing.T) {
-	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]interface{}{
+	jsonl := makeAssistantMessageWithMsgID("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", "msg-001", 100, 50, []map[string]any{
 		makeTextBlock("response"),
 	}) + "\n"
 

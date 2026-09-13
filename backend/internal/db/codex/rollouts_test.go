@@ -19,8 +19,6 @@ const (
 	siblingUUID    = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 )
 
-func ptr(s string) *string { return &s }
-
 // setupCodexEnv creates a user + codex session + the codex store, returning
 // them in one bundle. The session_type is set to "codex" because in
 // production all writers to codex_rollouts go through a codex session.
@@ -125,13 +123,13 @@ func TestUpsertRollout_FirstWriteWinsOnParent(t *testing.T) {
 	store, userID, sessionID, ctx := setupCodexEnv(t)
 
 	// First write: parent = rootUUID
-	first := makeParams(childUUID, sessionID, "child.jsonl", ptr(rootUUID))
+	first := makeParams(childUUID, sessionID, "child.jsonl", new(rootUUID))
 	if err := store.UpsertRollout(ctx, userID, first); err != nil {
 		t.Fatalf("first: %v", err)
 	}
 
 	// Second write: parent = siblingUUID (different). Must be preserved.
-	second := makeParams(childUUID, sessionID, "child.jsonl", ptr(siblingUUID))
+	second := makeParams(childUUID, sessionID, "child.jsonl", new(siblingUUID))
 	if err := store.UpsertRollout(ctx, userID, second); err != nil {
 		t.Fatalf("second: %v", err)
 	}
@@ -155,7 +153,7 @@ func TestUpsertRollout_ParentNilThenSet(t *testing.T) {
 	if err := store.UpsertRollout(ctx, userID, makeParams(childUUID, sessionID, "child.jsonl", nil)); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	if err := store.UpsertRollout(ctx, userID, makeParams(childUUID, sessionID, "child.jsonl", ptr(rootUUID))); err != nil {
+	if err := store.UpsertRollout(ctx, userID, makeParams(childUUID, sessionID, "child.jsonl", new(rootUUID))); err != nil {
 		t.Fatalf("second: %v", err)
 	}
 
@@ -346,9 +344,9 @@ func TestListSubtree_LinearChain(t *testing.T) {
 	// root -> child -> grandchild
 	mustUpsert(t, store, userID, makeParams(rootUUID, sessionID, "r.jsonl", nil))
 	time.Sleep(5 * time.Millisecond)
-	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", ptr(rootUUID)))
+	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", new(rootUUID)))
 	time.Sleep(5 * time.Millisecond)
-	mustUpsert(t, store, userID, makeParams(grandchildUUID, sessionID, "g.jsonl", ptr(childUUID)))
+	mustUpsert(t, store, userID, makeParams(grandchildUUID, sessionID, "g.jsonl", new(childUUID)))
 
 	got, err := store.ListSubtree(ctx, userID, rootUUID)
 	if err != nil {
@@ -374,8 +372,8 @@ func TestListSubtree_Branching(t *testing.T) {
 
 	// root with two children
 	mustUpsert(t, store, userID, makeParams(rootUUID, sessionID, "r.jsonl", nil))
-	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c1.jsonl", ptr(rootUUID)))
-	mustUpsert(t, store, userID, makeParams(siblingUUID, sessionID, "c2.jsonl", ptr(rootUUID)))
+	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c1.jsonl", new(rootUUID)))
+	mustUpsert(t, store, userID, makeParams(siblingUUID, sessionID, "c2.jsonl", new(rootUUID)))
 
 	got, err := store.ListSubtree(ctx, userID, rootUUID)
 	if err != nil {
@@ -422,7 +420,7 @@ func TestListSubtree_QueryMissingRootReturnsEmpty(t *testing.T) {
 	store, userID, sessionID, ctx := setupCodexEnv(t)
 
 	// Only a child exists; its parent_thread_uuid is an orphan reference.
-	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", ptr(rootUUID)))
+	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", new(rootUUID)))
 
 	got, err := store.ListSubtree(ctx, userID, rootUUID)
 	if err != nil {
@@ -440,7 +438,7 @@ func TestListSubtree_OrphanChildReachableViaOwnUUID(t *testing.T) {
 	store, userID, sessionID, ctx := setupCodexEnv(t)
 
 	// Child references a never-uploaded parent.
-	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", ptr(rootUUID)))
+	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", new(rootUUID)))
 
 	got, err := store.ListSubtree(ctx, userID, childUUID)
 	if err != nil {
@@ -458,7 +456,7 @@ func TestListSubtree_CascadeOnSessionDelete(t *testing.T) {
 	store, userID, sessionID, ctx := setupCodexEnv(t)
 
 	mustUpsert(t, store, userID, makeParams(rootUUID, sessionID, "r.jsonl", nil))
-	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", ptr(rootUUID)))
+	mustUpsert(t, store, userID, makeParams(childUUID, sessionID, "c.jsonl", new(rootUUID)))
 
 	if _, err := store.conn().ExecContext(ctx, `DELETE FROM sessions WHERE id = $1`, sessionID); err != nil {
 		t.Fatalf("delete session: %v", err)

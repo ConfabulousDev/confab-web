@@ -18,7 +18,7 @@ import (
 )
 
 // AuthenticatedRequest creates an HTTP request with user authentication context
-func AuthenticatedRequest(t *testing.T, method, url string, body interface{}, userID int64) *http.Request {
+func AuthenticatedRequest(t *testing.T, method, url string, body any, userID int64) *http.Request {
 	t.Helper()
 
 	var bodyReader io.Reader
@@ -39,7 +39,7 @@ func AuthenticatedRequest(t *testing.T, method, url string, body interface{}, us
 }
 
 // ParseJSONResponse decodes JSON response body into v
-func ParseJSONResponse(t *testing.T, w *httptest.ResponseRecorder, v interface{}) {
+func ParseJSONResponse(t *testing.T, w *httptest.ResponseRecorder, v any) {
 	t.Helper()
 
 	if err := json.NewDecoder(w.Body).Decode(v); err != nil {
@@ -146,7 +146,7 @@ func CreateTestSessionWithGitInfo(t *testing.T, env *TestEnvironment, userID int
 
 	sessionID := uuid.New().String()
 
-	gitInfo := map[string]interface{}{
+	gitInfo := map[string]any{
 		"repo_url": repoURL,
 	}
 	gitInfoJSON, err := json.Marshal(gitInfo)
@@ -170,7 +170,7 @@ func CreateTestSessionWithGitInfo(t *testing.T, env *TestEnvironment, userID int
 // CreateTestSessionWithGitInfoMap creates a session whose git_info JSONB is the
 // caller-supplied map verbatim, for tests that need a rich blob (remotes,
 // tracking_remote, author, credential-bearing repo_url, etc.).
-func CreateTestSessionWithGitInfoMap(t *testing.T, env *TestEnvironment, userID int64, externalID string, gitInfo map[string]interface{}) string {
+func CreateTestSessionWithGitInfoMap(t *testing.T, env *TestEnvironment, userID int64, externalID string, gitInfo map[string]any) string {
 	t.Helper()
 
 	sessionID := uuid.New().String()
@@ -197,7 +197,7 @@ func CreateTestSessionWithGitInfoMap(t *testing.T, env *TestEnvironment, userID 
 // create a session first and add the upstream signal after.
 func SetSessionUpstream(t *testing.T, env *TestEnvironment, sessionID, forkURL, upstreamURL string) {
 	t.Helper()
-	gitInfoJSON, err := json.Marshal(map[string]interface{}{
+	gitInfoJSON, err := json.Marshal(map[string]any{
 		"repo_url": forkURL,
 		"branch":   "main",
 		"remotes": []map[string]string{
@@ -482,7 +482,7 @@ func CreateTestSessionFull(t *testing.T, env *TestEnvironment, userID int64, ext
 
 	sessionID := uuid.New().String()
 
-	gitInfo := map[string]interface{}{}
+	gitInfo := map[string]any{}
 	if opts.RepoURL != "" {
 		gitInfo["repo_url"] = opts.RepoURL
 	}

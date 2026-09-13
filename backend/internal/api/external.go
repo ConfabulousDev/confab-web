@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
+	"github.com/go-chi/chi/v5"
 )
 
 // CondensedTranscriptResponse is the JSON response for the condensed transcript endpoint.
@@ -25,17 +25,17 @@ type CondensedTranscriptResponse struct {
 
 // CondensedTranscriptMetadata contains session metadata alongside the condensed transcript.
 type CondensedTranscriptMetadata struct {
-	SessionID        string                 `json:"session_id"`
-	ExternalID       string                 `json:"external_id"`
-	Title            string                 `json:"title"`
-	Repo             *string                `json:"repo,omitempty"`
-	Branch           *string                `json:"branch,omitempty"`
-	FirstSeen        time.Time              `json:"first_seen"`
-	LastSyncAt       *time.Time             `json:"last_sync_at,omitempty"`
-	TotalLines       int64                  `json:"total_lines"`
-	EstimatedCostUSD *float64               `json:"estimated_cost_usd,omitempty"`
-	SmartRecap       *SmartRecapExport      `json:"smart_recap,omitempty"`
-	Analytics        map[string]interface{} `json:"analytics,omitempty"`
+	SessionID        string            `json:"session_id"`
+	ExternalID       string            `json:"external_id"`
+	Title            string            `json:"title"`
+	Repo             *string           `json:"repo,omitempty"`
+	Branch           *string           `json:"branch,omitempty"`
+	FirstSeen        time.Time         `json:"first_seen"`
+	LastSyncAt       *time.Time        `json:"last_sync_at,omitempty"`
+	TotalLines       int64             `json:"total_lines"`
+	EstimatedCostUSD *float64          `json:"estimated_cost_usd,omitempty"`
+	SmartRecap       *SmartRecapExport `json:"smart_recap,omitempty"`
+	Analytics        map[string]any    `json:"analytics,omitempty"`
 }
 
 // SmartRecapExport is a simplified smart recap for external consumption.
@@ -194,7 +194,7 @@ func buildCondensedMetadata(session *db.SessionDetail, totalLines int64) Condens
 	}
 
 	// Extract repo and branch from git_info
-	if gitInfo, ok := session.GitInfo.(map[string]interface{}); ok {
+	if gitInfo, ok := session.GitInfo.(map[string]any); ok {
 		if repoURL, ok := gitInfo["repo_url"].(string); ok && repoURL != "" {
 			repo := extractRepoName(repoURL)
 			meta.Repo = &repo

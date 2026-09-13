@@ -78,7 +78,7 @@ func TestGetSessionAnalytics_Cursor_HTTP_Integration(t *testing.T) {
 		if !ok {
 			t.Fatalf("code_activity card missing: %v", result.Cards)
 		}
-		m, ok := raw.(map[string]interface{})
+		m, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("code_activity card unexpected type: %T", raw)
 		}

@@ -22,8 +22,6 @@ func setupGitHubStore(t *testing.T) (*dbgithub.Store, string, *testutil.TestEnvi
 	return &dbgithub.Store{DB: env.DB}, sessionID, env
 }
 
-func strPtr(s string) *string { return &s }
-
 func TestCreateGitHubLink_InsertsNew(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test")
@@ -38,7 +36,7 @@ func TestCreateGitHubLink_InsertsNew(t *testing.T) {
 		Owner:     "foo",
 		Repo:      "bar",
 		Ref:       "42",
-		Title:     strPtr("first version"),
+		Title:     new("first version"),
 		Source:    models.GitHubLinkSourceManual,
 	}, true)
 	if err != nil {
@@ -95,7 +93,7 @@ func TestCreateGitHubLink_UpsertUpdatesSourceAndURL(t *testing.T) {
 		Owner:     "o",
 		Repo:      "r",
 		Ref:       "aaaaaaa",
-		Title:     strPtr("commit msg"),
+		Title:     new("commit msg"),
 		Source:    models.GitHubLinkSourceCLIHook,
 	}, true)
 	if err != nil {
@@ -110,7 +108,7 @@ func TestCreateGitHubLink_UpsertUpdatesSourceAndURL(t *testing.T) {
 		Owner:     "o",
 		Repo:      "r",
 		Ref:       "aaaaaaa",
-		Title:     strPtr("commit msg v2"),
+		Title:     new("commit msg v2"),
 		Source:    models.GitHubLinkSourceTranscript,
 	}, true)
 	if err != nil {
@@ -153,17 +151,17 @@ func TestCreateGitHubLink_OverwriteTitle(t *testing.T) {
 		{
 			name:           "overwrite_true_replaces_existing",
 			ref:            "1",
-			initialTitle:   strPtr("original title"),
+			initialTitle:   new("original title"),
 			overwriteTitle: true,
-			secondTitle:    strPtr("replaced title"),
+			secondTitle:    new("replaced title"),
 			wantTitle:      "replaced title",
 		},
 		{
 			name:           "overwrite_false_preserves_existing",
 			ref:            "2",
-			initialTitle:   strPtr("user-set title"),
+			initialTitle:   new("user-set title"),
 			overwriteTitle: false,
-			secondTitle:    strPtr("enricher would set this"),
+			secondTitle:    new("enricher would set this"),
 			wantTitle:      "user-set title",
 		},
 		{
@@ -171,7 +169,7 @@ func TestCreateGitHubLink_OverwriteTitle(t *testing.T) {
 			ref:            "3",
 			initialTitle:   nil, // existing title is NULL → fill-only still populates
 			overwriteTitle: false,
-			secondTitle:    strPtr("background-enriched"),
+			secondTitle:    new("background-enriched"),
 			wantTitle:      "background-enriched",
 		},
 	}
@@ -294,7 +292,7 @@ func TestGetGitHubLinkByID_HappyPath(t *testing.T) {
 		Owner:     "o",
 		Repo:      "r",
 		Ref:       "5",
-		Title:     strPtr("hi"),
+		Title:     new("hi"),
 		Source:    models.GitHubLinkSourceManual,
 	}, true)
 	if err != nil {

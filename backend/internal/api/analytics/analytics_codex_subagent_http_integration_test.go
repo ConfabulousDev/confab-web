@@ -128,7 +128,7 @@ func TestGetSessionAnalytics_CodexSubagent_HTTP_Integration(t *testing.T) {
 			t.Fatalf("Cards[\"conversation\"] missing in response: %v", result.Cards)
 		}
 		// JSON decode round-trips ConversationCardData as map[string]interface{}.
-		m, ok := raw.(map[string]interface{})
+		m, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("conversation card unexpected type: %T", raw)
 		}

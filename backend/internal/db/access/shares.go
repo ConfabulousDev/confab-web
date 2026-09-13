@@ -68,7 +68,7 @@ func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64,
 		// Batch lookup: get all existing user_ids for the recipient emails
 		emailToUserID := make(map[string]int64)
 		placeholders := make([]string, len(recipientEmails))
-		args := make([]interface{}, len(recipientEmails))
+		args := make([]any, len(recipientEmails))
 		for i, email := range recipientEmails {
 			placeholders[i] = fmt.Sprintf("LOWER($%d)", i+1)
 			args[i] = email
@@ -97,7 +97,7 @@ func (s *Store) CreateShare(ctx context.Context, sessionID string, userID int64,
 
 		// Batch insert: build multi-row INSERT for all recipients
 		insertPlaceholders := make([]string, len(recipientEmails))
-		insertArgs := make([]interface{}, 0, len(recipientEmails)*3)
+		insertArgs := make([]any, 0, len(recipientEmails)*3)
 		for i, email := range recipientEmails {
 			var recipientUserID *int64
 			if uid, ok := emailToUserID[strings.ToLower(email)]; ok {

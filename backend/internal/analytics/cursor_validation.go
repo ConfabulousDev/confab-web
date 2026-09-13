@@ -25,7 +25,7 @@ func parseCursorJSONL(ctx context.Context, raw []byte, fileName string) ([]*Curs
 	var lineErrors []LineValidationError
 	lineNum := 0
 
-	for _, line := range bytes.Split(raw, []byte("\n")) {
+	for line := range bytes.SplitSeq(raw, []byte("\n")) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue
