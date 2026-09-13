@@ -17,7 +17,7 @@ Internal packages for the Confab backend server. All packages live under
 | `db` | Database connection, shared types (`SessionListItem`, `SessionDetail`), error sentinels, helpers | Changing connection pooling, adding shared DB types |
 | `db/access` | Session access checks and share CRUD | Changing share permissions, access control rules |
 | `db/codex` | Codex rollout sidecar store (`codex_rollouts` table): `UpsertRollout`, `GetRollout`, `ListSubtree` recursive CTE. Records the parent-child thread tree without modifying `sessions` | Changing Codex parent-child thread storage, adding sidecar fields |
-| `db/dbadmincardinvalidations` | Admin card invalidation audit table + smart-recap quota-bypass signal (CF-343) | Changing card invalidation semantics, audit shape |
+| `db/dbadmincardinvalidations` | Admin card invalidation audit table + smart-recap quota-bypass signal (CF-343); `session_title` target marking + provider filter (nbrd) | Changing card invalidation semantics, audit shape, title candidate predicate |
 | `db/dbadminsettings` | Admin settings key-value store (`admin_settings` table) | Adding new admin-configurable settings |
 | `db/dbauth` | OAuth accounts, password hashes, web sessions, API keys, device codes | Adding auth storage, changing token/session schema |
 | `db/events` | Session event insertion (e.g., sync events) | Adding new event types |
@@ -64,8 +64,8 @@ have no internal dependencies.
 
   db/access                    ┐
   db/codex                     │
-  db/dbadmincardinvalidations  │ (also imports analytics for
-  db/dbauth                    │  AllCardTableNames validation)
+  db/dbadmincardinvalidations  │ (also imports analytics for target
+  db/dbauth                    │  validation, and models for providers)
   db/events                    ├─→ db (root only; sub-packages do NOT
   db/github                    │     import each other)
   db/session                   │

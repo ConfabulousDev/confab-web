@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, APIError } from '@/services/api';
 import { formatRelativeTime } from '@/utils';
+import { PROVIDER_VALUES, providerLabel } from '@/utils/providers';
 import Button from '@/components/Button';
 import Alert from '@/components/Alert';
 import Modal from '@/components/Modal';
@@ -10,18 +11,10 @@ import {
   type InvalidateCardsResponse,
   type CardInvalidationsListResponse,
 } from '@/schemas/api';
+import { buildInvalidateCardsRequest, SESSION_TITLE_TARGET } from './invalidateCardsRequest';
 import styles from './AdminCardInvalidationsPage.module.css';
 
 type Feedback = { type: 'success' | 'error' | 'info'; message: string };
-
-// toIsoUtc converts a `datetime-local` input value (e.g. "2026-04-20T12:34")
-// to an ISO-8601 timestamp with explicit UTC timezone. The input is treated as
-// wall-clock UTC per the "UTC" label next to the field.
-function toIsoUtc(datetimeLocal: string): string {
-  if (!datetimeLocal) return '';
-  const withSeconds = datetimeLocal.length === 16 ? `${datetimeLocal}:00` : datetimeLocal;
-  return `${withSeconds}Z`;
-}
 
 // partialFailureFrom extracts the structured partial-failure body from an APIError
 // (500 response shaped like InvalidateCardsResponse).
@@ -31,18 +24,32 @@ function partialFailureFrom(err: unknown): InvalidateCardsResponse | null {
   return parsed.success ? parsed.data : null;
 }
 
+function TargetLabel({ name }: { name: string }) {
+  if (name === SESSION_TITLE_TARGET) {
+    return (
+      <span>
+        Session title: re-derive missing Codex titles / strip Cursor <code>&lt;user_query&gt;</code> tags
+      </span>
+    );
+  }
+  return <code>{name}</code>;
+}
+
 export interface AdminCardInvalidationsPageContentProps {
-  /** Card table names served by the backend (GET /admin/cards/types). */
+  /** Invalidation targets served by the backend (GET /admin/cards/types). */
   cardTypes: string[];
   startDate: string;
   endDate: string;
   selectedCards: Set<string>;
+  /** Canonical providers to scope to; empty means all providers. */
+  selectedProviders: Set<string>;
   reason: string;
   preview: InvalidateCardsResponse | null;
 
   onStartDateChange: (v: string) => void;
   onEndDateChange: (v: string) => void;
   onToggleCard: (card: string) => void;
+  onToggleProvider: (provider: string) => void;
   onReasonChange: (v: string) => void;
 
   onPreview: () => void;
@@ -69,11 +76,13 @@ export function AdminCardInvalidationsPageContent({
   startDate,
   endDate,
   selectedCards,
+  selectedProviders,
   reason,
   preview,
   onStartDateChange,
   onEndDateChange,
   onToggleCard,
+  onToggleProvider,
   onReasonChange,
   onPreview,
   isPreviewing,
@@ -103,7 +112,7 @@ export function AdminCardInvalidationsPageContent({
       )}
 
       <div className={styles.card}>
-        <h3>Invalidate Cards by Date Range</h3>
+        <h3>Invalidate Cards &amp; Session Titles</h3>
         <p className={styles.description}>
           Deletes <code>session_card_*</code> rows for sessions in the selected window.
           The worker will recompute them with current logic/pricing on the next tick.
@@ -133,7 +142,7 @@ export function AdminCardInvalidationsPageContent({
 
         <fieldset className={styles.cardTypesGroup}>
           <legend className={styles.legend}>
-            Card Types <span className={styles.required}>*</span>
+            Targets <span className={styles.required}>*</span>
           </legend>
           {cardTypes.length === 0 ? (
             // Empty while the GET /admin/cards/types fetch is loading or failed;
@@ -147,10 +156,32 @@ export function AdminCardInvalidationsPageContent({
                   checked={selectedCards.has(name)}
                   onChange={() => onToggleCard(name)}
                 />
-                <code>{name}</code>
+                <TargetLabel name={name} />
               </label>
             ))
           )}
+          {cardTypes.includes(SESSION_TITLE_TARGET) && (
+            <p className={styles.description}>
+              Session title recompute runs in the background worker and only repairs Codex sessions
+              with no title and Cursor titles wrapped in <code>&lt;user_query&gt;</code>. It does not
+              recompute cards; select card types for that.
+            </p>
+          )}
+        </fieldset>
+
+        <fieldset className={styles.cardTypesGroup}>
+          <legend className={styles.legend}>Providers</legend>
+          {PROVIDER_VALUES.map((p) => (
+            <label key={p} className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={selectedProviders.has(p)}
+                onChange={() => onToggleProvider(p)}
+              />
+              {providerLabel(p)}
+            </label>
+          ))}
+          <p className={styles.description}>None selected means all providers.</p>
         </fieldset>
 
         <label className={styles.label}>
@@ -183,7 +214,7 @@ export function AdminCardInvalidationsPageContent({
                 .filter(([, n]) => n > 0)
                 .map(([name, n]) => (
                   <li key={name}>
-                    <code>{name}</code>: {n.toLocaleString()} rows
+                    <code>{name}</code>: {n.toLocaleString()} {name === SESSION_TITLE_TARGET ? 'sessions' : 'rows'}
                   </li>
                 ))}
             </ul>
@@ -242,10 +273,10 @@ export function AdminCardInvalidationsPageContent({
         <div className={styles.confirmModal}>
           <h3>Execute invalidation?</h3>
           <p>
-            This will DELETE{' '}
-            <strong>{preview?.affected_sessions.toLocaleString() ?? '?'}</strong> sessions&rsquo; cards
-            across <strong>{selectedCards.size}</strong> card type(s).
-            The worker will recompute them over the next few minutes. This action cannot be undone.
+            This will invalidate{' '}
+            <strong>{preview?.affected_sessions.toLocaleString() ?? '?'}</strong> sessions
+            across <strong>{selectedCards.size}</strong> target(s): selected cards are DELETED and
+            recomputed, session titles are queued for re-derivation. This action cannot be undone.
           </p>
           <label className={styles.label}>
             Type the affected-session count (<strong>{preview?.affected_sessions ?? '?'}</strong>) to confirm
@@ -287,6 +318,7 @@ function AdminCardInvalidationsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
+  const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<InvalidateCardsResponse | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -299,8 +331,8 @@ function AdminCardInvalidationsPage() {
     queryFn: () => adminAPI.listCardInvalidations(),
   });
 
-  // vd31: the card-type checkboxes are sourced from the backend
-  // (analytics.AllCardTableNames) so they can't drift from a hardcoded list.
+  // vd31: the target checkboxes are sourced from the backend
+  // (analytics.AllInvalidationTargets) so they can't drift from a hardcoded list.
   const { data: cardTypesData } = useQuery({
     queryKey: ['admin', 'card-types'],
     queryFn: () => adminAPI.getCardTypes(),
@@ -317,30 +349,31 @@ function AdminCardInvalidationsPage() {
     };
   }
 
-  function toggleCard(name: string) {
-    setSelectedCards((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-    setPreview(null);
+  function toggleIn(setter: (update: (prev: Set<string>) => Set<string>) => void) {
+    return (name: string) => {
+      setter((prev) => {
+        const next = new Set(prev);
+        if (next.has(name)) {
+          next.delete(name);
+        } else {
+          next.add(name);
+        }
+        return next;
+      });
+      setPreview(null);
+    };
   }
 
   function buildRequest(dryRun: boolean) {
-    return {
-      start_date: toIsoUtc(startDate),
-      end_date: endDate ? toIsoUtc(endDate) : undefined,
-      card_types: Array.from(selectedCards),
-      reason: reason.trim(),
-      dry_run: dryRun,
-      // kyrr: on execute, echo the affected-session count from the preview; the
-      // server re-counts and rejects on mismatch. Irrelevant on dry-run.
-      ...(dryRun ? {} : { confirm: confirmInput.trim() }),
-    };
+    return buildInvalidateCardsRequest({
+      startDate,
+      endDate,
+      selectedCards,
+      selectedProviders,
+      reason,
+      confirmInput,
+      dryRun,
+    });
   }
 
   const previewMutation = useMutation({
@@ -395,11 +428,13 @@ function AdminCardInvalidationsPage() {
       startDate={startDate}
       endDate={endDate}
       selectedCards={selectedCards}
+      selectedProviders={selectedProviders}
       reason={reason}
       preview={preview}
       onStartDateChange={setAndInvalidatePreview(setStartDate)}
       onEndDateChange={setAndInvalidatePreview(setEndDate)}
-      onToggleCard={toggleCard}
+      onToggleCard={toggleIn(setSelectedCards)}
+      onToggleProvider={toggleIn(setSelectedProviders)}
       onReasonChange={setAndInvalidatePreview(setReason)}
       onPreview={() => previewMutation.mutate()}
       isPreviewing={previewMutation.isPending}

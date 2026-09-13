@@ -1338,7 +1338,7 @@ Triggers bulk regeneration of all smart recaps. Writes a timestamp to `admin_set
 POST /api/v1/admin/cards/invalidate
 ```
 
-Deletes `session_card_*` rows for sessions in a date window so the precompute worker recomputes them with current logic/pricing on the next tick (CF-343). Writes one audit row per affected session to `admin_card_invalidations`; the row also acts as a per-session smart-recap quota bypass signal.
+Deletes `session_card_*` rows for sessions in a date window so the precompute worker recomputes them with current logic/pricing on the next tick (CF-343), and/or queues a **session title recompute** (the `session_title` target, nbrd). Writes one audit row per affected session to `admin_card_invalidations` (`card_types` exactly as submitted); a row whose `card_types` includes `session_card_smart_recap` also acts as a per-session smart-recap quota bypass signal (`session_title` never does).
 
 **Request:**
 ```json
@@ -1346,6 +1346,7 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
   "start_date": "2026-04-01T00:00:00Z",
   "end_date": "2026-04-20T23:59:59Z",
   "card_types": ["session_card_tokens", "session_card_tokens_v2"],
+  "providers": ["claude-code"],
   "reason": "Opus 4.7 pricing backfill",
   "dry_run": false,
   "confirm": "1234"
@@ -1356,7 +1357,8 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 |-------|------|-------------|
 | `start_date` | string | Required. ISO-8601 with explicit timezone (`Z` or `±hh:mm`). Filter: `sessions.last_message_at >= start_date`. |
 | `end_date` | string | Optional. Same format as `start_date`. Filter: `last_message_at < end_date`. Must be after `start_date`. |
-| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_tokens_v2`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_workflows`, `session_card_smart_recap`. |
+| `card_types` | string[] | Required, non-empty. Each entry must be one of: `session_card_tokens`, `session_card_tokens_v2`, `session_card_session`, `session_card_tools`, `session_card_code_activity`, `session_card_conversation`, `session_card_agents_and_skills`, `session_card_redactions`, `session_card_workflows`, `session_card_smart_recap`, `session_title` (see below). Unknown values → `400 unknown card_type: X`. |
+| `providers` | string[] | Optional. Canonical providers (`claude-code`, `codex`, `opencode`, `cursor`) to scope **every** selected target to; legacy `session_type` aliases (e.g. `Claude Code`) are matched server-side. Omitted or empty = all providers. Non-canonical values → `400 unknown provider: X`. |
 | `reason` | string | Required, 1–500 chars. Stored in the audit row. |
 | `dry_run` | bool | Defaults to `true`. `false` to actually delete. |
 | `confirm` | string | Required on execute (`dry_run: false`) — a typed-confirmation echo (kyrr) of the affected-session count. The server **re-counts** affected sessions at execute time and rejects with `400` unless `confirm` equals that fresh count, binding the action to the current blast radius (a stale preview is rejected too). Ignored on dry-run. |
@@ -1376,9 +1378,30 @@ Deletes `session_card_*` rows for sessions in a date window so the precompute wo
 | Field | Type | Description |
 |-------|------|-------------|
 | `correlation_id` | string | UUID grouping all writes from this run (shared across batches). Generated for dry-run too so the UI can stitch preview → execute. |
-| `affected_sessions` | int | `COUNT(DISTINCT s.id)` where the session has at least one row in any selected card table (intersection semantic). |
+| `affected_sessions` | int | `COUNT(DISTINCT s.id)` over the window and `providers` filter, where the session has at least one row in any selected card table **or** (when `session_title` is selected) is a title candidate — the union across targets. `confirm` must echo this number. |
 | `affected_cards[<table>]` | int | Per-table count of rows that would be / were deleted. |
+| `affected_cards["session_title"]` | int | Present when `session_title` is selected: the number of title candidates that would be / were marked. |
 | `executed` | bool | `false` for dry-run; `true` for actual execute. |
+
+**`session_title` target (nbrd).** Selecting it marks each *title candidate* in the window (sets `sessions.title_recompute_requested_at`); nothing is recomputed in the request. A title candidate is a **Codex** session with `first_user_message IS NULL`, or a **Cursor** session whose `first_user_message` still contains `<user_query>`. The precompute worker (bucket 4) then repairs each marked session from data already stored — stored objects are only read, never modified — and clears the mark:
+
+- **Codex (fill-NULL only):** reads the main transcript's chunk 1 and derives the first human prompt exactly as sync ingest does (`event_msg` stream only, clamped to 8192 bytes). A session that gained a title in the meantime is left untouched; nothing derivable leaves the column `NULL` (never `""`).
+- **Cursor (envelope-only):** unwraps the stored `<user_query>` envelope. An empty envelope is left as-is so the session stays listable; clean values are untouched.
+
+Dry-run counts candidates from the database only; it does not predict per-session outcomes. The worker logs one line per session (`outcome`: `fixed` / `not_fixable` / `already_set` / `superseded`). A filled title makes a previously hidden Codex session listable and counted by Trends / cost-by-model immediately (both compute live); precomputed cards are **not** recomputed by this target — select the card types too.
+
+Example — repair the Codex 0.149.1 title regression and its cards in one run:
+```json
+{
+  "start_date": "2026-08-20T00:00:00Z",
+  "card_types": ["session_card_code_activity", "session_card_tools", "session_card_redactions", "session_card_smart_recap", "session_title"],
+  "providers": ["codex"],
+  "reason": "Codex 0.149.1 wire-format regression",
+  "dry_run": true
+}
+```
+
+Run this before enabling any session retention that could delete the transcripts it reads.
 
 **Partial-failure response (500):** the body includes `completed_batches` and `affected_sessions_executed` reporting progress before the failure, plus an `error` string. Already-committed batches remain invalidated; re-running the same window is safe.
 
@@ -1423,7 +1446,7 @@ Returns up to 500 most recent audit rows (ordered by `invalidated_at DESC`). Pas
 GET /api/v1/admin/cards/types
 ```
 
-Returns the canonical list of invalidatable card table names — the single source of truth (`analytics.AllCardTableNames`) that drives the admin invalidation UI's checkboxes. The frontend renders the list verbatim so it can never drift; `POST /api/v1/admin/cards/invalidate` validates inbound `card_types` against this same list and `400`s unknown values.
+Returns the canonical list of invalidation targets — every card table name plus `session_title` — the single source of truth (`analytics.AllInvalidationTargets`) that drives the admin invalidation UI's checkboxes. The frontend renders the list verbatim so it can never drift; `POST /api/v1/admin/cards/invalidate` validates inbound `card_types` against this same list and `400`s unknown values.
 
 **Response:**
 ```json
@@ -1438,7 +1461,8 @@ Returns the canonical list of invalidatable card table names — the single sour
     "session_card_agents_and_skills",
     "session_card_redactions",
     "session_card_workflows",
-    "session_card_smart_recap"
+    "session_card_smart_recap",
+    "session_title"
   ]
 }
 ```

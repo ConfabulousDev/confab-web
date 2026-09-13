@@ -18,6 +18,7 @@ const CARD_TYPES = [
   'session_card_redactions',
   'session_card_workflows',
   'session_card_smart_recap',
+  'session_title',
 ];
 
 const baseProps: AdminCardInvalidationsPageContentProps = {
@@ -25,11 +26,13 @@ const baseProps: AdminCardInvalidationsPageContentProps = {
   startDate: '',
   endDate: '',
   selectedCards: new Set<string>(),
+  selectedProviders: new Set<string>(),
   reason: '',
   preview: null,
   onStartDateChange: noop,
   onEndDateChange: noop,
   onToggleCard: noop,
+  onToggleProvider: noop,
   onReasonChange: noop,
   onPreview: noop,
   isPreviewing: false,
@@ -63,6 +66,27 @@ export default meta;
 type Story = StoryObj<typeof AdminCardInvalidationsPageContent>;
 
 export const EmptyForm: Story = { args: baseProps };
+
+// nbrd: the Codex-incident repair — session_title plus card types, scoped to Codex,
+// with a preview showing both card rows and title candidates.
+export const SessionTitleWithProviders: Story = {
+  args: {
+    ...baseProps,
+    startDate: '2026-08-20T00:00',
+    selectedCards: new Set<string>(['session_card_code_activity', 'session_title']),
+    selectedProviders: new Set<string>(['codex']),
+    reason: 'Codex 0.149.1 wire-format regression',
+    preview: {
+      correlation_id: '0191a3e0-1234-7000-8000-aabbccddeeff',
+      affected_sessions: 412,
+      affected_cards: {
+        session_card_code_activity: 398,
+        session_title: 405,
+      },
+      executed: false,
+    },
+  },
+};
 
 export const PartiallyFilled: Story = {
   args: {

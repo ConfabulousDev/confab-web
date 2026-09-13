@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db/dbadmincardinvalidations"
 	"github.com/ConfabulousDev/confab-web/internal/httputil"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 const (
@@ -31,9 +33,14 @@ const (
 // start_date/end_date are ISO-8601 timestamps with explicit timezone (Z or ±hh:mm).
 // Missing timezone is rejected with 400.
 type InvalidateCardsRequest struct {
-	StartDate string   `json:"start_date"`
-	EndDate   string   `json:"end_date,omitempty"`
+	StartDate string `json:"start_date"`
+	EndDate   string `json:"end_date,omitempty"`
+	// CardTypes are invalidation targets: card table names and/or "session_title"
+	// (analytics.AllInvalidationTargets).
 	CardTypes []string `json:"card_types"`
+	// Providers optionally restricts every target to sessions of these canonical
+	// providers (models.CanonicalProviders). Empty means all providers.
+	Providers []string `json:"providers,omitempty"`
 	Reason    string   `json:"reason"`
 	DryRun    *bool    `json:"dry_run,omitempty"` // defaults to true when nil
 	// Confirm is the typed-confirmation echo for the execute path (kyrr): the admin
@@ -75,17 +82,18 @@ type CardInvalidationsListResponse struct {
 }
 
 // CardTypesResponse is the GET /admin/cards/types payload — the canonical list of
-// invalidatable card table names.
+// invalidation targets (card table names plus session_title).
 type CardTypesResponse struct {
 	CardTypes []string `json:"card_types"`
 }
 
-// HandleGetCardTypes serves analytics.AllCardTableNames so the admin UI's
-// invalidation checkboxes are sourced from the backend source of truth and can't
-// drift from a hand-maintained frontend copy (vd31). Inbound invalidation
-// requests are still validated against the same list in parseInvalidateCardsRequest.
+// HandleGetCardTypes serves analytics.AllInvalidationTargets (every card table plus
+// session_title) so the admin UI's invalidation checkboxes are sourced from the
+// backend source of truth and can't drift from a hand-maintained frontend copy
+// (vd31). Inbound invalidation requests are validated against the same list in
+// parseInvalidateCardsRequest.
 func (h *Handlers) HandleGetCardTypes(w http.ResponseWriter, _ *http.Request) {
-	httputil.RespondJSON(w, http.StatusOK, CardTypesResponse{CardTypes: analytics.AllCardTableNames})
+	httputil.RespondJSON(w, http.StatusOK, CardTypesResponse{CardTypes: analytics.AllInvalidationTargets})
 }
 
 // parseInvalidateCardsRequest validates the request body and produces the
@@ -118,11 +126,22 @@ func parseInvalidateCardsRequest(req *InvalidateCardsRequest) (dbadmincardinvali
 		return out, false, "", errors.New("card_types must be non-empty")
 	}
 	for _, ct := range req.CardTypes {
-		if !analytics.IsKnownCardTableName(ct) {
+		if !analytics.IsKnownInvalidationTarget(ct) {
 			return out, false, "", errors.New("unknown card_type: " + ct)
 		}
 	}
 	out.CardTypes = req.CardTypes
+
+	// Wire input is canonical-only; legacy session_type aliases are expanded here
+	// so the store's session_type = ANY(...) filter matches rows from older binaries.
+	for _, p := range req.Providers {
+		if !slices.Contains(models.CanonicalProviders, p) {
+			return out, false, "", errors.New("unknown provider: " + p)
+		}
+	}
+	if len(req.Providers) > 0 {
+		out.Providers = models.ExpandWithAliases(req.Providers)
+	}
 
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
@@ -229,6 +248,7 @@ func (h *Handlers) respondExecute(
 		AuditLogFromRequest(r, h.DB, ActionCardInvalidate, map[string]any{
 			"correlation_id":    res.CorrelationID.String(),
 			"card_types":        countReq.CardTypes,
+			"providers":         countReq.Providers,
 			"start_date":        countReq.StartDate.Format(time.RFC3339),
 			"end_date":          formatEndDate(countReq.EndDate),
 			"affected_sessions": res.Result.AffectedSessions,

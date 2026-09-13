@@ -91,7 +91,7 @@ that still uses the public template defaults, `loadConfig` refuses to start when
 
 | Var | Default | Purpose |
 |---|---|---|
-| `WORKER_MAX_SESSIONS` | (required) | Max sessions to scan per cycle for regular cards + smart recap. |
+| `WORKER_MAX_SESSIONS` | (required) | Max sessions to scan per cycle for regular cards, smart recap, and session title recompute (each bucket separately). |
 | `WORKER_MAX_SEARCH_INDEX_SESSIONS` | `200` | Max sessions to scan per cycle for search index. |
 | `WORKER_POLL_INTERVAL` | `30m` | Cycle interval. Garbage/zero/negative values keep the default. |
 | `WORKER_DRY_RUN` | (off) | `"true"` or `"1"` logs intended work without doing it. Case-sensitive. |
@@ -124,7 +124,7 @@ Each prefix supports the same five suffixes. Unset values use the per-bucket def
 
 - Adding a new API endpoint: handler in [`internal/api`](../../internal/api); register in `SetupRoutes`; document in [`backend/API.md`](../../API.md).
 - Adding analytics cards: follow `/add-session-card` skill — touches `internal/analytics`, migrations, and the frontend.
-- Adding a new worker bucket: extend `precomputerAPI` and `Worker.runOnce` in `worker.go` (and the fake in tests). Each bucket has its own `Find*` + `process*` adapter onto `processSessions`.
+- Adding a new worker bucket: extend `precomputerAPI` and `Worker.runOnce` in `worker.go` (and the fake in tests). Each bucket has its own `Find*` + `process*` adapter onto `processSessions`. Current buckets: 1 regular cards, 2 smart recap, 3 search index, 4 session title recompute (`FindTitleRecomputeSessions` / `RecomputeSessionTitle`, nbrd).
 
 ## Tests
 
