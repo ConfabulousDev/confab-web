@@ -28,7 +28,8 @@ services:
       retries: 5
 
   minio:
-    image: quay.io/minio/minio:latest
+    # MinIO community images are frozen (upstream stopped publishing); pinned to the last multi-arch release. See kata z6ts.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -45,7 +46,7 @@ services:
       retries: 5
 
   minio-setup:
-    image: minio/mc:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     depends_on:
       minio:
         condition: service_healthy
