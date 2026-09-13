@@ -236,6 +236,8 @@ SMART_RECAP_MODEL=claude-haiku-4-5-20251001
 SMART_RECAP_QUOTA_LIMIT=500  # Monthly per-user generation limit
 ```
 
+Anthropic smart recaps support Claude Haiku 4.5, Sonnet 5, Opus 4.8, and Opus 5. Fable and Mythos models (thinking always on) are not supported.
+
 To use OpenAI instead:
 
 ```bash

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -128,10 +129,10 @@ func TestNewRecapLLM_RejectsUnknownProvider(t *testing.T) {
 }
 
 // =============================================================================
-// Anthropic adapter: wire request must stay byte-for-byte what it was
+// Anthropic adapter: native structured outputs, no prefill
 // =============================================================================
 
-func TestAnthropicRecapLLM_SendsUnchangedPrefillRequest(t *testing.T) {
+func TestAnthropicRecapLLM_SendsStructuredOutputRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/messages" {
 			t.Errorf("path = %s, want /v1/messages", r.URL.Path)
@@ -143,20 +144,34 @@ func TestAnthropicRecapLLM_SendsUnchangedPrefillRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		want := map[string]any{
-			"model":       "claude-haiku-4-5-20251001",
-			"max_tokens":  float64(1000),
-			"temperature": 0.25,
-			"system":      "SYSTEM",
-			"messages": []any{
-				map[string]any{"role": "user", "content": "USER"},
-				map[string]any{"role": "assistant", "content": "{"},
-			},
+		if body["model"] != "claude-haiku-4-5-20251001" || body["system"] != "SYSTEM" || body["max_tokens"] != float64(1000) {
+			t.Errorf("model/system/max_tokens = %v/%v/%v", body["model"], body["system"], body["max_tokens"])
 		}
-		if !reflect.DeepEqual(body, want) {
-			t.Errorf("anthropic request body changed:\n got: %v\nwant: %v", body, want)
+		wantMessages := []any{map[string]any{"role": "user", "content": "USER"}}
+		if !reflect.DeepEqual(body["messages"], wantMessages) {
+			t.Errorf("messages = %v, want only the user turn (no assistant prefill)", body["messages"])
 		}
-		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"\"recap\": \"hi\"}"}],"usage":{"input_tokens":11,"output_tokens":7}}`))
+		for _, k := range []string{"temperature", "top_p", "top_k"} {
+			if _, ok := body[k]; ok {
+				t.Errorf("request must not include %q", k)
+			}
+		}
+		if !reflect.DeepEqual(body["thinking"], map[string]any{"type": "disabled"}) {
+			t.Errorf("thinking = %v, want {type: disabled}", body["thinking"])
+		}
+		outputConfig, _ := body["output_config"].(map[string]any)
+		format, _ := outputConfig["format"].(map[string]any)
+		if format["type"] != "json_schema" {
+			t.Errorf("output_config.format.type = %v, want json_schema", format["type"])
+		}
+		var wantSchema any
+		if err := json.Unmarshal([]byte(smartRecapAnthropicJSONSchema), &wantSchema); err != nil {
+			t.Fatalf("smartRecapAnthropicJSONSchema is not valid JSON: %v", err)
+		}
+		if !reflect.DeepEqual(format["schema"], wantSchema) {
+			t.Errorf("output_config.format.schema does not match smartRecapAnthropicJSONSchema")
+		}
+		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"{\"recap\": \"hi\"}"}],"usage":{"input_tokens":11,"output_tokens":7}}`))
 	}))
 	defer server.Close()
 
@@ -171,10 +186,88 @@ func TestAnthropicRecapLLM_SendsUnchangedPrefillRequest(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 	if resp.Text != `{"recap": "hi"}` {
-		t.Errorf("Text = %q, want prefill-prepended JSON", resp.Text)
+		t.Errorf("Text = %q, want the reply passed through unprefixed", resp.Text)
 	}
 	if resp.InputTokens != 11 || resp.OutputTokens != 7 {
 		t.Errorf("tokens = %d/%d, want 11/7", resp.InputTokens, resp.OutputTokens)
+	}
+}
+
+func TestAnthropicRecapLLM_TreatsUnusableResponsesAsFailures(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    int
+		body      string
+		wantInErr string
+	}{
+		{
+			name:      "max_tokens stop reason means truncated JSON",
+			body:      `{"stop_reason":"max_tokens","content":[{"type":"text","text":"{\"recap\":"}]}`,
+			wantInErr: "max_tokens",
+		},
+		{
+			name:      "refusal stop reason",
+			body:      `{"stop_reason":"refusal","content":[{"type":"text","text":"I can't help with that"}]}`,
+			wantInErr: "refus",
+		},
+		{
+			name:      "empty text",
+			body:      `{"stop_reason":"end_turn","content":[{"type":"text","text":""}]}`,
+			wantInErr: "no text",
+		},
+		{
+			name:      "no content blocks",
+			body:      `{"stop_reason":"end_turn","content":[]}`,
+			wantInErr: "no text",
+		},
+		{
+			name:      "HTTP error",
+			status:    http.StatusBadRequest,
+			body:      `{"type":"error","error":{"type":"invalid_request_error","message":"thinking disabled not supported"}}`,
+			wantInErr: "thinking disabled not supported",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.status != 0 {
+					w.WriteHeader(tt.status)
+				}
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			llm, err := newRecapLLM(LLMProviderAnthropic, "ak", server.URL)
+			if err != nil {
+				t.Fatalf("newRecapLLM: %v", err)
+			}
+			_, err = llm.Generate(context.Background(), recapLLMRequest{Model: "m", System: "s", User: "u", MaxOutputTokens: 10})
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !strings.Contains(err.Error(), tt.wantInErr) {
+				t.Errorf("error %q should contain %q", err.Error(), tt.wantInErr)
+			}
+		})
+	}
+}
+
+func TestAnthropicRecapLLM_ReturnsOnlyTextBlocks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"{\"recap\":\"hi\"}"}],"usage":{"input_tokens":1,"output_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	llm, err := newRecapLLM(LLMProviderAnthropic, "ak", server.URL)
+	if err != nil {
+		t.Fatalf("newRecapLLM: %v", err)
+	}
+	resp, err := llm.Generate(context.Background(), recapLLMRequest{Model: "m", System: "s", User: "u", MaxOutputTokens: 10})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if resp.Text != `{"recap":"hi"}` {
+		t.Errorf("Text = %q, want only the text block", resp.Text)
 	}
 }
 
@@ -304,7 +397,7 @@ func TestOpenAIRecapLLM_TreatsUnusableResponsesAsFailures(t *testing.T) {
 }
 
 // =============================================================================
-// Schema drift guard: smartRecapJSONSchema vs Go structs
+// Schema drift guard: smartRecapJSONSchema / smartRecapAnthropicJSONSchema vs Go structs
 // =============================================================================
 
 func jsonTagNames(t reflect.Type) []string {
@@ -359,48 +452,109 @@ func assertStrictObjects(t *testing.T, path string, node map[string]any) {
 	}
 }
 
+// assertNoTypeArrays fails on any `"type": [...]` — Anthropic documents anyOf, not type arrays.
+func assertNoTypeArrays(t *testing.T, path string, node any) {
+	t.Helper()
+	switch v := node.(type) {
+	case map[string]any:
+		if _, isArray := v["type"].([]any); isArray {
+			t.Errorf("%s: type array %v; use anyOf", path, v["type"])
+		}
+		for k, child := range v {
+			assertNoTypeArrays(t, path+"."+k, child)
+		}
+	case []any:
+		for i, child := range v {
+			assertNoTypeArrays(t, fmt.Sprintf("%s[%d]", path, i), child)
+		}
+	}
+}
+
 func TestSmartRecapJSONSchema_MatchesResultStructs(t *testing.T) {
-	var schema map[string]any
-	if err := json.Unmarshal([]byte(smartRecapJSONSchema), &schema); err != nil {
+	nullableIntTypeArray := map[string]any{"type": []any{"integer", "null"}}
+	nullableIntAnyOf := map[string]any{"anyOf": []any{
+		map[string]any{"type": "integer"},
+		map[string]any{"type": "null"},
+	}}
+	variants := []struct {
+		name          string
+		schema        string
+		wantMessageID map[string]any
+	}{
+		{"openai smartRecapJSONSchema", smartRecapJSONSchema, nullableIntTypeArray},
+		{"anthropic smartRecapAnthropicJSONSchema", smartRecapAnthropicJSONSchema, nullableIntAnyOf},
+	}
+	for _, v := range variants {
+		t.Run(v.name, func(t *testing.T) {
+			var schema map[string]any
+			if err := json.Unmarshal([]byte(v.schema), &schema); err != nil {
+				t.Fatalf("schema is not valid JSON: %v", err)
+			}
+			assertStrictObjects(t, "$", schema)
+
+			props := schema["properties"].(map[string]any)
+			if got, want := schemaPropKeys(props), jsonTagNames(reflect.TypeFor[SmartRecapResult]()); !reflect.DeepEqual(got, want) {
+				t.Errorf("top-level properties = %v, want SmartRecapResult json tags %v", got, want)
+			}
+
+			itemTags := jsonTagNames(reflect.TypeFor[AnnotatedItem]())
+			for f := range reflect.TypeFor[SmartRecapResult]().Fields() {
+				name := strings.Split(f.Tag.Get("json"), ",")[0]
+				if name == "" {
+					continue
+				}
+				prop := props[name].(map[string]any)
+				switch f.Type {
+				case reflect.TypeFor[string]():
+					if prop["type"] != "string" {
+						t.Errorf("%s: type = %v, want string", name, prop["type"])
+					}
+				case reflect.TypeFor[[]AnnotatedItem]():
+					if prop["type"] != "array" {
+						t.Errorf("%s: type = %v, want array", name, prop["type"])
+						continue
+					}
+					items := prop["items"].(map[string]any)
+					itemProps := items["properties"].(map[string]any)
+					if got := schemaPropKeys(itemProps); !reflect.DeepEqual(got, itemTags) {
+						t.Errorf("%s items properties = %v, want AnnotatedItem tags %v", name, got, itemTags)
+					}
+					if !reflect.DeepEqual(itemProps["message_id"], v.wantMessageID) {
+						t.Errorf("%s.message_id = %v, want nullable integer %v", name, itemProps["message_id"], v.wantMessageID)
+					}
+				default:
+					t.Errorf("%s: unhandled Go type %v — extend the schema and this test", name, f.Type)
+				}
+			}
+		})
+	}
+}
+
+func TestSmartRecapAnthropicJSONSchema_UsesAnyOfNotTypeArrays(t *testing.T) {
+	var schema any
+	if err := json.Unmarshal([]byte(smartRecapAnthropicJSONSchema), &schema); err != nil {
+		t.Fatalf("smartRecapAnthropicJSONSchema is not valid JSON: %v", err)
+	}
+	assertNoTypeArrays(t, "$", schema)
+}
+
+// The OpenAI schema is proven in hosted production; adding the Anthropic
+// variant must not change a byte of what OpenAI receives (semantically).
+func TestSmartRecapJSONSchema_OpenAIVariantUnchanged(t *testing.T) {
+	list := `{"type":"array","items":{"type":"object","properties":{"text":{"type":"string"},"message_id":{"type":["integer","null"]}},"required":["text","message_id"],"additionalProperties":false}}`
+	want := `{"type":"object","properties":{"suggested_session_title":{"type":"string"},"recap":{"type":"string"},` +
+		`"went_well":` + list + `,"went_bad":` + list + `,"human_suggestions":` + list +
+		`,"environment_suggestions":` + list + `,"default_context_suggestions":` + list +
+		`},"required":["suggested_session_title","recap","went_well","went_bad","human_suggestions","environment_suggestions","default_context_suggestions"],"additionalProperties":false}`
+	var got, wantV any
+	if err := json.Unmarshal([]byte(smartRecapJSONSchema), &got); err != nil {
 		t.Fatalf("smartRecapJSONSchema is not valid JSON: %v", err)
 	}
-	assertStrictObjects(t, "$", schema)
-
-	props := schema["properties"].(map[string]any)
-	if got, want := schemaPropKeys(props), jsonTagNames(reflect.TypeFor[SmartRecapResult]()); !reflect.DeepEqual(got, want) {
-		t.Errorf("top-level properties = %v, want SmartRecapResult json tags %v", got, want)
+	if err := json.Unmarshal([]byte(want), &wantV); err != nil {
+		t.Fatalf("expected schema literal is not valid JSON: %v", err)
 	}
-
-	itemTags := jsonTagNames(reflect.TypeFor[AnnotatedItem]())
-	resultType := reflect.TypeFor[SmartRecapResult]()
-	for f := range resultType.Fields() {
-		f := f
-		name := strings.Split(f.Tag.Get("json"), ",")[0]
-		if name == "" {
-			continue
-		}
-		prop := props[name].(map[string]any)
-		switch f.Type {
-		case reflect.TypeFor[string]():
-			if prop["type"] != "string" {
-				t.Errorf("%s: type = %v, want string", name, prop["type"])
-			}
-		case reflect.TypeFor[[]AnnotatedItem]():
-			if prop["type"] != "array" {
-				t.Errorf("%s: type = %v, want array", name, prop["type"])
-				continue
-			}
-			items := prop["items"].(map[string]any)
-			itemProps := items["properties"].(map[string]any)
-			if got := schemaPropKeys(itemProps); !reflect.DeepEqual(got, itemTags) {
-				t.Errorf("%s items properties = %v, want AnnotatedItem tags %v", name, got, itemTags)
-			}
-			if !reflect.DeepEqual(itemProps["message_id"].(map[string]any)["type"], []any{"integer", "null"}) {
-				t.Errorf("%s.message_id must be nullable integer", name)
-			}
-		default:
-			t.Errorf("%s: unhandled Go type %v — extend the schema and this test", name, f.Type)
-		}
+	if !reflect.DeepEqual(got, wantV) {
+		t.Errorf("smartRecapJSONSchema changed; the hosted OpenAI request must stay identical")
 	}
 }
 
