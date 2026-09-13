@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 
 export interface UseApiDataReturn<T, P> {
   /** Latest fetched data, or null before the first successful load. */
@@ -34,14 +34,16 @@ export function useApiData<T, P>(
   const [params, setParams] = useState<P>(initialParams);
 
   const fetchFnRef = useRef(fetchFn);
-  fetchFnRef.current = fetchFn;
   const errorMessageRef = useRef(errorMessage);
-  errorMessageRef.current = errorMessage;
+  // Latest-value refs: updated after each commit, before effects and paint.
+  useLayoutEffect(() => {
+    fetchFnRef.current = fetchFn;
+    errorMessageRef.current = errorMessage;
+  });
 
-  const fetchData = useCallback(async (fetchParams: P) => {
-    setLoading(true);
-    setError(null);
-
+  // Awaits the fetch and settles data/error/loading. Every state update happens
+  // after the await, so the mount effect can call this directly.
+  const runFetch = useCallback(async (fetchParams: P) => {
     try {
       const response = await fetchFnRef.current(fetchParams);
       setData(response);
@@ -57,14 +59,17 @@ export function useApiData<T, P>(
       if (newParams !== undefined) {
         setParams(newParams);
       }
-      await fetchData(newParams ?? params);
+      setLoading(true);
+      setError(null);
+      await runFetch(newParams ?? params);
     },
-    [fetchData, params],
+    [runFetch, params],
   );
 
-  // Initial fetch (once on mount).
+  // Initial fetch (once on mount). Initial state is already loading=true,
+  // error=null, so no synchronous reset is needed here.
   useEffect(() => {
-    fetchData(params);
+    runFetch(params);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only fetch once on mount
   }, []);
 

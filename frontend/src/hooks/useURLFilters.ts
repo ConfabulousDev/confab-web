@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import type { DateRange } from '@/utils/dateRange';
 import { getDateRangeLabel } from '@/utils/dateRange';
 
@@ -170,9 +170,12 @@ export function useURLFilters<T extends object>(
 ): URLFiltersResult<T> {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Store config in a ref so callbacks remain stable
+  // Store config in a ref so callbacks remain stable. Updated after each commit,
+  // before effects and paint; it is only read inside callbacks.
   const configRef = useRef(config);
-  configRef.current = config;
+  useLayoutEffect(() => {
+    configRef.current = config;
+  });
 
   const filters = useMemo(() => {
     const result: Record<string, unknown> = {};

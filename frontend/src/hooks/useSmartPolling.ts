@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { POLLING_CONFIG, type PollingState } from '@/config/polling';
 import { useVisibility } from './useVisibility';
 import { useUserActivity } from './useUserActivity';
@@ -129,6 +129,10 @@ export function useSmartPolling<T>(
     }
   }, []);
 
+  // Latest scheduleNext, so its own timeout callback can reschedule without
+  // referencing the binding it is being declared as.
+  const scheduleNextRef = useRef<() => void>(() => {});
+
   // scheduleNext uses refs to avoid being recreated when state changes
   const scheduleNext = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -150,11 +154,15 @@ export function useSmartPolling<T>(
     timeoutRef.current = window.setTimeout(() => {
       doFetch().finally(() => {
         if (isMountedRef.current) {
-          scheduleNext();
+          scheduleNextRef.current();
         }
       });
     }, interval);
   }, [doFetch]);
+
+  useLayoutEffect(() => {
+    scheduleNextRef.current = scheduleNext;
+  }, [scheduleNext]);
 
   // Handle visibility and enabled changes - fetch immediately when becoming visible
   useEffect(() => {

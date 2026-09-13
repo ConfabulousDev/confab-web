@@ -108,6 +108,8 @@ const { data, state, refetch, loading, error } = useSmartPolling(fetchFn, {
 - Filter state is URL-synced via `useSearchParams` -- refreshing the page preserves filters
 - Polling hooks respect tab visibility: no network requests when the tab is hidden
 - `useSmartPolling` uses refs extensively to avoid stale closures in timeouts
+- Refs are never read or written during render (enforced by `eslint-plugin-react-hooks` 7.1+): latest-value refs (`fetchFnRef`, `configRef`, `scheduleNextRef`) are assigned in `useLayoutEffect`, so callbacks and effects see the committed value
+- State that must reset when an input changes (`useLoadSession` deps, `useAutoRetry` `enabled`) uses React's "adjust state while rendering" pattern — the previous input is held in `useState` and compared during render — rather than a ref or a synchronous `setState` in an effect
 
 ## Design Decisions
 

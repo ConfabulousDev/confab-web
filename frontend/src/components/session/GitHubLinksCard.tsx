@@ -114,12 +114,16 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLin
     return () => clearInterval(intervalId);
   }, [initialLinks, isVisible, fetchLinks]);
 
-  // Auto-show add form when revealed via menu (only if empty)
-  useEffect(() => {
-    if (forceShow && links.length === 0 && !showAddForm && !loading) {
-      setShowAddForm(true);
-    }
-  }, [forceShow, links.length, showAddForm, loading]);
+  // Auto-show the add form when revealed via menu (only if empty), unless the
+  // user dismissed it. Hiding the card re-arms the auto-show for the next reveal.
+  const [dismissedAutoShow, setDismissedAutoShow] = useState(false);
+  const [prevForceShow, setPrevForceShow] = useState(forceShow);
+  if (forceShow !== prevForceShow) {
+    setPrevForceShow(forceShow);
+    if (!forceShow) setDismissedAutoShow(false);
+  }
+  const addFormOpen =
+    showAddForm || (forceShow === true && links.length === 0 && !loading && !dismissedAutoShow);
 
   // Notify parent when links availability changes (for syncing toggle state)
   useEffect(() => {
@@ -200,7 +204,7 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLin
           <span className={styles.cardTitleIcon}>{GitHubIcon}</span>
           GitHub
         </span>
-        {isOwner && !showAddForm && (
+        {isOwner && !addFormOpen && (
           <button
             className={styles.addButton}
             onClick={() => setShowAddForm(true)}
@@ -214,7 +218,7 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLin
       <div className={styles.cardContent}>
         {error && <div className={styles.error}>{error}</div>}
 
-        {showAddForm && (
+        {addFormOpen && (
           <form onSubmit={handleAddLink} className={styles.addForm}>
             <input
               type="url"
@@ -238,6 +242,7 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLin
                 className={styles.cancelButton}
                 onClick={() => {
                   setShowAddForm(false);
+                  setDismissedAutoShow(true);
                   setNewUrl('');
                 }}
                 disabled={adding}
@@ -250,7 +255,7 @@ function GitHubLinksCard({ sessionId, isOwner, initialLinks, forceShow, onHasLin
 
         {loading && links.length === 0 ? (
           <div className={styles.loading}>Loading...</div>
-        ) : links.length === 0 && !showAddForm ? (
+        ) : links.length === 0 && !addFormOpen ? (
           <div className={styles.empty}>
             <span>No linked PRs or commits</span>
             {isOwner && (
