@@ -90,6 +90,7 @@ func runWorker() {
 	precomputeConfig := loadPrecomputeConfig()
 	logger.Info("smart recap configuration",
 		"enabled", precomputeConfig.SmartRecapEnabled,
+		"llm_provider", precomputeConfig.SmartRecapLLMProvider,
 		"model", precomputeConfig.SmartRecapModel,
 		"quota", precomputeConfig.SmartRecapQuota,
 	)
@@ -411,11 +412,16 @@ func loadS3Config() storage.S3Config {
 
 // loadPrecomputeConfig loads smart recap configuration from environment variables.
 func loadPrecomputeConfig() analytics.PrecomputeConfig {
+	llmConfig, err := analytics.ResolveSmartRecapLLMConfig(os.Getenv)
+	if err != nil {
+		logFatal("invalid smart recap configuration", "error", err)
+	}
 	config := analytics.PrecomputeConfig{
-		SmartRecapEnabled:  os.Getenv("SMART_RECAP_ENABLED") == "true",
-		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
-		SmartRecapModel:    os.Getenv("SMART_RECAP_MODEL"),
-		LockTimeoutSeconds: 60,
+		SmartRecapEnabled:     os.Getenv("SMART_RECAP_ENABLED") == "true",
+		SmartRecapLLMProvider: llmConfig.Provider,
+		SmartRecapAPIKey:      llmConfig.APIKey,
+		SmartRecapModel:       llmConfig.Model,
+		LockTimeoutSeconds:    60,
 	}
 
 	// Parse quota limit: positive integer = cap, 0 or omitted = unlimited
@@ -454,7 +460,11 @@ func loadPrecomputeConfig() analytics.PrecomputeConfig {
 	)
 
 	// Disable if required config is missing (quota=0 means unlimited, not disabled)
-	if config.AnthropicAPIKey == "" || config.SmartRecapModel == "" {
+	if llmConfig.MissingVar != "" {
+		if config.SmartRecapEnabled {
+			logger.Warn("smart recap disabled: missing env var",
+				"var", llmConfig.MissingVar, "llm_provider", llmConfig.Provider)
+		}
 		config.SmartRecapEnabled = false
 	}
 

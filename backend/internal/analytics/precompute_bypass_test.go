@@ -44,7 +44,7 @@ func seedAdminCardInvalidation(t *testing.T, env *testutil.TestEnvironment, sess
 func bypassTestConfig(quota int) analytics.PrecomputeConfig {
 	return analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        quota,
 		LockTimeoutSeconds:     60,

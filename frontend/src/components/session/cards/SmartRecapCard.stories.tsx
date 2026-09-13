@@ -42,10 +42,22 @@ export const Default: Story = {
       ],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
+      llm_provider: 'anthropic',
     },
     loading: false,
     quota: { used: 3, limit: 20, exceeded: false },
     sessionId: 'demo-session-id',
+  },
+};
+
+export const OpenAIGenerated: Story = {
+  args: {
+    ...Default.args,
+    data: {
+      ...Default.args!.data!,
+      model_used: 'gpt-5.6-luna',
+      llm_provider: 'openai',
+    },
   },
 };
 
@@ -60,6 +72,7 @@ export const Refreshing: Story = {
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
+      llm_provider: 'anthropic',
     },
     loading: false,
     quota: { used: 3, limit: 20, exceeded: false },
@@ -78,6 +91,7 @@ export const QuotaExceeded: Story = {
       default_context_suggestions: [],
       computed_at: '2024-01-10T14:00:00Z',
       model_used: 'claude-haiku-4-5-20251101',
+      llm_provider: 'anthropic',
     },
     loading: false,
     quota: { used: 20, limit: 20, exceeded: true },
@@ -95,6 +109,7 @@ export const MinimalData: Story = {
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
+      llm_provider: 'anthropic',
     },
     loading: false,
     quota: { used: 1, limit: 20, exceeded: false },
@@ -130,6 +145,7 @@ export const AllSuggestions: Story = {
       ],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
+      llm_provider: 'anthropic',
     },
     loading: false,
     quota: { used: 5, limit: 20, exceeded: false },
@@ -156,6 +172,7 @@ export const UnlimitedQuota: Story = {
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
       model_used: 'claude-haiku-4-5-20251101',
+      llm_provider: 'anthropic',
     },
     loading: false,
     quota: null,

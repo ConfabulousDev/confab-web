@@ -83,6 +83,7 @@ export function buildCodexAnalyticsFixture(): SessionAnalytics {
         default_context_suggestions: [],
         computed_at: new Date(Date.now() - 30000).toISOString(),
         model_used: 'claude-sonnet-4-5',
+        llm_provider: 'anthropic',
       },
     },
   };

@@ -76,11 +76,12 @@ func DefaultSmartRecapThresholds() StalenessThresholds {
 
 // PrecomputeConfig holds configuration for the precomputer.
 type PrecomputeConfig struct {
-	SmartRecapEnabled  bool
-	AnthropicAPIKey    string
-	SmartRecapModel    string
-	SmartRecapQuota    int
-	LockTimeoutSeconds int
+	SmartRecapEnabled     bool
+	SmartRecapLLMProvider string // LLMProviderAnthropic or LLMProviderOpenAI
+	SmartRecapAPIKey      string // API key for SmartRecapLLMProvider
+	SmartRecapModel       string
+	SmartRecapQuota       int
+	LockTimeoutSeconds    int
 
 	// LLM token limits (0 means use defaults)
 	MaxOutputTokens     int
@@ -122,7 +123,8 @@ func NewPrecomputer(rawDB *sql.DB, store *storage.S3Storage, analyticsStore *Sto
 			analyticsStore,
 			wrappedDB,
 			SmartRecapGeneratorConfig{
-				APIKey:              config.AnthropicAPIKey,
+				Provider:            config.SmartRecapLLMProvider,
+				APIKey:              config.SmartRecapAPIKey,
 				Model:               config.SmartRecapModel,
 				GenerationTimeout:   60 * time.Second,
 				MaxOutputTokens:     config.MaxOutputTokens,

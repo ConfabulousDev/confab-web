@@ -732,19 +732,58 @@ func TestSmartRecap_CacheMissTriggersGeneration(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	// Configure smart recap with the mock server
-	os.Setenv("SMART_RECAP_ENABLED", "true")
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	os.Setenv("SMART_RECAP_MODEL", "test-model")
-	os.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
-	os.Setenv("TEST_SMART_RECAP_BASE_URL", mockServer.URL)
-	defer func() {
-		os.Unsetenv("SMART_RECAP_ENABLED")
-		os.Unsetenv("ANTHROPIC_API_KEY")
-		os.Unsetenv("SMART_RECAP_MODEL")
-		os.Unsetenv("SMART_RECAP_QUOTA_LIMIT")
-		os.Unsetenv("TEST_SMART_RECAP_BASE_URL")
-	}()
+	card := runCacheMissGeneration(t, mockServer.URL, map[string]string{
+		"ANTHROPIC_API_KEY": "test-key",
+	}, analytics.LLMProviderAnthropic)
+	if card.InputTokens != 200 || card.OutputTokens != 80 {
+		t.Errorf("saved tokens = %d/%d, want 200/80", card.InputTokens, card.OutputTokens)
+	}
+}
+
+// TestSmartRecap_CacheMissTriggersGeneration_OpenAI runs the same E2E path with
+// SMART_RECAP_LLM_PROVIDER=openai against a mock Responses API server.
+func TestSmartRecap_CacheMissTriggersGeneration_OpenAI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("OpenAI mock hit %s, want /v1/responses", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-openai-key" {
+			t.Errorf("Authorization = %q, want the OpenAI key", r.Header.Get("Authorization"))
+		}
+		recap := `{"suggested_session_title":"Generated Title","recap":"Generated recap.","went_well":[{"text":"Good","message_id":null}],"went_bad":[],"human_suggestions":[],"environment_suggestions":[],"default_context_suggestions":[]}`
+		textJSON, _ := json.Marshal(recap)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"id":"resp_test","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":%s}]}],"usage":{"input_tokens":210,"output_tokens":90}}`, textJSON)
+	}))
+	defer mockServer.Close()
+
+	card := runCacheMissGeneration(t, mockServer.URL, map[string]string{
+		"SMART_RECAP_LLM_PROVIDER": "openai",
+		"OPENAI_API_KEY":           "test-openai-key",
+		"ANTHROPIC_API_KEY":        "unused-anthropic-key",
+	}, analytics.LLMProviderOpenAI)
+	if card.InputTokens != 210 || card.OutputTokens != 90 {
+		t.Errorf("saved tokens = %d/%d, want 210/90 from OpenAI usage", card.InputTokens, card.OutputTokens)
+	}
+}
+
+// runCacheMissGeneration drives a cache-miss analytics request against the given
+// mock LLM server, asserts the generated card on the wire and in the DB (including
+// llm_provider), and returns the persisted card.
+func runCacheMissGeneration(t *testing.T, mockURL string, vendorEnv map[string]string, wantProvider string) *analytics.SmartRecapCardRecord {
+	t.Helper()
+
+	t.Setenv("SMART_RECAP_ENABLED", "true")
+	t.Setenv("SMART_RECAP_MODEL", "test-model")
+	t.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
+	t.Setenv("TEST_SMART_RECAP_BASE_URL", mockURL)
+	for _, k := range []string{"SMART_RECAP_LLM_PROVIDER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"} {
+		t.Setenv(k, vendorEnv[k])
+	}
 
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
@@ -819,5 +858,95 @@ func TestSmartRecap_CacheMissTriggersGeneration(t *testing.T) {
 	}
 	if card.Recap != "Generated recap." {
 		t.Errorf("saved recap = %q, want %q", card.Recap, "Generated recap.")
+	}
+	if smartRecap["llm_provider"] != wantProvider {
+		t.Errorf("wire llm_provider = %v, want %q", smartRecap["llm_provider"], wantProvider)
+	}
+	if card.LLMProvider != wantProvider {
+		t.Errorf("saved LLMProvider = %q, want %q", card.LLMProvider, wantProvider)
+	}
+	return card
+}
+
+// TestSmartRecap_WireLLMProvider asserts llm_provider on the analytics JSON for a
+// stored OpenAI card and for a legacy card whose llm_provider column is NULL.
+func TestSmartRecap_WireLLMProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	t.Setenv("SMART_RECAP_ENABLED", "true")
+	t.Setenv("SMART_RECAP_LLM_PROVIDER", "")
+	t.Setenv("ANTHROPIC_API_KEY", "test-api-key-not-used")
+	t.Setenv("SMART_RECAP_MODEL", "claude-haiku-4-5-20251001")
+	t.Setenv("SMART_RECAP_QUOTA_LIMIT", "20")
+
+	env := testutil.SetupTestEnvironment(t)
+
+	tests := []struct {
+		name         string
+		storedVendor string
+		nullColumn   bool
+		want         string
+	}{
+		{name: "openai card", storedVendor: analytics.LLMProviderOpenAI, want: "openai"},
+		{name: "anthropic card", storedVendor: analytics.LLMProviderAnthropic, want: "anthropic"},
+		{name: "legacy NULL card reads as anthropic", storedVendor: analytics.LLMProviderAnthropic, nullColumn: true, want: "anthropic"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env.CleanDB(t)
+
+			user := testutil.CreateTestUser(t, env, "wirevendor@test.com", "Wire Vendor User")
+			sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
+			sessionID := testutil.CreateTestSession(t, env, user.ID, "test-session-wire-vendor")
+
+			jsonlContent := `{"type":"assistant","message":{"id":"msg_1","type":"message","model":"claude-sonnet-4","role":"assistant","content":[{"type":"text","text":"Hello!"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":50}},"uuid":"a1","timestamp":"2025-01-01T00:00:01Z","parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/test","sessionId":"test","version":"1.0"}
+`
+			testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "test-session-wire-vendor", "transcript.jsonl", 1, 1, []byte(jsonlContent))
+			testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 1)
+
+			store := analytics.NewStore(env.DB.Conn())
+			if err := store.UpsertSmartRecapCard(context.Background(), &analytics.SmartRecapCardRecord{
+				SessionID:                 sessionID,
+				Version:                   analytics.SmartRecapCardVersion,
+				ComputedAt:                time.Now().UTC(),
+				UpToLine:                  1,
+				Recap:                     "Cached recap",
+				WentWell:                  []analytics.AnnotatedItem{},
+				WentBad:                   []analytics.AnnotatedItem{},
+				HumanSuggestions:          []analytics.AnnotatedItem{},
+				EnvironmentSuggestions:    []analytics.AnnotatedItem{},
+				DefaultContextSuggestions: []analytics.AnnotatedItem{},
+				ModelUsed:                 "some-model",
+				LLMProvider:               tt.storedVendor,
+			}); err != nil {
+				t.Fatalf("UpsertSmartRecapCard: %v", err)
+			}
+			if tt.nullColumn {
+				if _, err := env.DB.Conn().Exec(`UPDATE session_card_smart_recap SET llm_provider = NULL WHERE session_id = $1`, sessionID); err != nil {
+					t.Fatalf("null llm_provider: %v", err)
+				}
+			}
+
+			ts := setupTestServerWithEnv(t, env)
+			client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
+			resp, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			testutil.RequireStatus(t, resp, http.StatusOK)
+
+			var rawResult map[string]interface{}
+			testutil.ParseJSON(t, resp, &rawResult)
+			smartRecap, ok := rawResult["cards"].(map[string]interface{})["smart_recap"].(map[string]interface{})
+			if !ok {
+				t.Fatal("expected smart_recap card in response")
+			}
+			if smartRecap["llm_provider"] != tt.want {
+				t.Errorf("llm_provider = %v, want %q", smartRecap["llm_provider"], tt.want)
+			}
+		})
 	}
 }

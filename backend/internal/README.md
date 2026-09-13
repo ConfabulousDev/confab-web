@@ -9,7 +9,7 @@ Internal packages for the Confab backend server. All packages live under
 |---------|---------|---------------------|
 | `admin` | Super-admin handlers (user management, system shares, settings, audit) | Adding admin actions, changing admin authorization rules, adding admin settings |
 | `analytics` | Session analytics computation, card storage, trends, search index, smart recaps | Adding analytics cards, changing cost/token calculations, modifying analyzers |
-| `anthropic` | HTTP client for the Anthropic Messages API | Changing AI model calls, updating API version |
+| `anthropic` | HTTP client for the Anthropic Messages API (smart recap vendor) | Changing Anthropic model calls, updating API version |
 | `api` | HTTP handlers, routing (chi), middleware wiring, request/response helpers | Adding/changing API endpoints, adjusting rate limits, modifying middleware stack |
 | `auth` | Authentication middleware, OAuth flows (GitHub/Google/OIDC), password auth, API key validation | Adding auth providers, changing session/token logic |
 | `clientip` | Middleware to extract real client IPs (Fly.io, Cloudflare, nginx) | Supporting new reverse proxy headers |
@@ -29,6 +29,7 @@ Internal packages for the Confab backend server. All packages live under
 | `httputil` | HTTP response helpers shared between `api` and `admin` (e.g., `RespondJSON`) | Adding new shared response/render helpers |
 | `logger` | Structured JSON logging (slog), request-scoped context logger | Changing log format, adding log fields |
 | `models` | Domain types shared across packages (`User`, `OAuthProvider`) and provider identity (`ProviderClaudeCode`, `ProviderCodex`, `LegacyAliases`, `AllowedProviders`, `NormalizeProvider`, `ExpandWithAliases` in `provider.go`) | Adding domain-wide types, adding/renaming a provider, or registering a permanent legacy alias |
+| `openai` | HTTP client for the OpenAI Responses API (smart recap vendor) | Changing OpenAI model calls, request parameters, or structured-output handling |
 | `pricingsource` | Owns the model price table: the embedded `pricing.json` (single source of truth) + a lazy, best-effort refresh from confabulous.dev with freshest-wins fallback. Serves `/api/v1/pricing`; feeds analytics cost compute | Changing the price data, the document schema, TTLs, the source URL, or the fallback semantics |
 | `ratelimit` | Rate limiter interface + in-memory token bucket implementation | Changing rate limit strategies, adding distributed limiter |
 | `recapquota` | Per-user monthly smart recap quota tracking | Changing quota rules, billing logic |
@@ -54,7 +55,7 @@ have no internal dependencies.
   auth         ─→ db, db/dbauth, db/user, models,
                   clientip, logger, validation
 
-  analytics    ─→ codex, storage, anthropic, db, db/dbadminsettings, recapquota
+  analytics    ─→ codex, storage, anthropic, openai, db, db/dbadminsettings, recapquota
 
   ratelimit    ─→ clientip, logger
 
@@ -71,7 +72,7 @@ have no internal dependencies.
   db/user                      ┘
 
   Leaf packages (zero internal deps):
-    clientip, logger, validation, models, anthropic,
+    clientip, logger, validation, models, anthropic, openai,
     recapquota, storage, codex
 
   Test-only:
@@ -131,7 +132,7 @@ Client (browser / CLI)
   └────┬─────┘  └─────┬────┘  └─────┬────┘
        │              │              │
        v              v              v
-   PostgreSQL    Anthropic API   MinIO / S3
+   PostgreSQL   Anthropic/OpenAI  MinIO / S3
 ```
 
 ### Key Request Paths
@@ -149,8 +150,8 @@ Client (browser / CLI)
 
 1. **`api` and `admin`** are the top-level HTTP layers. They may import any other package.
 2. **`auth`** handles authentication concerns. It imports `db`, `db/dbauth`, `db/user`, `models`, `clientip`, `logger`, `validation`.
-3. **`analytics`** handles computation. It imports `storage`, `anthropic`, `recapquota` but NOT `api` or `auth`.
+3. **`analytics`** handles computation. It imports `storage`, `anthropic`, `openai`, `recapquota` but NOT `api` or `auth`.
 4. **`db` sub-packages** (`access`, `codex`, `dbauth`, `events`, `github`, `session`, `user`) depend only on `db` root (for the `DB` struct and shared types). They do NOT import each other.
-5. **Leaf packages** (`logger`, `clientip`, `models`, `anthropic`, `recapquota`, `storage`) have zero internal dependencies. `validation` imports `models` for the canonical provider list. `ratelimit` has minimal deps (`clientip`, `logger`). `email` has minimal deps (`logger`, `models`) — it consults `models.NormalizeProvider` plus the canonical provider constants to keep share-invitation wording in lockstep with the rest of the codebase. None of these may import `api`, `auth`, `admin`, or `analytics`.
+5. **Leaf packages** (`logger`, `clientip`, `models`, `anthropic`, `openai`, `recapquota`, `storage`) have zero internal dependencies. `validation` imports `models` for the canonical provider list. `ratelimit` has minimal deps (`clientip`, `logger`). `email` has minimal deps (`logger`, `models`) — it consults `models.NormalizeProvider` plus the canonical provider constants to keep share-invitation wording in lockstep with the rest of the codebase. None of these may import `api`, `auth`, `admin`, or `analytics`.
 6. **`testutil`** is test-only infrastructure. Production code must not import it.
 7. **No circular imports.** If two packages need to share a type, put it in `db/types.go` or `models/models.go`.

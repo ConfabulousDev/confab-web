@@ -1027,6 +1027,12 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.workflows.runs[].succeeded_agents` | int | Agents with a journal `result` line (0 when `has_journal` is false) |
 | `cards.workflows.runs[].has_journal` | bool | Whether a run journal was uploaded; when false, `succeeded_agents` is not meaningful |
 | `cards.workflows.runs[].duration_ms` | int | Activity span from the run's first to last agent timestamp (0 if unknown) |
+| `cards.smart_recap` | object\|null | AI-generated recap (omitted when smart recap is disabled, not yet generated, or unavailable — see `smart_recap_missing_reason`) |
+| `cards.smart_recap.recap` | string | Short recap of the session |
+| `cards.smart_recap.went_well` / `went_bad` / `human_suggestions` / `environment_suggestions` / `default_context_suggestions` | array | Items of `{text, message_id?}`; `message_id` is a transcript message UUID when present |
+| `cards.smart_recap.computed_at` | string | RFC 3339 timestamp of generation |
+| `cards.smart_recap.model_used` | string | Model id that generated the recap — an Anthropic (e.g. `claude-haiku-4-5-20251001`) or OpenAI (e.g. `gpt-5.6-luna`) model id |
+| `cards.smart_recap.llm_provider` | string | LLM provider that generated the recap: `"anthropic"` or `"openai"`. Always present; recaps generated before this field existed report `"anthropic"` |
 | `card_errors` | object\|null | Map of card key to error message for failed computations (graceful degradation) |
 | `smart_recap_quota` | object\|null | Per-user quota info (present when quota is capped and viewer is owner; omitted when unlimited or non-owner) |
 | `smart_recap_quota.used` | int | Recaps generated this month |

@@ -347,7 +347,7 @@ func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*Smart
 	query := `
 		SELECT session_id, version, computed_at, up_to_line,
 			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
-			model_used, input_tokens, output_tokens, generation_time_ms,
+			model_used, llm_provider, input_tokens, output_tokens, generation_time_ms,
 			computing_started_at
 		FROM session_card_smart_recap
 		WHERE session_id = $1
@@ -355,6 +355,7 @@ func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*Smart
 
 	var record SmartRecapCardRecord
 	var wentWellJSON, wentBadJSON, humanSuggestionsJSON, envSuggestionsJSON, contextSuggestionsJSON []byte
+	var llmProvider sql.NullString
 
 	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&record.SessionID,
@@ -368,6 +369,7 @@ func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*Smart
 		&envSuggestionsJSON,
 		&contextSuggestionsJSON,
 		&record.ModelUsed,
+		&llmProvider,
 		&record.InputTokens,
 		&record.OutputTokens,
 		&record.GenerationTimeMs,
@@ -379,6 +381,7 @@ func (s *Store) GetSmartRecapCard(ctx context.Context, sessionID string) (*Smart
 	if err != nil {
 		return nil, err
 	}
+	record.LLMProvider = llmProviderOrDefault(llmProvider.String)
 
 	// Unmarshal JSONB arrays
 	if err := json.Unmarshal(wentWellJSON, &record.WentWell); err != nil {
@@ -427,9 +430,9 @@ func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCard
 		INSERT INTO session_card_smart_recap (
 			session_id, version, computed_at, up_to_line,
 			recap, went_well, went_bad, human_suggestions, environment_suggestions, default_context_suggestions,
-			model_used, input_tokens, output_tokens, generation_time_ms,
+			model_used, llm_provider, input_tokens, output_tokens, generation_time_ms,
 			computing_started_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULL)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NULL)
 		ON CONFLICT (session_id) DO UPDATE SET
 			version = EXCLUDED.version,
 			computed_at = EXCLUDED.computed_at,
@@ -441,6 +444,7 @@ func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCard
 			environment_suggestions = EXCLUDED.environment_suggestions,
 			default_context_suggestions = EXCLUDED.default_context_suggestions,
 			model_used = EXCLUDED.model_used,
+			llm_provider = EXCLUDED.llm_provider,
 			input_tokens = EXCLUDED.input_tokens,
 			output_tokens = EXCLUDED.output_tokens,
 			generation_time_ms = EXCLUDED.generation_time_ms,
@@ -459,6 +463,7 @@ func (s *Store) UpsertSmartRecapCard(ctx context.Context, record *SmartRecapCard
 		envSuggestionsJSON,
 		contextSuggestionsJSON,
 		record.ModelUsed,
+		sql.NullString{String: record.LLMProvider, Valid: record.LLMProvider != ""},
 		record.InputTokens,
 		record.OutputTokens,
 		record.GenerationTimeMs,

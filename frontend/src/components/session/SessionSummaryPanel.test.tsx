@@ -161,6 +161,43 @@ describe('SessionSummaryPanel', () => {
     });
   });
 
+  describe('smart_recap llm_provider schema (pedp)', () => {
+    const smartRecap = {
+      recap: 'Recap.',
+      went_well: [],
+      went_bad: [],
+      human_suggestions: [],
+      environment_suggestions: [],
+      default_context_suggestions: [],
+      computed_at: '2024-01-15T10:30:00Z',
+      model_used: 'gpt-5.6-luna',
+    };
+    const withVendor = (vendor?: string): unknown => {
+      const fixture = buildCursorAnalyticsFixture();
+      return {
+        ...fixture,
+        cards: {
+          ...fixture.cards,
+          smart_recap: vendor === undefined ? smartRecap : { ...smartRecap, llm_provider: vendor },
+        },
+      };
+    };
+
+    it('accepts the anthropic and openai LLM vendors', () => {
+      expect(SessionAnalyticsSchema.safeParse(withVendor('anthropic')).success).toBe(true);
+      expect(SessionAnalyticsSchema.safeParse(withVendor('openai')).success).toBe(true);
+    });
+
+    it('rejects a smart recap missing llm_provider or with an unknown vendor', () => {
+      const missing = SessionAnalyticsSchema.safeParse(withVendor());
+      expect(missing.success).toBe(false);
+      if (!missing.success) {
+        expect(JSON.stringify(missing.error.issues)).toContain('llm_provider');
+      }
+      expect(SessionAnalyticsSchema.safeParse(withVendor('gemini')).success).toBe(false);
+    });
+  });
+
   // cd3z: regression coverage for the live Cursor wire shape. The Summary tab
   // showed the hard error on Cursor sessions; assert the captured payload parses
   // cleanly AND renders the card grid (no error/empty state).
@@ -315,6 +352,7 @@ describe('SessionSummaryPanel', () => {
             default_context_suggestions: [],
             computed_at: '2024-01-15T10:30:00Z',
             model_used: 'claude-sonnet-4-20250514',
+            llm_provider: 'anthropic',
           },
         },
       };
@@ -348,6 +386,7 @@ describe('SessionSummaryPanel', () => {
             default_context_suggestions: [],
             computed_at: '2024-01-15T10:30:00Z',
             model_used: 'claude-sonnet-4-20250514',
+            llm_provider: 'anthropic',
           },
         },
       };
@@ -458,6 +497,7 @@ describe('SessionSummaryPanel', () => {
               default_context_suggestions: [],
               computed_at: '2024-01-15T10:30:00Z',
               model_used: 'claude-sonnet-4-20250514',
+              llm_provider: 'anthropic',
             },
           },
         },
@@ -502,6 +542,7 @@ describe('SessionSummaryPanel', () => {
               default_context_suggestions: [],
               computed_at: '2024-01-15T10:30:00Z',
               model_used: 'claude-sonnet-4-20250514',
+              llm_provider: 'anthropic',
             },
           },
         },
@@ -545,6 +586,7 @@ describe('SessionSummaryPanel', () => {
               default_context_suggestions: [],
               computed_at: '2024-01-15T10:30:00Z',
               model_used: 'claude-sonnet-4-20250514',
+              llm_provider: 'anthropic',
             },
           },
         },
@@ -586,6 +628,7 @@ describe('SessionSummaryPanel', () => {
               default_context_suggestions: [],
               computed_at: '2024-01-15T10:30:00Z',
               model_used: 'claude-sonnet-4-20250514',
+              llm_provider: 'anthropic',
             },
           },
         },

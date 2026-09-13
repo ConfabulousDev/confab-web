@@ -21,7 +21,7 @@ Notable choices for a Fly.io deployment:
 
 - Two `[[vm]]` blocks — one for the `app` process (auto-stop enabled), one for the always-on `worker` singleton.
 - `S3_ENDPOINT = "fly.storage.tigris.dev"` for Tigris, with `S3_USE_SSL = "true"`.
-- Secrets (`AWS_*`, `CSRF_SECRET_KEY`, `RESEND_API_KEY`, `ANTHROPIC_API_KEY`) are set via `fly secrets set`, not in `fly.toml`.
+- Secrets (`AWS_*`, `CSRF_SECRET_KEY`, `RESEND_API_KEY`, and `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for the smart recap provider) are set via `fly secrets set`, not in `fly.toml`.
 - `auto_stop_machines = 'stop'` plus `min_machines_running = 1` keeps response latency low while letting unused machines stop on idle.
 
 ### Deploying

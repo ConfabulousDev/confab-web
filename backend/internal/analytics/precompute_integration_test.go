@@ -800,7 +800,7 @@ func TestFindStaleSmartRecapSessions_RegularCardsStale_NotFound(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -843,7 +843,7 @@ func TestFindStaleSmartRecapSessions_AllFresh_NotFound(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -883,7 +883,7 @@ func TestFindStaleSmartRecapSessions_SmartRecapMissing_Found(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -930,7 +930,7 @@ func TestFindStaleSmartRecapSessions_IncludesCodex(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -987,7 +987,7 @@ func TestFindStaleSmartRecapSessions_SmartRecapOutdatedVersion_Found(t *testing.
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1031,7 +1031,7 @@ func TestFindStaleSmartRecapSessions_NewLines_Found(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1079,7 +1079,7 @@ func TestTwoBucketDiscovery_BothStale_FoundByQuery1Only(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1128,7 +1128,7 @@ func TestTwoBucketDiscovery_OnlySmartRecapStale_FoundByQuery2Only(t *testing.T) 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1178,7 +1178,7 @@ func TestTwoBucketDiscovery_AllFresh_FoundByNeither(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1891,7 +1891,7 @@ func TestFindStaleSmartRecapSessions_NewRecap_BelowMinLines_Young_Skipped(t *tes
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1931,7 +1931,7 @@ func TestFindStaleSmartRecapSessions_NewRecap_MeetsMinLines_Found(t *testing.T) 
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -1973,7 +1973,7 @@ func TestFindStaleSmartRecapSessions_NewRecap_BelowMinLines_Old_Found(t *testing
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2013,7 +2013,7 @@ func TestFindStaleSmartRecapSessions_Cached_SmallLineGap_Recent_Skipped(t *testi
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2060,7 +2060,7 @@ func TestFindStaleSmartRecapSessions_Cached_TimeThresholdMet_Found(t *testing.T)
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2099,7 +2099,7 @@ func TestFindStaleSmartRecapSessions_Cached_NoLineGap_Skipped(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2138,7 +2138,7 @@ func TestFindStaleSmartRecapSessions_Cached_LineThresholdMet_Found(t *testing.T)
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2180,7 +2180,7 @@ func TestFindStaleSmartRecapSessions_LargeSession_SmallGap_Skipped(t *testing.T)
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2244,7 +2244,7 @@ func TestIndependentThresholds_RegularCardsHigherBaseMin_Found(t *testing.T) {
 
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2302,7 +2302,7 @@ func TestIndependentThresholds_SmartRecapTimeThreshold_RegularFresh(t *testing.T
 
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        100,
 		LockTimeoutSeconds:     60,
@@ -2931,7 +2931,7 @@ func TestFindStaleSmartRecapSessions_QuotaExceeded_Excluded(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        5, // quota = 5, user has 5 → at limit
 		LockTimeoutSeconds:     60,
@@ -2978,7 +2978,7 @@ func TestFindStaleSmartRecapSessions_QuotaUnderLimit_Included(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        5, // quota = 5, user has 3 → under limit
 		LockTimeoutSeconds:     60,
@@ -3028,7 +3028,7 @@ func TestFindStaleSmartRecapSessions_QuotaDisabled_Included(t *testing.T) {
 	analyticsStore := analytics.NewStore(env.DB.Conn())
 	precomputer := analytics.NewPrecomputer(env.DB.Conn(), env.Storage, analyticsStore, analytics.PrecomputeConfig{
 		SmartRecapEnabled:      true,
-		AnthropicAPIKey:        "test-key",
+		SmartRecapAPIKey:       "test-key",
 		SmartRecapModel:        "test-model",
 		SmartRecapQuota:        0, // 0 = unlimited
 		LockTimeoutSeconds:     60,

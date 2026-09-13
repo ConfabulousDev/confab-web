@@ -349,6 +349,8 @@ const SmartRecapCardDataSchema = z.object({
   default_context_suggestions: z.array(AnnotatedItemSchema),
   computed_at: z.string(),
   model_used: z.string(),
+  // LLM vendor that generated the recap (legacy cards are reported as anthropic by the backend)
+  llm_provider: z.enum(['anthropic', 'openai']),
 });
 
 // Quota information for smart recap generation

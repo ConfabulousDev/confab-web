@@ -3,7 +3,7 @@ import cardStyles from './Card.module.css';
 
 interface CardWrapperProps {
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   icon?: React.ReactNode;
   /** Optional action element (e.g., refresh button) shown in header */
   action?: React.ReactNode;

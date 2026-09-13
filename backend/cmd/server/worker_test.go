@@ -377,11 +377,61 @@ func TestLoadPrecomputeConfig_EnablesWhenAllRequiredSet(t *testing.T) {
 	if !cfg.SmartRecapEnabled {
 		t.Error("SmartRecapEnabled: want true")
 	}
-	if cfg.AnthropicAPIKey != "key" {
-		t.Errorf("AnthropicAPIKey: %q", cfg.AnthropicAPIKey)
+	if cfg.SmartRecapAPIKey != "key" {
+		t.Errorf("SmartRecapAPIKey: %q", cfg.SmartRecapAPIKey)
 	}
 	if cfg.SmartRecapModel != "claude-sonnet-4-6" {
 		t.Errorf("SmartRecapModel: %q", cfg.SmartRecapModel)
+	}
+	if cfg.SmartRecapLLMProvider != analytics.LLMProviderAnthropic {
+		t.Errorf("SmartRecapLLMProvider: want anthropic by default, got %q", cfg.SmartRecapLLMProvider)
+	}
+}
+
+func TestLoadPrecomputeConfig_SelectsOpenAI(t *testing.T) {
+	clearServerEnv(t)
+	t.Setenv("SMART_RECAP_ENABLED", "true")
+	t.Setenv("SMART_RECAP_LLM_PROVIDER", "openai")
+	t.Setenv("ANTHROPIC_API_KEY", "anthropic-key")
+	t.Setenv("OPENAI_API_KEY", "openai-key")
+	t.Setenv("SMART_RECAP_MODEL", "gpt-5.6-luna")
+
+	cfg := loadPrecomputeConfig()
+
+	if !cfg.SmartRecapEnabled {
+		t.Error("SmartRecapEnabled: want true")
+	}
+	if cfg.SmartRecapLLMProvider != analytics.LLMProviderOpenAI {
+		t.Errorf("SmartRecapLLMProvider: want openai, got %q", cfg.SmartRecapLLMProvider)
+	}
+	if cfg.SmartRecapAPIKey != "openai-key" {
+		t.Errorf("SmartRecapAPIKey: want the OpenAI key, got %q", cfg.SmartRecapAPIKey)
+	}
+}
+
+func TestLoadPrecomputeConfig_DisablesWhenOpenAIKeyMissing(t *testing.T) {
+	clearServerEnv(t)
+	t.Setenv("SMART_RECAP_ENABLED", "true")
+	t.Setenv("SMART_RECAP_LLM_PROVIDER", "openai")
+	t.Setenv("ANTHROPIC_API_KEY", "anthropic-key") // wrong vendor's key does not count
+	t.Setenv("SMART_RECAP_MODEL", "gpt-5.6-luna")
+
+	cfg := loadPrecomputeConfig()
+
+	if cfg.SmartRecapEnabled {
+		t.Error("SmartRecapEnabled: want false when OPENAI_API_KEY missing for provider openai")
+	}
+}
+
+func TestLoadPrecomputeConfig_InvalidLLMProviderIsFatalEvenWhenDisabled(t *testing.T) {
+	clearServerEnv(t)
+	t.Setenv("SMART_RECAP_LLM_PROVIDER", "gemini")
+	// SMART_RECAP_ENABLED unset: a typo must still never ship silently.
+
+	fc := withFatalRecover(t, func() { loadPrecomputeConfig() })
+
+	if fc == nil {
+		t.Fatal("expected logFatal for invalid SMART_RECAP_LLM_PROVIDER")
 	}
 }
 
