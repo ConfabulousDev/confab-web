@@ -112,34 +112,45 @@ func newRecapLLM(provider, apiKey, baseURL string) (recapLLM, error) {
 	}
 }
 
-// anthropicRecapLLM calls the Anthropic Messages API with an assistant prefill.
+// anthropicRecapLLM calls the Anthropic Messages API with native structured
+// outputs and thinking disabled.
 type anthropicRecapLLM struct {
 	client *anthropic.Client
 }
 
 func (a anthropicRecapLLM) Generate(ctx context.Context, req recapLLMRequest) (recapLLMResponse, error) {
-	// Low temperature for mostly consistent output.
-	// 0.25 allows slight variation on regeneration while staying focused.
-	temperature := 0.25
 	resp, err := a.client.CreateMessage(ctx, &anthropic.MessagesRequest{
-		Model:       req.Model,
-		MaxTokens:   req.MaxOutputTokens,
-		Temperature: &temperature,
-		System:      req.System,
-		Messages: []anthropic.Message{
-			{Role: "user", Content: req.User},
-			// Prefill assistant response with "{" to force JSON output.
-			// This prevents the model from role-playing as Claude Code when
-			// analyzing transcripts that contain tool calls.
-			{Role: "assistant", Content: "{"},
-		},
+		Model:     req.Model,
+		MaxTokens: req.MaxOutputTokens,
+		System:    req.System,
+		Messages:  []anthropic.Message{{Role: "user", Content: req.User}},
+		// Recap is summarization/extraction, and thinking tokens would count
+		// against the output cap. Always-thinking models (Fable, Mythos) reject
+		// "disabled" and are unsupported. No temperature: newer Claude models
+		// reject it.
+		Thinking: &anthropic.ThinkingConfig{Type: "disabled"},
+		// The schema forces JSON output, which also keeps the model from
+		// role-playing as Claude Code on transcripts full of tool calls.
+		OutputConfig: &anthropic.OutputConfig{Format: &anthropic.OutputFormat{
+			Type:   "json_schema",
+			Schema: json.RawMessage(smartRecapAnthropicJSONSchema),
+		}},
 	})
 	if err != nil {
 		return recapLLMResponse{}, err
 	}
-	// The API returns only the continuation after the prefilled "{".
+	switch resp.StopReason {
+	case "max_tokens":
+		return recapLLMResponse{}, errors.New("anthropic smart recap response truncated (stop_reason max_tokens)")
+	case "refusal":
+		return recapLLMResponse{}, errors.New("anthropic refused smart recap request (stop_reason refusal)")
+	}
+	text := resp.GetTextContent()
+	if text == "" {
+		return recapLLMResponse{}, errors.New("anthropic response has no text content")
+	}
 	return recapLLMResponse{
-		Text:         "{" + resp.GetTextContent(),
+		Text:         text,
 		InputTokens:  resp.Usage.InputTokens,
 		OutputTokens: resp.Usage.OutputTokens,
 	}, nil
@@ -193,37 +204,44 @@ func (o openaiRecapLLM) Generate(ctx context.Context, req recapLLMRequest) (reca
 	}, nil
 }
 
-// smartRecapAnnotatedListSchema is the schema for a list of AnnotatedItem.
-// message_id is nullable rather than optional because strict mode requires
-// every property to be listed in "required".
-const smartRecapAnnotatedListSchema = `{
+// Nullable-integer forms for AnnotatedItem.message_id. message_id is nullable
+// rather than optional because strict mode requires every property to be
+// listed in "required". OpenAI gets the type-array form (proven in hosted
+// production); Anthropic documents anyOf, not type arrays.
+const (
+	nullableIntTypeArraySchema = `{"type": ["integer", "null"]}`
+	nullableIntAnyOfSchema     = `{"anyOf": [{"type": "integer"}, {"type": "null"}]}`
+)
+
+// smartRecapResultSchema builds the strict JSON Schema for smart recap output
+// with the given message_id schema. It mirrors smartRecapOutputSchema (the
+// prose version kept in the system prompt for every vendor) and the json tags
+// of SmartRecapResult and AnnotatedItem.
+// TestSmartRecapJSONSchema_MatchesResultStructs guards drift. Length and
+// item-count limits are enforced by parseSmartRecapResponse instead.
+func smartRecapResultSchema(messageIDSchema string) string {
+	list := `{
 		"type": "array",
 		"items": {
 			"type": "object",
 			"properties": {
 				"text": {"type": "string"},
-				"message_id": {"type": ["integer", "null"]}
+				"message_id": ` + messageIDSchema + `
 			},
 			"required": ["text", "message_id"],
 			"additionalProperties": false
 		}
 	}`
-
-// smartRecapJSONSchema is the strict JSON Schema for smart recap output, sent
-// natively to OpenAI. It mirrors smartRecapOutputSchema (the prose version kept
-// in the system prompt for every vendor) and the json tags of SmartRecapResult
-// and AnnotatedItem. TestSmartRecapJSONSchema_MatchesResultStructs guards drift.
-// Length and item-count limits are enforced by parseSmartRecapResponse instead.
-const smartRecapJSONSchema = `{
+	return `{
 	"type": "object",
 	"properties": {
 		"suggested_session_title": {"type": "string"},
 		"recap": {"type": "string"},
-		"went_well": ` + smartRecapAnnotatedListSchema + `,
-		"went_bad": ` + smartRecapAnnotatedListSchema + `,
-		"human_suggestions": ` + smartRecapAnnotatedListSchema + `,
-		"environment_suggestions": ` + smartRecapAnnotatedListSchema + `,
-		"default_context_suggestions": ` + smartRecapAnnotatedListSchema + `
+		"went_well": ` + list + `,
+		"went_bad": ` + list + `,
+		"human_suggestions": ` + list + `,
+		"environment_suggestions": ` + list + `,
+		"default_context_suggestions": ` + list + `
 	},
 	"required": [
 		"suggested_session_title",
@@ -236,3 +254,11 @@ const smartRecapJSONSchema = `{
 	],
 	"additionalProperties": false
 }`
+}
+
+var (
+	// smartRecapJSONSchema is sent to OpenAI (text.format, strict mode).
+	smartRecapJSONSchema = smartRecapResultSchema(nullableIntTypeArraySchema)
+	// smartRecapAnthropicJSONSchema is sent to Anthropic (output_config.format).
+	smartRecapAnthropicJSONSchema = smartRecapResultSchema(nullableIntAnyOfSchema)
+)

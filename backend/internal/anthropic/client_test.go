@@ -182,6 +182,61 @@ func TestCreateMessage(t *testing.T) {
 	})
 }
 
+func TestMessagesRequest_ThinkingAndOutputConfigSerialization(t *testing.T) {
+	t.Run("omitted when nil", func(t *testing.T) {
+		raw, err := json.Marshal(MessagesRequest{Model: "m", MaxTokens: 1, Messages: []Message{{Role: "user", Content: "u"}}})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var body map[string]any
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		for _, k := range []string{"thinking", "output_config", "temperature"} {
+			if _, ok := body[k]; ok {
+				t.Errorf("%q must be omitted when unset, got %s", k, raw)
+			}
+		}
+	})
+
+	t.Run("serialized when set", func(t *testing.T) {
+		raw, err := json.Marshal(MessagesRequest{
+			Model:     "m",
+			MaxTokens: 1,
+			Messages:  []Message{{Role: "user", Content: "u"}},
+			Thinking:  &ThinkingConfig{Type: "disabled"},
+			OutputConfig: &OutputConfig{Format: &OutputFormat{
+				Type:   "json_schema",
+				Schema: json.RawMessage(`{"type":"object","additionalProperties":false}`),
+			}},
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var body struct {
+			Thinking     map[string]any `json:"thinking"`
+			OutputConfig struct {
+				Format struct {
+					Type   string         `json:"type"`
+					Schema map[string]any `json:"schema"`
+				} `json:"format"`
+			} `json:"output_config"`
+		}
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if body.Thinking["type"] != "disabled" || len(body.Thinking) != 1 {
+			t.Errorf("thinking = %v, want {type: disabled}", body.Thinking)
+		}
+		if body.OutputConfig.Format.Type != "json_schema" {
+			t.Errorf("output_config.format.type = %q", body.OutputConfig.Format.Type)
+		}
+		if body.OutputConfig.Format.Schema["type"] != "object" || body.OutputConfig.Format.Schema["additionalProperties"] != false {
+			t.Errorf("output_config.format.schema = %v, want the raw schema inlined", body.OutputConfig.Format.Schema)
+		}
+	})
+}
+
 func TestClientOptions(t *testing.T) {
 	t.Run("WithBaseURL", func(t *testing.T) {
 		client := NewClient("test-key", WithBaseURL("https://custom.api.com"))

@@ -13,7 +13,9 @@ HTTP client for the Anthropic Messages API.
 ## Key Types
 
 - **`Client`** -- HTTP client holding API key, base URL, and `*http.Client`. Created via `NewClient`.
-- **`MessagesRequest`** -- Request payload: model, max tokens, optional temperature, system prompt, and messages.
+- **`MessagesRequest`** -- Request payload: model, max tokens, optional temperature, system prompt, messages, optional `Thinking`, and optional `OutputConfig`. Optional fields are omitted from the JSON when unset.
+- **`ThinkingConfig`** -- Extended-thinking control (`thinking`), e.g. `Type: "disabled"`.
+- **`OutputConfig`** / **`OutputFormat`** -- Structured outputs (`output_config.format`): `Type: "json_schema"` plus a raw JSON Schema.
 - **`Message`** -- A single conversation turn with `Role` and `Content`.
 - **`MessagesResponse`** -- Full API response including content blocks, stop reason, and token usage.
 - **`Usage`** -- Token counts: input, output, cache creation, and cache read.
@@ -57,4 +59,4 @@ Tests use `WithBaseURL` to point the client at an `httptest.Server` that returns
 
 ## Dependencies
 
-**Used by:** `internal/analytics` — the `anthropicRecapLLM` adapter in `smart_recap_llm.go`, selected when `SMART_RECAP_LLM_PROVIDER` is `anthropic` (the default). The adapter owns the smart-recap request shape (temperature, `"{"` assistant prefill); this package stays a generic client.
+**Used by:** `internal/analytics` — the `anthropicRecapLLM` adapter in `smart_recap_llm.go`, selected when `SMART_RECAP_LLM_PROVIDER` is `anthropic` (the default). The adapter owns the smart-recap request shape (structured-output schema, thinking disabled); this package stays a generic client.

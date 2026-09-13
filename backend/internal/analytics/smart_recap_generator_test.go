@@ -16,8 +16,8 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-// mockAnthropicResponse returns a valid Anthropic API response with a smart recap JSON.
-// The text content omits the leading "{" because the analyzer prefills it.
+// mockAnthropicResponse returns a valid Anthropic API response with a complete
+// smart recap JSON object (structured outputs; no prefill).
 func mockAnthropicResponse() anthropic.MessagesResponse {
 	return anthropic.MessagesResponse{
 		ID:         "msg_test",
@@ -27,7 +27,7 @@ func mockAnthropicResponse() anthropic.MessagesResponse {
 		Content: []anthropic.ContentBlock{
 			{
 				Type: "text",
-				Text: `"suggested_session_title": "Test Session", "recap": "Test recap content.", "went_well": ["Good thing"], "went_bad": [], "human_suggestions": [], "environment_suggestions": [], "default_context_suggestions": []}`,
+				Text: `{"suggested_session_title": "Test Session", "recap": "Test recap content.", "went_well": [{"text": "Good thing", "message_id": null}], "went_bad": [], "human_suggestions": [], "environment_suggestions": [], "default_context_suggestions": []}`,
 			},
 		},
 		Usage: anthropic.Usage{
