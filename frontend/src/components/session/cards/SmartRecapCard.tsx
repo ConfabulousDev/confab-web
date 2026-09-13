@@ -6,6 +6,8 @@ import {
   LightbulbIcon,
   RefreshIcon,
   ExternalLinkIcon,
+  ClaudeCodeIcon,
+  CodexIcon,
 } from '@/components/icons';
 import type {
   SmartRecapCardData,
@@ -28,6 +30,15 @@ interface SmartRecapCardProps extends CardProps<SmartRecapCardData> {
   /** Session ID for building message deep links */
   sessionId?: string;
 }
+
+/**
+ * LLM vendors that can generate a recap. Keyed by LLM vendor, not coding agent —
+ * deliberately separate from utils/providers.ts.
+ */
+const LLM_VENDORS: Record<SmartRecapCardData['llm_provider'], { label: string; icon: React.ReactNode }> = {
+  anthropic: { label: 'Anthropic', icon: ClaudeCodeIcon },
+  openai: { label: 'OpenAI', icon: CodexIcon },
+};
 
 /**
  * Displays AI-generated session insights including:
@@ -111,14 +122,19 @@ export function SmartRecapCard({
     return null;
   }
 
-  // Build subtitle showing when generated, model, and quota
+  // Build subtitle showing when generated, vendor + model, and quota
   const modelShort = data.model_used.replace(/-\d{8}$/, '');
-  const subtitleParts = [
-    formatRelativeTime(data.computed_at),
-    modelShort,
-    ...(quota ? [`${quota.used}/${quota.limit} this month`] : []),
-  ];
-  const subtitle = subtitleParts.join(' · ');
+  const vendor = LLM_VENDORS[data.llm_provider];
+  const subtitle = (
+    <>
+      {formatRelativeTime(data.computed_at)} ·{' '}
+      <span className={styles.vendorIcon} role="img" aria-label={vendor.label} title={vendor.label}>
+        {vendor.icon}
+      </span>{' '}
+      {modelShort}
+      {quota && ` · ${quota.used}/${quota.limit} this month`}
+    </>
+  );
 
   // Refresh button for owners (disabled if quota exceeded)
   // Note: isRefreshing check not needed here since we return early with generating UI

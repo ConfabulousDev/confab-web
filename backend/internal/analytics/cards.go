@@ -254,6 +254,7 @@ type SmartRecapCardRecord struct {
 
 	// LLM metadata
 	ModelUsed        string `json:"model_used"`
+	LLMProvider      string `json:"llm_provider"` // LLMProviderAnthropic | LLMProviderOpenAI; legacy NULL rows read as anthropic
 	InputTokens      int    `json:"input_tokens"`
 	OutputTokens     int    `json:"output_tokens"`
 	GenerationTimeMs *int   `json:"generation_time_ms,omitempty"`
@@ -388,6 +389,7 @@ type SmartRecapCardData struct {
 	DefaultContextSuggestions []AnnotatedItem `json:"default_context_suggestions"`
 	ComputedAt                string          `json:"computed_at"`
 	ModelUsed                 string          `json:"model_used"`
+	LLMProvider               string          `json:"llm_provider"` // "anthropic" | "openai"
 }
 
 // SmartRecapQuotaInfo contains quota information for smart recap generation.

@@ -101,8 +101,9 @@ that still uses the public template defaults, `loadConfig` refuses to start when
 ### Smart recap (LLM-backed)
 | Var | Default | Purpose |
 |---|---|---|
-| `SMART_RECAP_ENABLED` | (off) | `"true"` enables. Silently disabled if `ANTHROPIC_API_KEY` or `SMART_RECAP_MODEL` is missing. |
-| `ANTHROPIC_API_KEY` / `SMART_RECAP_MODEL` | (off) | Both required to actually enable. |
+| `SMART_RECAP_ENABLED` | (off) | `"true"` enables. Disabled with a startup warning naming the missing var if the active provider's API key or `SMART_RECAP_MODEL` is missing. |
+| `SMART_RECAP_LLM_PROVIDER` | `anthropic` | `anthropic` or `openai`. Any other value is fatal at startup (even when smart recap is disabled). Resolved by `analytics.ResolveSmartRecapLLMConfig`, shared with the API server. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `SMART_RECAP_MODEL` | (off) | The active provider's key plus the model are required to actually enable. |
 | `SMART_RECAP_QUOTA_LIMIT` | unlimited | Per-user-per-month cap. `0` = unlimited. Negative or non-integer fails loudly. |
 | `SMART_RECAP_MAX_OUTPUT_TOKENS` | (model default) | Output token cap. |
 | `SMART_RECAP_MAX_TRANSCRIPT_TOKENS` | (model default) | Input transcript token cap. |

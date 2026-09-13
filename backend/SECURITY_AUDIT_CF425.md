@@ -167,7 +167,7 @@ without PKCE).
 |---|----------|----------|---------|
 | G1 | High (docs/code mismatch) | `SECURITY.md` line 813 | `SESSION_SECRET` was documented as required but never read by the code. **Fixed in this PR** — removed from docs and replaced with a clarifying note. |
 | G2 | Medium | `cmd/server/main.go` | `INSECURE_DEV_MODE=true` had no startup warning. **Fixed in this PR** — logs WARN at startup. |
-| G3 | Medium | `cmd/server/worker.go:422-457` | Smart Recap silently disables if `ANTHROPIC_API_KEY` is missing while `SMART_RECAP_ENABLED=true`. Operator gets no warning. (Deferred — recommend a startup warning; not separately ticketed.) |
+| G3 | Medium | `cmd/server/worker.go:422-457` | Smart Recap silently disables if `ANTHROPIC_API_KEY` is missing while `SMART_RECAP_ENABLED=true`. Operator gets no warning. (Deferred — recommend a startup warning; not separately ticketed.) **Update (pedp):** the worker and API server now log a startup WARN naming the missing env var (the active provider's API key or `SMART_RECAP_MODEL`), and an invalid `SMART_RECAP_LLM_PROVIDER` is fatal. |
 | G4 | Low | `cmd/server/main.go:204-243` | Partial OAuth configs (ID set, secret missing) are silently disabled. (Deferred.) |
 | G5 | Info / passed | `internal/api/flylogger.go:142-153` | Log sanitization strips control characters, prevents log injection. |
 | G6 | Info / passed | `internal/anthropic/client.go:84` | Anthropic API key is set as `X-API-Key` and never included in OTel span attributes (which record only token counts and model name). |

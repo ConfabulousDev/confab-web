@@ -87,7 +87,7 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 			name: "valid config with smart recap enabled",
 			config: PrecomputeConfig{
 				SmartRecapEnabled:  true,
-				AnthropicAPIKey:    "test-key",
+				SmartRecapAPIKey:   "test-key",
 				SmartRecapModel:    "claude-haiku-4-5-20251001",
 				SmartRecapQuota:    100,
 				LockTimeoutSeconds: 60,
@@ -105,7 +105,7 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 			name: "missing API key makes it invalid for smart recap",
 			config: PrecomputeConfig{
 				SmartRecapEnabled: true,
-				AnthropicAPIKey:   "",
+				SmartRecapAPIKey:  "",
 				SmartRecapModel:   "claude-haiku-4-5-20251001",
 				SmartRecapQuota:   100,
 			},
@@ -117,7 +117,7 @@ func TestPrecomputeConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// The config validation logic is in worker.go's loadPrecomputeConfig
 			// This test documents the expected behavior
-			isValid := tt.config.SmartRecapEnabled == false || (tt.config.AnthropicAPIKey != "" &&
+			isValid := tt.config.SmartRecapEnabled == false || (tt.config.SmartRecapAPIKey != "" &&
 				tt.config.SmartRecapModel != "" &&
 				tt.config.SmartRecapQuota > 0)
 

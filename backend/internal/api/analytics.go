@@ -26,22 +26,29 @@ const (
 // SmartRecapConfig holds configuration for the smart recap feature.
 type SmartRecapConfig struct {
 	Enabled             bool
-	APIKey              string
+	Provider            string // LLM vendor: analytics.LLMProviderAnthropic or analytics.LLMProviderOpenAI
+	APIKey              string // API key for Provider
 	Model               string
 	QuotaLimit          int
 	LockTimeoutSeconds  int
 	MaxOutputTokens     int    // 0 means use DefaultMaxOutputTokens
 	MaxTranscriptTokens int    // 0 means use DefaultMaxTranscriptTokens
-	BaseURL             string // Custom base URL for the Anthropic API (for testing)
+	BaseURL             string // Custom base URL for the active vendor's API (for testing)
 }
 
 // loadSmartRecapConfig loads smart recap configuration from environment variables.
-// All env vars are required for the feature to be enabled.
+// The active vendor's API key and the model are required for the feature to be
+// enabled; an invalid SMART_RECAP_LLM_PROVIDER is fatal.
 func loadSmartRecapConfig() SmartRecapConfig {
+	llmConfig, err := analytics.ResolveSmartRecapLLMConfig(os.Getenv)
+	if err != nil {
+		logger.Fatal("invalid smart recap configuration", "error", err)
+	}
 	config := SmartRecapConfig{
 		Enabled:            os.Getenv("SMART_RECAP_ENABLED") == "true",
-		APIKey:             os.Getenv("ANTHROPIC_API_KEY"),
-		Model:              os.Getenv("SMART_RECAP_MODEL"),
+		Provider:           llmConfig.Provider,
+		APIKey:             llmConfig.APIKey,
+		Model:              llmConfig.Model,
 		LockTimeoutSeconds: defaultSmartRecapLockTimeoutSecs,
 	}
 
@@ -68,11 +75,15 @@ func loadSmartRecapConfig() SmartRecapConfig {
 		}
 	}
 
-	// Test-only: override the Anthropic API base URL (for mock servers in integration tests)
+	// Test-only: override the active vendor's API base URL (for mock servers in integration tests)
 	config.BaseURL = os.Getenv("TEST_SMART_RECAP_BASE_URL")
 
 	// Disable if required config is missing (quota=0 means unlimited, not disabled)
-	if config.APIKey == "" || config.Model == "" {
+	if llmConfig.MissingVar != "" {
+		if config.Enabled {
+			logger.Warn("smart recap disabled: missing env var",
+				"var", llmConfig.MissingVar, "llm_provider", llmConfig.Provider)
+		}
 		config.Enabled = false
 	}
 
@@ -88,6 +99,7 @@ func (c SmartRecapConfig) QuotaEnabled() bool {
 // generatorConfig returns the analytics.SmartRecapGeneratorConfig derived from this config.
 func (c SmartRecapConfig) generatorConfig() analytics.SmartRecapGeneratorConfig {
 	return analytics.SmartRecapGeneratorConfig{
+		Provider:            c.Provider,
 		APIKey:              c.APIKey,
 		Model:               c.Model,
 		MaxOutputTokens:     c.MaxOutputTokens,
@@ -493,6 +505,7 @@ func addSmartRecapToResponse(response *analytics.AnalyticsResponse, card *analyt
 		DefaultContextSuggestions: card.DefaultContextSuggestions,
 		ComputedAt:                card.ComputedAt.Format(time.RFC3339),
 		ModelUsed:                 card.ModelUsed,
+		LLMProvider:               card.LLMProvider,
 	}
 }
 

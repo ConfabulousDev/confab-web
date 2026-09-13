@@ -15,6 +15,7 @@ const mockData: SmartRecapCardData = {
   default_context_suggestions: [a('Add CLAUDE.md entry for auth patterns')],
   computed_at: '2024-01-15T10:30:00Z',
   model_used: 'claude-sonnet-4-20250514',
+  llm_provider: 'anthropic',
 };
 
 const mockQuota: SmartRecapQuotaInfo = {
@@ -24,6 +25,30 @@ const mockQuota: SmartRecapQuotaInfo = {
 };
 
 describe('SmartRecapCard', () => {
+  it('shows the Anthropic vendor icon in the subtitle for anthropic recaps', () => {
+    render(<SmartRecapCard data={mockData} loading={false} />);
+
+    const vendor = screen.getByRole('img', { name: 'Anthropic' });
+    expect(vendor).toHaveAttribute('title', 'Anthropic');
+    expect(screen.queryByRole('img', { name: 'OpenAI' })).not.toBeInTheDocument();
+  });
+
+  it('shows the OpenAI vendor icon and model name for openai recaps', () => {
+    render(
+      <SmartRecapCard
+        data={{ ...mockData, llm_provider: 'openai', model_used: 'gpt-5.6-luna' }}
+        loading={false}
+        quota={mockQuota}
+      />
+    );
+
+    const vendor = screen.getByRole('img', { name: 'OpenAI' });
+    expect(vendor).toHaveAttribute('title', 'OpenAI');
+    expect(screen.queryByRole('img', { name: 'Anthropic' })).not.toBeInTheDocument();
+    expect(screen.getByText(/gpt-5\.6-luna/)).toBeInTheDocument();
+    expect(screen.getByText(/3\/10 this month/)).toBeInTheDocument();
+  });
+
   it('renders recap text and subtitle with model name trimmed of date suffix', () => {
     render(<SmartRecapCard data={mockData} loading={false} />);
 

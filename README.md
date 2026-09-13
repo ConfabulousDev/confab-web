@@ -54,7 +54,7 @@ Start a Claude Code or Codex session — it appears in the dashboard automatical
 ## Features
 
 - **Session Management** — Archive, browse, search sessions; full transcript viewer
-- **Analytics & Smart Recaps** — Cost tracking, AI-powered recaps (requires Anthropic API key)
+- **Analytics & Smart Recaps** — Cost tracking, AI-powered recaps (requires an Anthropic or OpenAI API key)
 - **Sharing** — Fine-grained session-by-session sharing, or open sharing policy for self-hosted high-trust deployments
 - **Multi-User Auth** — Password auth, GitHub OAuth, Google OAuth, or OIDC (Okta, Auth0, Azure AD, Keycloak)
 - **Admin Panel** — User management, activation/deactivation, storage monitoring

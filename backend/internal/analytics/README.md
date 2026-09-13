@@ -16,7 +16,7 @@ Per-card compute logic lives in `analyzer_<card>_<provider>.go` files. One file 
 | Agents and Skills | `analyzer_agents_and_skills_claude.go` (two `FileProcessor`s — `AgentsAnalyzer` and `SkillsAnalyzer` — feeding one combined card) | `analyzer_agents_and_skills_codex.go` (CF-443: `spawn_agent` → AgentStats keyed by `agent_role`; `<skill>` blocks → SkillStats keyed by skill name) |
 | Redactions | `analyzer_redactions_claude.go` | `analyzer_redactions_codex.go` |
 | Workflows | `analyzer_workflows.go` (CF-534: per-run subagent aggregates; Claude-only, driven explicitly by `ComputeStreaming`, not a `FileProcessor`) | — (Codex has no workflows) |
-| Smart Recap | `analyzer_smart_recap.go` (shared infrastructure: LLM call, prompt assembly, response parsing, `FormatConfig`) + `analyzer_smart_recap_claude.go` (Claude transcript prep: `PrepareTranscript`, `TranscriptBuilder`) | `analyzer_smart_recap_codex.go` (`PrepareCodexTranscript`) |
+| Smart Recap | `analyzer_smart_recap.go` (shared infrastructure: prompt assembly, response parsing, `FormatConfig`) + `smart_recap_llm.go` (LLM-vendor seam — vendor here means Anthropic/OpenAI, not coding agent) + `analyzer_smart_recap_claude.go` (Claude transcript prep: `PrepareTranscript`, `TranscriptBuilder`) | `analyzer_smart_recap_codex.go` (`PrepareCodexTranscript`) |
 
 The orchestrators follow the same convention: `claude_compute.go` ↔ `codex_compute.go`, with the shared `ComputeResult` aggregate living in `compute_result.go` (CF-454).
 
@@ -37,9 +37,10 @@ The orchestrators follow the same convention: `claude_compute.go` ↔ `codex_com
 | `analyzer_agents_and_skills_claude.go` | `AgentsAnalyzer` (Agent/Task tool invocations grouped by `subagent_type`) and `SkillsAnalyzer` (Skill tool invocations plus command-expansion `<command-name>` detection). Two `FileProcessor`s, main-only, feeding the combined Agents & Skills card (CF-454). |
 | `analyzer_redactions_claude.go` | `RedactionsAnalyzer` — counts `[REDACTED:TYPE]` markers by recursively walking `RawData`. Processes all files. |
 | `analyzer_workflows.go` | `WorkflowsAnalyzer` (CF-534) — per-run workflow subagent aggregates (agent count, token breakdown + cost, journal-derived success count, activity span). Driven explicitly by `ComputeStreaming` via `ProcessAgent`/`ProcessJournal`/`Result` (not a `FileProcessor`). Claude-only. |
-| `analyzer_smart_recap.go` | `SmartRecapAnalyzer` — calls Anthropic LLM to generate session recaps. Shared infrastructure: LLM call, `PrepareStats`, response parsing (`parseSmartRecapResponse`, `resolveMessageIDs`), system-prompt sections + `BuildSmartRecapSystemPrompt`, and the `FormatConfig` truncation helper used by both providers' transcript-prep paths. |
+| `analyzer_smart_recap.go` | `SmartRecapAnalyzer` — generates session recaps through a `recapLLM` (vendor-agnostic). Shared infrastructure: `PrepareStats`, response parsing (`parseSmartRecapResponse`, `resolveMessageIDs`), system-prompt sections + `BuildSmartRecapSystemPrompt`, and the `FormatConfig` truncation helper used by both providers' transcript-prep paths. |
 | `analyzer_smart_recap_claude.go` | Claude transcript prep for smart recap: `PrepareTranscript`, `PrepareTranscriptFromFiles`, `TranscriptBuilder` + `NewTranscriptBuilder`, and the `formatLine` / `formatUserLine` / `formatAssistantLine` helpers that emit `<user>` / `<assistant>` / `<skill>` / `<tool_results>` XML from `TranscriptLine`s. |
-| `smart_recap_generator.go` | `SmartRecapGenerator` — full lifecycle for smart recap: lock acquisition, LLM call, quota increment, card persistence, and suggested-title update. Resolves custom system prompt from `dbadminsettings` at generation time. Used by both the precomputer and the on-demand API handler. |
+| `smart_recap_generator.go` | `SmartRecapGenerator` — full lifecycle for smart recap: LLM client construction (`SmartRecapGeneratorConfig.Provider`, empty → anthropic), lock acquisition, LLM call, quota increment, card persistence (incl. `LLMProvider`), and suggested-title update. Resolves custom system prompt from `dbadminsettings` at generation time. Used by both the precomputer and the on-demand API handler. |
+| `smart_recap_llm.go` | Smart recap LLM-vendor seam (pedp). `LLMProviderAnthropic`/`LLMProviderOpenAI` constants; `ResolveSmartRecapLLMConfig(getenv)` — shared by `api` and `cmd/server` — reads `SMART_RECAP_LLM_PROVIDER` (unset → anthropic, unknown → error), the active vendor's key, and `SMART_RECAP_MODEL`, reporting the first missing var in `MissingVar`. Unexported `recapLLM` interface + `newRecapLLM` switch with two adapters: `anthropicRecapLLM` (temperature 0.25, `"{"` assistant prefill, prepends `"{"` to the reply) and `openaiRecapLLM` (Responses API, strict `smartRecapJSONSchema`, reasoning effort `none`, `store: false`, no temperature; `incomplete` status, refusal, or empty output → error). `smartRecapJSONSchema` mirrors `SmartRecapResult`/`AnnotatedItem` json tags (drift-tested); `llmProviderOrDefault` maps empty/NULL → anthropic. |
 | `agent_provider.go` | `AgentFileInfo`, `AgentDownloader`, and `NewAgentProvider()` — streams agent files from storage one at a time, capping at `maxAgents` (0 = unlimited). |
 | `cards.go` | Card record types (DB schema), card data types (API response), version constants, `IsValid`/`AllValid` staleness helpers. |
 | `models.go` | `AnalyticsResponse` (API envelope), legacy flat types (`TokenStats`, `CostStats`, `CompactionInfo`). |
@@ -274,6 +275,14 @@ See `PROVIDER_EXTENSION.md` (in this directory) for the full checklist.
 - `TestGetModelFamily_Parity` (`pricing_test.go`) loads the repo-root `testdata/model_family_parity.json` — a cross-language fixture also consumed by the frontend's `tokenStats.test.ts` — and asserts `getModelFamily` matches each row's `backend` family key. It guards backend↔frontend normalizer drift (nrxr / 5x6e F7); the one intentional divergence (malformed `claude-opus-4a-5`) is pinned in the fixture.
 - `cursor_fixture_test.go` smoke-parses `testdata/cursor/main.jsonl`, the sanitized Cursor agent-transcript wire-format fixture (the `{role, message.content[]}` envelope — **not** Claude Code JSONL). It asserts the line/block shapes, tool coverage (incl. `StrReplace`, Cursor's edit tool), and `turn_ended` markers documented in `../../docs/cursor-integration-architecture.md`. Downstream Cursor tickets (parser, analytics compute, frontend adapter) consume the same fixture. It also smoke-parses `testdata/cursor/subagent.jsonl` (wc9t) — a sanitized subagent transcript with the identical main-thread envelope plus the subagent-only `UpdateCurrentStep` marker — asserting the shared envelope and the marker's three input keys.
 
+- `smart_recap_live_compare_test.go` (`TestSmartRecapLiveCompare`) is an **opt-in, billed** side-by-side comparison of the two LLM vendors on one real Claude Code transcript — used to validate a vendor/model switch before flipping it in production, and the live check that the OpenAI model accepts reasoning effort `none` + the strict schema. It skips unless all of `SMART_RECAP_LIVE_COMPARE=1`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `SMART_RECAP_COMPARE_JSONL` are set (CI sets none). Models default to `claude-haiku-4-5-20251001` / `gpt-5.6-luna` (override with `SMART_RECAP_COMPARE_ANTHROPIC_MODEL` / `SMART_RECAP_COMPARE_OPENAI_MODEL`):
+
+  ```bash
+  SMART_RECAP_LIVE_COMPARE=1 ANTHROPIC_API_KEY=… OPENAI_API_KEY=… \
+    SMART_RECAP_COMPARE_JSONL=~/.claude/projects/<proj>/<session>.jsonl \
+    go test ./internal/analytics -run TestSmartRecapLiveCompare -v
+  ```
+
 Key test patterns:
 - Analyzers are tested by constructing `TranscriptFile` or `FileCollection` objects with known lines and asserting on `Result()`.
 - Store tests use containerized Postgres and verify round-trip get/upsert behavior.
@@ -287,7 +296,8 @@ Key test patterns:
 |------------|---------|
 | `github.com/shopspring/decimal` | Precise cost arithmetic (avoids floating-point rounding) |
 | `github.com/lib/pq` | PostgreSQL array parameters in trends queries |
-| `github.com/ConfabulousDev/confab-web/internal/anthropic` | LLM client for smart recap generation |
+| `github.com/ConfabulousDev/confab-web/internal/anthropic` | Anthropic LLM client for smart recap generation (`anthropicRecapLLM`) |
+| `github.com/ConfabulousDev/confab-web/internal/openai` | OpenAI LLM client for smart recap generation (`openaiRecapLLM`) |
 | `github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings` | Custom smart recap prompt retrieval |
 | `github.com/ConfabulousDev/confab-web/internal/recapquota` | Monthly smart recap quota tracking |
 | `github.com/ConfabulousDev/confab-web/internal/storage` | `DownloadAndMergeChunks` for transcript/agent file retrieval; `MaxAgentFiles` cap |

@@ -108,6 +108,17 @@
   color: var(--color-text-muted);
 }
 
+/* LLM vendor glyph in the subtitle, sized to the subtitle text */
+.vendorIcon {
+  display: inline-flex;
+  vertical-align: -0.125em;
+}
+
+.vendorIcon svg {
+  width: 1em;
+  height: 1em;
+}
+
 .messageLink {
   display: inline-flex;
   align-items: center;

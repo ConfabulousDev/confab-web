@@ -8,7 +8,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 |------|------|
 | `registry.ts` | Central card registry -- ordered list of all cards with render conditions |
 | `types.ts` | `CardProps<T>`, `CardDefinition` interfaces |
-| `Card.tsx` | Shared building blocks: `CardWrapper`, `StatRow`, `CardLoading`, `CardError`, `SectionHeader`. `CardWrapper` takes an optional `footer` slot (zsk4) — a muted one-liner below the stat rows, used to explain why a metric is absent by design (rather than padding the card with placeholder rows). |
+| `Card.tsx` | Shared building blocks: `CardWrapper`, `StatRow`, `CardLoading`, `CardError`, `SectionHeader`. `CardWrapper`'s `subtitle` is a `React.ReactNode` (pedp — SmartRecapCard renders a vendor glyph inside it; plain strings still work) and it takes an optional `footer` slot (zsk4) — a muted one-liner below the stat rows, used to explain why a metric is absent by design (rather than padding the card with placeholder rows). |
 | `Card.module.css` | Styles owned by the `Card.tsx` building blocks themselves — currently the `.cardFooter` rule (zsk4; hairline top border + muted small text, mirroring the SmartRecapCard footer tone). The rest of card chrome (`.card`, `.cardContent`, `.statRow`, …) still lives in `SessionSummaryPanel.module.css`. |
 | `useCardState.tsx` | `useCardState(data, loading, error, { title, icon })` — collapses the repeated loading/error guard at the top of every card (x8j0). Returns `CardError`/wrapped `CardLoading` (before data arrives) or `null`; callers keep their own trailing `if (!data) return null`. SmartRecapCard keeps its bespoke states. |
 | `TokensCard.tsx` | Flat token usage breakdown (input, output, cache) with estimated cost. Provider-aware via `getAdapter(provider)`: cost / fast-mode tooltips come from `tokensCostTooltip` / `tokensFastTooltip` on the adapter. When `!isTokensMeasurable(provider)` (Cursor — st5f), cost and token rows render **"Not available"** with adapter tooltip instead of `$0.00` / zero counts. "Cache created" row hidden when value is 0 (CF-436). Direct callers pass required `provider`; the registry uses `TokensCardForRegistry`. **Superseded by `TokensV2Card` whenever `tokens_v2` is present** (`SessionSummaryPanel` suppresses this card); it remains the fallback for sessions whose v2 tree hasn't been computed yet. |
@@ -20,7 +20,7 @@ Analytics card components for the session summary panel. Each card visualizes on
 | `AgentsAndSkillsCard.tsx` | Agent and skill invocation counts with per-type breakdown. Provider-agnostic copy: Claude buckets by `subagent_type`, Codex (CF-443) buckets by `agent_role` (`"default"`, `"explorer"`). Renders for both providers via the registry's `agent_invocations + skill_invocations > 0` gate. |
 | `RedactionsCard.tsx` | Redaction counts by type (shown only when redactions exist) |
 | `WorkflowsCard.tsx` | Per-run workflow subagent aggregates (CF-534): one row per run labelled `Run 1…N` (opaque `run_id` in hover title), showing agent count, a token subtotal, cost, an activity-span duration, and a `succeeded/total completed` count when the run journal was uploaded (`has_journal`). Backend-sourced (`cards.workflows`); hidden when there are no runs. |
-| `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links. `MessageLink` short-circuits when `item.message_id` is empty — this is the intentional state for Codex sessions (Codex rollout JSONL has no stable per-message id; the backend `PrepareCodexTranscript` synthesizes ids only for the LLM's internal use, and `codexProvider.ClearMessageIDs()` zeroes them before the card is saved). Claude sessions render the icon link; Codex sessions render plain text. |
+| `SmartRecapCard.tsx` | AI-generated session recap with actionable suggestions and deep links. `MessageLink` short-circuits when `item.message_id` is empty — this is the intentional state for Codex sessions (Codex rollout JSONL has no stable per-message id; the backend `PrepareCodexTranscript` synthesizes ids only for the LLM's internal use, and `codexProvider.ClearMessageIDs()` zeroes them before the card is saved). Claude sessions render the icon link; Codex sessions render plain text. The subtitle shows `time · <LLM vendor glyph> model · quota`: a local `LLM_VENDORS` map keyed by `llm_provider` (`anthropic` → `ClaudeCodeIcon`, `openai` → `CodexIcon`) renders the glyph with `role="img"` + `aria-label`/`title` "Anthropic"/"OpenAI" (pedp). This map is keyed by **LLM vendor**, not coding agent — do not fold it into `utils/providers.ts`. |
 | `index.ts` | Barrel export: `getOrderedCards()` |
 
 ## Key Types
@@ -91,7 +91,7 @@ See the `/add-session-card` skill for a full step-by-step playbook including bac
 
 - `Card.test.tsx` -- `CardWrapper`, `StatRow`, `CardLoading` rendering
 - `TokensCard.test.tsx` -- Token formatting, cost display
-- `SmartRecapCard.test.tsx` -- Recap display, quota exceeded state, deep link handling
+- `SmartRecapCard.test.tsx` -- Recap display, LLM vendor glyph (Anthropic/OpenAI), quota exceeded state, deep link handling
 - `registry.test.ts` -- Registry ordering, `shouldRender` logic
 - `SessionCard.test.tsx` -- Duration/model/messages formatting, compaction rows
 - `ConversationCard.test.tsx` -- Per-field nullability and duration formatting

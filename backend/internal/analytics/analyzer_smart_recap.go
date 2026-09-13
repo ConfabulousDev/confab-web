@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ConfabulousDev/confab-web/internal/anthropic"
 )
 
 const (
@@ -78,9 +76,10 @@ type SmartRecapResult struct {
 	GenerationTimeMs int
 }
 
-// SmartRecapAnalyzer generates AI-powered session recaps using Claude Haiku.
+// SmartRecapAnalyzer generates AI-powered session recaps using the configured
+// LLM vendor (see recapLLM). Parsing and message-id resolution are vendor-agnostic.
 type SmartRecapAnalyzer struct {
-	client             *anthropic.Client
+	llm                recapLLM
 	model              string
 	maxOutputTokens    int
 	maxTranscriptChars int
@@ -94,8 +93,8 @@ type SmartRecapAnalyzerConfig struct {
 	SystemPrompt        string // Fully assembled system prompt. If empty, uses the default.
 }
 
-// NewSmartRecapAnalyzer creates a new analyzer with the given Anthropic client.
-func NewSmartRecapAnalyzer(client *anthropic.Client, model string, cfg SmartRecapAnalyzerConfig) *SmartRecapAnalyzer {
+// NewSmartRecapAnalyzer creates a new analyzer that generates through llm.
+func NewSmartRecapAnalyzer(llm recapLLM, model string, cfg SmartRecapAnalyzerConfig) *SmartRecapAnalyzer {
 	maxOutput := cfg.MaxOutputTokens
 	if maxOutput <= 0 {
 		maxOutput = DefaultMaxOutputTokens
@@ -109,7 +108,7 @@ func NewSmartRecapAnalyzer(client *anthropic.Client, model string, cfg SmartReca
 		systemPrompt = BuildSmartRecapSystemPrompt(nil)
 	}
 	return &SmartRecapAnalyzer{
-		client:             client,
+		llm:                llm,
 		model:              model,
 		maxOutputTokens:    maxOutput,
 		maxTranscriptChars: maxTranscriptTokens * 4,
@@ -152,21 +151,11 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 
 	start := time.Now()
 
-	// Create the request with low temperature for mostly consistent output
-	// 0.25 allows slight variation on regeneration while staying focused
-	temperature := 0.25
-	resp, err := a.client.CreateMessage(ctx, &anthropic.MessagesRequest{
-		Model:       a.model,
-		MaxTokens:   a.maxOutputTokens,
-		Temperature: &temperature,
-		System:      a.systemPrompt,
-		Messages: []anthropic.Message{
-			{Role: "user", Content: userContent},
-			// Prefill assistant response with "{" to force JSON output.
-			// This prevents the model from role-playing as Claude Code when
-			// analyzing transcripts that contain tool calls.
-			{Role: "assistant", Content: "{"},
-		},
+	resp, err := a.llm.Generate(ctx, recapLLMRequest{
+		Model:           a.model,
+		System:          a.systemPrompt,
+		User:            userContent,
+		MaxOutputTokens: a.maxOutputTokens,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("LLM request failed: %w", err)
@@ -174,17 +163,14 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 
 	generationTimeMs := int(time.Since(start).Milliseconds())
 
-	// Parse the response - prepend "{" since we used prefill and the API
-	// returns only the continuation after the prefilled content
-	llmContent := "{" + resp.GetTextContent()
-	result, err := parseSmartRecapResponse(llmContent)
+	result, err := parseSmartRecapResponse(resp.Text)
 	if err != nil {
 		// Log the raw LLM response for debugging parse failures
 		slog.Error("smart recap parse failed",
 			"error", err,
 			"model", a.model,
-			"response_length", len(llmContent),
-			"raw_response", llmContent,
+			"response_length", len(resp.Text),
+			"raw_response", resp.Text,
 		)
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
@@ -192,8 +178,8 @@ func (a *SmartRecapAnalyzer) Analyze(ctx context.Context, input GenerateInput, c
 	// Translate integer message_ids from LLM response to real UUIDs
 	resolveMessageIDs(result, idMap)
 
-	result.InputTokens = resp.Usage.InputTokens
-	result.OutputTokens = resp.Usage.OutputTokens
+	result.InputTokens = resp.InputTokens
+	result.OutputTokens = resp.OutputTokens
 	result.GenerationTimeMs = generationTimeMs
 
 	return result, nil

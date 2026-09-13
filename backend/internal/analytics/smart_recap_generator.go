@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ConfabulousDev/confab-web/internal/anthropic"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbadminsettings"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
@@ -16,12 +15,13 @@ import (
 
 // SmartRecapGeneratorConfig holds configuration for the smart recap generator.
 type SmartRecapGeneratorConfig struct {
-	APIKey              string
+	Provider            string // LLM vendor: LLMProviderAnthropic or LLMProviderOpenAI (empty means anthropic)
+	APIKey              string // API key for Provider
 	Model               string
 	GenerationTimeout   time.Duration
 	MaxOutputTokens     int    // 0 means use DefaultMaxOutputTokens
 	MaxTranscriptTokens int    // 0 means use DefaultMaxTranscriptTokens
-	BaseURL             string // Custom base URL for the Anthropic API (for testing)
+	BaseURL             string // Custom base URL for the active vendor's API (for testing)
 }
 
 // SmartRecapGenerator handles the full smart recap generation flow.
@@ -39,6 +39,7 @@ func NewSmartRecapGenerator(store *Store, database *db.DB, config SmartRecapGene
 	if config.GenerationTimeout == 0 {
 		config.GenerationTimeout = 30 * time.Second
 	}
+	config.Provider = llmProviderOrDefault(config.Provider)
 	return &SmartRecapGenerator{
 		store:         store,
 		db:            database.Conn(),
@@ -98,6 +99,12 @@ func (g *SmartRecapGenerator) GenerateWithMessageIDClearing(ctx context.Context,
 }
 
 func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput, lockTimeoutSeconds int, skipQuota bool, clearIDs bool) *GenerateResult {
+	// Build the vendor client first so a config error never takes the lock.
+	llm, err := newRecapLLM(g.config.Provider, g.config.APIKey, g.config.BaseURL)
+	if err != nil {
+		return &GenerateResult{Error: err}
+	}
+
 	// Try to acquire the lock
 	acquired, err := g.store.AcquireSmartRecapLock(ctx, input.SessionID, lockTimeoutSeconds)
 	if err != nil {
@@ -113,12 +120,7 @@ func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput,
 	systemPrompt := g.resolveSystemPrompt(ctx)
 
 	// Create the analyzer and generate
-	var clientOpts []anthropic.ClientOption
-	if g.config.BaseURL != "" {
-		clientOpts = append(clientOpts, anthropic.WithBaseURL(g.config.BaseURL))
-	}
-	client := anthropic.NewClient(g.config.APIKey, clientOpts...)
-	analyzer := NewSmartRecapAnalyzer(client, g.config.Model, SmartRecapAnalyzerConfig{
+	analyzer := NewSmartRecapAnalyzer(llm, g.config.Model, SmartRecapAnalyzerConfig{
 		MaxOutputTokens:     g.config.MaxOutputTokens,
 		MaxTranscriptTokens: g.config.MaxTranscriptTokens,
 		SystemPrompt:        systemPrompt,
@@ -156,6 +158,7 @@ func (g *SmartRecapGenerator) generate(ctx context.Context, input GenerateInput,
 		EnvironmentSuggestions:    result.EnvironmentSuggestions,
 		DefaultContextSuggestions: result.DefaultContextSuggestions,
 		ModelUsed:                 g.config.Model,
+		LLMProvider:               g.config.Provider,
 		InputTokens:               result.InputTokens,
 		OutputTokens:              result.OutputTokens,
 		GenerationTimeMs:          &result.GenerationTimeMs,
