@@ -38,6 +38,19 @@ export function useAutoRetry(
   const [isRetrying, setIsRetrying] = useState(false);
   const [exhausted, setExhausted] = useState(false);
 
+  // Reset displayed state in the same render that auto-retry is disabled
+  // (React's "adjust state while rendering" pattern, previous value held in state).
+  const [prevEnabled, setPrevEnabled] = useState(enabled);
+  if (enabled !== prevEnabled) {
+    setPrevEnabled(enabled);
+    if (!enabled) {
+      setCountdown(0);
+      setAttempt(0);
+      setIsRetrying(false);
+      setExhausted(false);
+    }
+  }
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const attemptRef = useRef(0);
 
@@ -57,10 +70,6 @@ export function useAutoRetry(
 
     if (!enabled) {
       clearTimer();
-      setCountdown(0);
-      setAttempt(0);
-      setIsRetrying(false);
-      setExhausted(false);
       attemptRef.current = 0;
       return;
     }

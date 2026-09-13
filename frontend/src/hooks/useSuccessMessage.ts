@@ -36,7 +36,10 @@ export function useSuccessMessage(
     skipUrlParams = false,
   } = options;
   const [searchParams, setSearchParams] = useSearchParams();
-  const [message, setMessageState] = useState('');
+  // Read the success message from the URL once, during the first render, so it
+  // shows immediately without an effect-driven state update.
+  const [urlMessage] = useState(() => (skipUrlParams ? null : searchParams.get(paramName)));
+  const [message, setMessageState] = useState(urlMessage ?? '');
   const [fading, setFading] = useState(false);
 
   const clearMessage = useCallback(() => {
@@ -44,32 +47,31 @@ export function useSuccessMessage(
     setFading(false);
   }, []);
 
+  // Start fade out before clearing
+  const scheduleDismiss = useCallback(() => {
+    setTimeout(() => setFading(true), fadeDuration);
+    setTimeout(() => {
+      setMessageState('');
+      setFading(false);
+    }, clearDuration);
+  }, [fadeDuration, clearDuration]);
+
   const setMessage = useCallback(
     (msg: string) => {
       setMessageState(msg);
       setFading(false);
-
-      // Start fade out before clearing
-      setTimeout(() => setFading(true), fadeDuration);
-      setTimeout(() => {
-        setMessageState('');
-        setFading(false);
-      }, clearDuration);
+      scheduleDismiss();
     },
-    [fadeDuration, clearDuration]
+    [scheduleDismiss]
   );
 
-  // Check for success message from URL params on mount
+  // On mount, dismiss a URL-provided message on schedule and remove the param from the URL
   useEffect(() => {
-    if (skipUrlParams) return;
+    if (!urlMessage) return;
 
-    const successParam = searchParams.get(paramName);
-    if (successParam) {
-      setMessage(successParam);
-      // Remove the success param from URL
-      searchParams.delete(paramName);
-      setSearchParams(searchParams, { replace: true });
-    }
+    scheduleDismiss();
+    searchParams.delete(paramName);
+    setSearchParams(searchParams, { replace: true });
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

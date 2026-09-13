@@ -216,6 +216,36 @@ describe('useAutoRetry', () => {
     expect(result.current.exhausted).toBe(false);
   });
 
+  it('restarts from attempt 0 when re-enabled after being disabled', async () => {
+    const retryFn = vi.fn().mockRejectedValue(new Error('fail'));
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useAutoRetry(retryFn, {
+          maxAttempts: 2,
+          initialDelay: 1_000,
+          maxDelay: 60_000,
+          enabled,
+        }),
+      { initialProps: { enabled: true } },
+    );
+
+    // Exhaust both attempts
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(result.current.exhausted).toBe(true);
+
+    rerender({ enabled: false });
+    expect(result.current.exhausted).toBe(false);
+    expect(result.current.attempt).toBe(0);
+
+    rerender({ enabled: true });
+    // Fresh backoff: first countdown uses initialDelay again
+    expect(result.current.countdown).toBe(1);
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(result.current.attempt).toBe(1);
+    expect(retryFn).toHaveBeenCalledTimes(3);
+  });
+
   it('cleans up timer on unmount', async () => {
     const retryFn = vi.fn().mockRejectedValue(new Error('fail'));
     const { unmount } = renderHook(() =>

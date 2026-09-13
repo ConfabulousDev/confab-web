@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { useLoadSession } from './useLoadSession';
 import type { SessionDetail } from '@/types';
 import { makeSessionDetailFixture } from '@/test-fixtures/session';
@@ -211,6 +212,60 @@ describe('useLoadSession', () => {
     await waitFor(() => {
       expect(fetchSession).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('resets session and error in the same render that deps change (no stale flash)', async () => {
+    const fetchSession = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first failed'))
+      .mockImplementation(() => new Promise<SessionDetail>(() => {}));
+
+    // Record committed renders only (render-phase state adjustments discard the
+    // in-progress render, so logging during render would capture throwaway output).
+    const renders: { sessionId: string; loading: boolean; error: string; session: SessionDetail | null }[] = [];
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => {
+        const state = useLoadSession({ fetchSession, deps: [sessionId] });
+        useLayoutEffect(() => {
+          renders.push({ sessionId, loading: state.loading, error: state.error, session: state.session });
+        });
+        return state;
+      },
+      { initialProps: { sessionId: '1' } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('first failed');
+    });
+
+    rerender({ sessionId: '2' });
+
+    const rendersForNewDeps = renders.filter((r) => r.sessionId === '2');
+    expect(rendersForNewDeps.length).toBeGreaterThan(0);
+    for (const r of rendersForNewDeps) {
+      expect(r.error).toBe('');
+      expect(r.loading).toBe(true);
+      expect(r.session).toBeNull();
+    }
+  });
+
+  it('does not reset state when deps are unchanged across renders', async () => {
+    const fetchSession = vi.fn().mockResolvedValue(mockSession);
+
+    const { result, rerender } = renderHook(
+      ({ sessionId }) => useLoadSession({ fetchSession, deps: [sessionId] }),
+      { initialProps: { sessionId: '1' } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.session).toEqual(mockSession);
+    });
+
+    rerender({ sessionId: '1' });
+
+    expect(result.current.session).toEqual(mockSession);
+    expect(result.current.loading).toBe(false);
+    expect(fetchSession).toHaveBeenCalledTimes(1);
   });
 
   it('cancels fetch on unmount', async () => {
