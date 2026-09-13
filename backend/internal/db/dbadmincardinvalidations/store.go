@@ -15,12 +15,13 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // DefaultBatchSize is the number of sessions processed in a single Execute transaction.
-// Each batch DELETEs from the selected card tables and INSERTs audit rows inside one
-// transaction. Independent commits let Execute tolerate huge windows without a single
-// giant transaction.
+// Each batch DELETEs from the selected card tables, marks session_title candidates, and
+// INSERTs audit rows inside one transaction. Independent commits let Execute tolerate
+// huge windows without a single giant transaction.
 const DefaultBatchSize = 1000
 
 // Store provides admin_card_invalidations database operations.
@@ -40,18 +41,26 @@ func (s *Store) batchSize() int {
 	return DefaultBatchSize
 }
 
-// CountRequest describes a date-window + card-types query. Used by both CountAffected
-// (dry-run) and Execute (to scope DELETEs).
+// CountRequest describes a date-window + targets query. Used by both CountAffected
+// (dry-run) and Execute (to scope DELETEs and title marks).
 type CountRequest struct {
 	StartDate time.Time
 	EndDate   *time.Time // nil means open-ended (no upper bound)
+	// CardTypes are invalidation targets: card table names and/or
+	// analytics.SessionTitleInvalidationTarget.
 	CardTypes []string
+	// Providers restricts every selected target to sessions whose session_type is
+	// in this list. Callers pass alias-expanded values (models.ExpandWithAliases).
+	// Empty means all providers.
+	Providers []string
 }
 
 // CountResult is the shape returned by CountAffected and echoed in Execute's response.
-// AffectedSessions counts DISTINCT sessions in the date window that have at least
-// one row in any selected card table (intersection semantic).
-// AffectedCards[tableName] is the per-table row count that would be / was deleted.
+// AffectedSessions counts DISTINCT sessions in the date window (and provider filter)
+// that have at least one row in any selected card table or, when session_title is
+// selected, are a title candidate (union across targets).
+// AffectedCards[target] is the per-table row count that would be / was deleted, and
+// for session_title the number of title candidates that would be / were marked.
 type CountResult struct {
 	AffectedSessions int
 	AffectedCards    map[string]int
@@ -89,91 +98,153 @@ type AuditRow struct {
 	Reason        string
 }
 
-// validateCardTypes rejects empty or unknown table names before they reach SQL.
-func validateCardTypes(cardTypes []string) error {
+// targets is a validated CardTypes list split by kind. Only cardTables may be
+// interpolated into SQL; session_title is handled by the title candidate predicate.
+type targets struct {
+	cardTables []string
+	titles     bool
+}
+
+// splitTargets rejects empty or unknown targets before anything reaches SQL.
+func splitTargets(cardTypes []string) (targets, error) {
+	var t targets
 	if len(cardTypes) == 0 {
-		return fmt.Errorf("card_types must be non-empty")
+		return t, fmt.Errorf("card_types must be non-empty")
 	}
 	for _, ct := range cardTypes {
-		if !analytics.IsKnownCardTableName(ct) {
-			return fmt.Errorf("unknown card_type: %s", ct)
+		switch {
+		case ct == analytics.SessionTitleInvalidationTarget:
+			t.titles = true
+		case analytics.IsKnownCardTableName(ct):
+			t.cardTables = append(t.cardTables, ct)
+		default:
+			return t, fmt.Errorf("unknown card_type: %s", ct)
 		}
 	}
-	return nil
+	return t, nil
 }
 
 // unionSessionIDs returns a UNION ALL of `SELECT session_id FROM <table>` for the
-// given card tables. Callers must have validated cardTypes via validateCardTypes
-// before interpolating the result into SQL.
-func unionSessionIDs(cardTypes []string) string {
-	parts := make([]string, len(cardTypes))
-	for i, ct := range cardTypes {
+// given card tables. Callers must pass only targets.cardTables from splitTargets.
+func unionSessionIDs(cardTables []string) string {
+	parts := make([]string, len(cardTables))
+	for i, ct := range cardTables {
 		parts[i] = fmt.Sprintf(`SELECT session_id FROM %s`, ct)
 	}
 	return strings.Join(parts, " UNION ALL ")
 }
 
-// endArg converts an optional upper bound into a driver value. Nil stays nil so
-// the `$2::timestamptz IS NULL` guard in the query skips the upper-bound check.
-func endArg(end *time.Time) any {
-	if end == nil {
-		return nil
+// sessionScope is the window + provider filter shared by every session-selecting
+// query. It binds $1 (start), $2 (end, NULL = open), $3 (providers, NULL = all);
+// build its arguments with scopeArgs.
+const sessionScope = `s.last_message_at >= $1
+	AND ($2::timestamptz IS NULL OR s.last_message_at < $2)
+	AND ($3::text[] IS NULL OR s.session_type = ANY($3))`
+
+func scopeArgs(req CountRequest) []any {
+	var end, providers any
+	if req.EndDate != nil {
+		end = *req.EndDate
 	}
-	return *end
+	if len(req.Providers) > 0 {
+		providers = pq.Array(req.Providers)
+	}
+	return []any{req.StartDate, end, providers}
 }
 
-// CountAffected returns the distinct-session count and per-table row counts for the
-// date window. Intersection semantic: a session is counted only when it has at least
-// one row in one of the selected card tables.
+// Session types whose stored title the session_title recompute can repair, with
+// legacy aliases so the predicate matches rows written by older binaries.
+var (
+	codexSessionTypes  = models.ExpandWithAliases([]string{models.ProviderCodex})
+	cursorSessionTypes = models.ExpandWithAliases([]string{models.ProviderCursor})
+)
+
+// titleCandidatePredicate is the single definition of a session_title candidate:
+// a Codex session with no first_user_message, or a Cursor session whose title still
+// carries the <user_query> envelope. codexParam/cursorParam are the placeholders
+// bound to titleCandidateArgs().
+func titleCandidatePredicate(codexParam, cursorParam string) string {
+	return fmt.Sprintf(`(
+		(s.session_type = ANY(%s::text[]) AND s.first_user_message IS NULL)
+		OR (s.session_type = ANY(%s::text[]) AND s.first_user_message LIKE '%%<user_query>%%')
+	)`, codexParam, cursorParam)
+}
+
+func titleCandidateArgs() []any {
+	return []any{pq.Array(codexSessionTypes), pq.Array(cursorSessionTypes)}
+}
+
+// affectedSessionsQuery returns the WHERE-scoped selection of sessions touched by
+// any selected target (card rows ∪ title candidates) and its arguments. selectExpr
+// is the projection, e.g. "COUNT(*)" or "s.id".
+func affectedSessionsQuery(selectExpr, suffix string, req CountRequest, t targets) (string, []any) {
+	args := scopeArgs(req)
+	var clauses []string
+	if len(t.cardTables) > 0 {
+		clauses = append(clauses, fmt.Sprintf(`s.id IN (%s)`, unionSessionIDs(t.cardTables)))
+	}
+	if t.titles {
+		clauses = append(clauses, titleCandidatePredicate("$4", "$5"))
+		args = append(args, titleCandidateArgs()...)
+	}
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM sessions s
+		WHERE %s
+		  AND (%s)
+		%s
+	`, selectExpr, sessionScope, strings.Join(clauses, " OR "), suffix)
+	return query, args
+}
+
+// CountAffected returns the distinct-session count and per-target counts for the
+// date window and provider filter. A session is counted when it has at least one row
+// in a selected card table or is a title candidate while session_title is selected.
 func (s *Store) CountAffected(ctx context.Context, req CountRequest) (*CountResult, error) {
-	if err := validateCardTypes(req.CardTypes); err != nil {
+	t, err := splitTargets(req.CardTypes)
+	if err != nil {
 		return nil, err
 	}
 
 	result := &CountResult{AffectedCards: make(map[string]int, len(req.CardTypes))}
-	end := endArg(req.EndDate)
 
-	countQuery := fmt.Sprintf(`
-		SELECT COUNT(DISTINCT s.id)
-		FROM sessions s
-		WHERE s.last_message_at >= $1
-		  AND ($2::timestamptz IS NULL OR s.last_message_at < $2)
-		  AND s.id IN (%s)
-	`, unionSessionIDs(req.CardTypes))
-	if err := s.conn().QueryRowContext(ctx, countQuery, req.StartDate, end).Scan(&result.AffectedSessions); err != nil {
+	countQuery, countArgs := affectedSessionsQuery("COUNT(*)", "", req, t)
+	if err := s.conn().QueryRowContext(ctx, countQuery, countArgs...).Scan(&result.AffectedSessions); err != nil {
 		return nil, fmt.Errorf("count affected sessions: %w", err)
 	}
 
-	for _, ct := range req.CardTypes {
+	for _, ct := range t.cardTables {
 		q := fmt.Sprintf(`
 			SELECT COUNT(*) FROM %s c
 			JOIN sessions s ON s.id = c.session_id
-			WHERE s.last_message_at >= $1
-			  AND ($2::timestamptz IS NULL OR s.last_message_at < $2)
-		`, ct)
+			WHERE %s
+		`, ct, sessionScope)
 		var n int
-		if err := s.conn().QueryRowContext(ctx, q, req.StartDate, end).Scan(&n); err != nil {
+		if err := s.conn().QueryRowContext(ctx, q, scopeArgs(req)...).Scan(&n); err != nil {
 			return nil, fmt.Errorf("count %s: %w", ct, err)
 		}
 		result.AffectedCards[ct] = n
 	}
 
+	if t.titles {
+		q := fmt.Sprintf(`
+			SELECT COUNT(*) FROM sessions s
+			WHERE %s AND %s
+		`, sessionScope, titleCandidatePredicate("$4", "$5"))
+		var n int
+		if err := s.conn().QueryRowContext(ctx, q, append(scopeArgs(req), titleCandidateArgs()...)...).Scan(&n); err != nil {
+			return nil, fmt.Errorf("count session_title candidates: %w", err)
+		}
+		result.AffectedCards[analytics.SessionTitleInvalidationTarget] = n
+	}
+
 	return result, nil
 }
 
-// selectSessionIDs returns the ordered list of session IDs in the date window that
-// have at least one row in any selected card table (intersection semantic).
-func (s *Store) selectSessionIDs(ctx context.Context, req CountRequest) ([]string, error) {
-	query := fmt.Sprintf(`
-		SELECT DISTINCT s.id
-		FROM sessions s
-		WHERE s.last_message_at >= $1
-		  AND ($2::timestamptz IS NULL OR s.last_message_at < $2)
-		  AND s.id IN (%s)
-		ORDER BY s.id
-	`, unionSessionIDs(req.CardTypes))
-
-	rows, err := s.conn().QueryContext(ctx, query, req.StartDate, endArg(req.EndDate))
+// selectSessionIDs returns the ordered IDs of every session CountAffected counts.
+func (s *Store) selectSessionIDs(ctx context.Context, req CountRequest, t targets) ([]string, error) {
+	query, args := affectedSessionsQuery("s.id", "ORDER BY s.id", req, t)
+	rows, err := s.conn().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("select session ids: %w", err)
 	}
@@ -191,22 +262,24 @@ func (s *Store) selectSessionIDs(ctx context.Context, req CountRequest) ([]strin
 }
 
 // Execute runs the invalidation in chunked batches. Each batch DELETEs from the
-// selected card tables and inserts audit rows inside a single transaction that
-// commits independently. Stops at the first failure, returning partial progress.
+// selected card tables, marks title candidates, and inserts audit rows inside a
+// single transaction that commits independently. Stops at the first failure,
+// returning partial progress.
 func (s *Store) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResult, error) {
-	if err := validateCardTypes(req.CardTypes); err != nil {
+	t, err := splitTargets(req.CardTypes)
+	if err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(req.Reason) == "" {
 		return nil, fmt.Errorf("reason must be non-empty")
 	}
 
-	ids, err := s.selectSessionIDs(ctx, req.CountRequest)
+	ids, err := s.selectSessionIDs(ctx, req.CountRequest, t)
 	if err != nil {
 		return nil, err
 	}
 
-	// Pre-seed AffectedCards with zero for every selected table so the response
+	// Pre-seed AffectedCards with zero for every selected target so the response
 	// shape matches dry-run even when 0 batches run.
 	affectedCards := make(map[string]int, len(req.CardTypes))
 	for _, ct := range req.CardTypes {
@@ -222,13 +295,13 @@ func (s *Store) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResult
 		end := min(start+batchSize, len(ids))
 		batch := ids[start:end]
 
-		perTable, err := s.executeBatch(ctx, req, batch, res.CorrelationID)
+		perTarget, err := s.executeBatch(ctx, req, t, batch, res.CorrelationID)
 		if err != nil {
 			res.Err = err
 			return res, err
 		}
 		res.Result.AffectedSessions += len(batch)
-		for ct, n := range perTable {
+		for ct, n := range perTarget {
 			res.Result.AffectedCards[ct] += n
 		}
 		res.CompletedBatches++
@@ -237,23 +310,36 @@ func (s *Store) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResult
 	return res, nil
 }
 
-// executeBatch runs one batch transaction: DELETE from each selected card table
-// and INSERT one audit row per session.
-func (s *Store) executeBatch(ctx context.Context, req ExecuteRequest, batch []string, correlationID uuid.UUID) (map[string]int, error) {
+// executeBatch runs one batch transaction: DELETE from each selected card table,
+// mark the batch's title candidates when session_title is selected, and INSERT one
+// audit row per session.
+func (s *Store) executeBatch(ctx context.Context, req ExecuteRequest, t targets, batch []string, correlationID uuid.UUID) (map[string]int, error) {
 	tx, err := s.conn().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	perTable := make(map[string]int, len(req.CardTypes))
-	for _, ct := range req.CardTypes {
+	perTarget := make(map[string]int, len(req.CardTypes))
+	for _, ct := range t.cardTables {
 		result, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE session_id = ANY($1)`, ct), pq.Array(batch))
 		if err != nil {
 			return nil, fmt.Errorf("delete %s: %w", ct, err)
 		}
 		n, _ := result.RowsAffected()
-		perTable[ct] = int(n)
+		perTarget[ct] = int(n)
+	}
+
+	if t.titles {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE sessions s SET title_recompute_requested_at = NOW()
+			WHERE s.id = ANY($1) AND `+titleCandidatePredicate("$2", "$3"),
+			append([]any{pq.Array(batch)}, titleCandidateArgs()...)...)
+		if err != nil {
+			return nil, fmt.Errorf("mark session_title candidates: %w", err)
+		}
+		n, _ := result.RowsAffected()
+		perTarget[analytics.SessionTitleInvalidationTarget] = int(n)
 	}
 
 	for _, sid := range batch {
@@ -269,7 +355,7 @@ func (s *Store) executeBatch(ctx context.Context, req ExecuteRequest, batch []st
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
-	return perTable, nil
+	return perTarget, nil
 }
 
 const listColumns = `

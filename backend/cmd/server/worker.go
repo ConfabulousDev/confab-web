@@ -35,6 +35,8 @@ type precomputerAPI interface {
 	PrecomputeRegularCards(ctx context.Context, session analytics.StaleSession) error
 	PrecomputeSmartRecapOnly(ctx context.Context, session analytics.StaleSession) error
 	BuildSearchIndexOnly(ctx context.Context, session analytics.StaleSession) error
+	FindTitleRecomputeSessions(ctx context.Context, limit int) ([]analytics.StaleSession, error)
+	RecomputeSessionTitle(ctx context.Context, session analytics.StaleSession) error
 }
 
 // Worker is the background analytics precompute worker.
@@ -146,9 +148,11 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 // runOnce executes a single precomputation cycle.
-// It processes two independent buckets:
+// It processes four independent buckets:
 // 1. Sessions with stale regular cards (computes regular cards only)
 // 2. Sessions with stale smart recap but fresh regular cards (computes smart recap only)
+// 3. Sessions with a stale search index
+// 4. Sessions marked for session-title recompute by an admin invalidation (nbrd)
 func (w *Worker) runOnce(ctx context.Context) {
 	logger.Info("starting precomputation cycle")
 
@@ -194,7 +198,14 @@ func (w *Worker) runOnce(ctx context.Context) {
 		return
 	}
 
-	totalFound := len(regularSessions) + len(smartRecapSessions) + len(searchIndexSessions)
+	// Bucket 4: Find sessions marked for session-title recompute
+	titleSessions, err := w.precomputer.FindTitleRecomputeSessions(ctx, w.config.MaxSessions)
+	if err != nil {
+		logger.Error("failed to find session title recompute sessions", "error", err)
+		return
+	}
+
+	totalFound := len(regularSessions) + len(smartRecapSessions) + len(searchIndexSessions) + len(titleSessions)
 	if totalFound == 0 {
 		logger.Info("no stale sessions found")
 		return
@@ -204,6 +215,7 @@ func (w *Worker) runOnce(ctx context.Context) {
 		"regular_cards", len(regularSessions),
 		"smart_recap_only", len(smartRecapSessions),
 		"search_index_only", len(searchIndexSessions),
+		"session_title", len(titleSessions),
 	)
 
 	// In dry-run mode, just log what would be processed and return
@@ -232,10 +244,19 @@ func (w *Worker) runOnce(ctx context.Context) {
 				"total_lines", session.TotalLines,
 			)
 		}
+		for _, session := range titleSessions {
+			logger.Info("[DRY-RUN] would recompute session title",
+				"session_id", session.SessionID,
+				"user_id", session.UserID,
+				"external_id", session.ExternalID,
+				"provider", session.Provider,
+			)
+		}
 		logger.Info("[DRY-RUN] precomputation cycle complete",
 			"would_process_regular", len(regularSessions),
 			"would_process_smart_recap", len(smartRecapSessions),
 			"would_process_search_index", len(searchIndexSessions),
+			"would_process_session_title", len(titleSessions),
 		)
 		return
 	}
@@ -249,6 +270,9 @@ func (w *Worker) runOnce(ctx context.Context) {
 	// Process Bucket 3: Sessions with stale search index
 	searchIndexProcessed, searchIndexErrors := w.processSearchIndexSessions(ctx, searchIndexSessions)
 
+	// Process Bucket 4: Sessions marked for session-title recompute
+	titleProcessed, titleErrors := w.processTitleRecomputeSessions(ctx, titleSessions)
+
 	logger.Info("precomputation cycle complete",
 		"regular_processed", regularProcessed,
 		"regular_errors", regularErrors,
@@ -256,6 +280,8 @@ func (w *Worker) runOnce(ctx context.Context) {
 		"smart_recap_errors", smartRecapErrors,
 		"search_index_processed", searchIndexProcessed,
 		"search_index_errors", searchIndexErrors,
+		"session_title_processed", titleProcessed,
+		"session_title_errors", titleErrors,
 	)
 }
 
@@ -272,6 +298,12 @@ func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analy
 // processSearchIndexSessions processes sessions with stale search index.
 func (w *Worker) processSearchIndexSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
 	return w.processSessions(ctx, sessions, "search index", w.precomputer.BuildSearchIndexOnly, 50*time.Millisecond)
+}
+
+// processTitleRecomputeSessions re-derives first_user_message for sessions marked
+// by a session_title invalidation.
+func (w *Worker) processTitleRecomputeSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
+	return w.processSessions(ctx, sessions, "session title", w.precomputer.RecomputeSessionTitle, 50*time.Millisecond)
 }
 
 // processSessions is a generic loop that processes a list of stale sessions with pacing.

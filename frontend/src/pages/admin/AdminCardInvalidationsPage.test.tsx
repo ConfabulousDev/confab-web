@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import {
   AdminCardInvalidationsPageContent,
   type AdminCardInvalidationsPageContentProps,
 } from './AdminCardInvalidationsPage';
+import { buildInvalidateCardsRequest } from './invalidateCardsRequest';
+import { PROVIDER_VALUES, providerLabel } from '@/utils/providers';
 
 const noop = () => {};
 
@@ -17,11 +19,13 @@ function baseProps(cardTypes: string[]): AdminCardInvalidationsPageContentProps 
     startDate: '',
     endDate: '',
     selectedCards: new Set<string>(),
+    selectedProviders: new Set<string>(),
     reason: '',
     preview: null,
     onStartDateChange: noop,
     onEndDateChange: noop,
     onToggleCard: noop,
+    onToggleProvider: noop,
     onReasonChange: noop,
     onPreview: noop,
     isPreviewing: false,
@@ -39,6 +43,14 @@ function baseProps(cardTypes: string[]): AdminCardInvalidationsPageContentProps 
   };
 }
 
+function targetsGroup(): HTMLElement {
+  return screen.getByRole('group', { name: /targets/i });
+}
+
+function providersGroup(): HTMLElement {
+  return screen.getByRole('group', { name: /providers/i });
+}
+
 describe('AdminCardInvalidationsPageContent card-type checkboxes', () => {
   it('renders a checkbox for each provided card type', () => {
     const cardTypes = [
@@ -48,22 +60,98 @@ describe('AdminCardInvalidationsPageContent card-type checkboxes', () => {
     ];
     render(<AdminCardInvalidationsPageContent {...baseProps(cardTypes)} />);
     for (const name of cardTypes) {
-      expect(screen.getByText(name)).toBeInTheDocument();
+      expect(within(targetsGroup()).getByText(name)).toBeInTheDocument();
     }
-    expect(screen.getAllByRole('checkbox')).toHaveLength(cardTypes.length);
+    expect(within(targetsGroup()).getAllByRole('checkbox')).toHaveLength(cardTypes.length);
   });
 
   it('does not render card types that are not in the served list', () => {
     render(<AdminCardInvalidationsPageContent {...baseProps(['session_card_tokens'])} />);
-    expect(screen.getByText('session_card_tokens')).toBeInTheDocument();
+    expect(within(targetsGroup()).getByText('session_card_tokens')).toBeInTheDocument();
     expect(screen.queryByText('session_card_session')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(within(targetsGroup()).getAllByRole('checkbox')).toHaveLength(1);
   });
 
-  it('shows an unavailable message and no checkboxes when the list is empty (load/error)', () => {
+  it('shows an unavailable message and no target checkboxes when the list is empty (load/error)', () => {
     render(<AdminCardInvalidationsPageContent {...baseProps([])} />);
     expect(screen.getByText('Card types unavailable.')).toBeInTheDocument();
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(within(targetsGroup()).queryAllByRole('checkbox')).toHaveLength(0);
+  });
+});
+
+// nbrd: session_title is a non-card target served alongside the card tables.
+describe('AdminCardInvalidationsPageContent session_title target (nbrd)', () => {
+  it('renders a friendly label for session_title and raw names for card tables', () => {
+    render(
+      <AdminCardInvalidationsPageContent {...baseProps(['session_card_tokens', 'session_title'])} />,
+    );
+    const group = targetsGroup();
+    expect(within(group).getByText('session_card_tokens')).toBeInTheDocument();
+    expect(within(group).getByLabelText(/session title: re-derive missing codex titles/i)).toBeInTheDocument();
+    expect(within(group).getAllByRole('checkbox')).toHaveLength(2);
+  });
+
+  it('explains that title recompute runs in the background and does not recompute cards', () => {
+    render(<AdminCardInvalidationsPageContent {...baseProps(['session_title'])} />);
+    expect(screen.getByText(/runs in the background worker/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not recompute cards/i)).toBeInTheDocument();
+  });
+});
+
+describe('AdminCardInvalidationsPageContent provider filter (nbrd)', () => {
+  it('renders one checkbox per canonical provider, labeled for display', () => {
+    render(<AdminCardInvalidationsPageContent {...baseProps(['session_card_tokens'])} />);
+    const group = providersGroup();
+    expect(within(group).getAllByRole('checkbox')).toHaveLength(PROVIDER_VALUES.length);
+    for (const p of PROVIDER_VALUES) {
+      expect(within(group).getByLabelText(providerLabel(p))).toBeInTheDocument();
+    }
+  });
+
+  it('reflects the selected providers', () => {
+    render(
+      <AdminCardInvalidationsPageContent
+        {...baseProps(['session_card_tokens'])}
+        selectedProviders={new Set(['codex'])}
+      />,
+    );
+    const group = providersGroup();
+    expect(within(group).getByLabelText(providerLabel('codex'))).toBeChecked();
+    expect(within(group).getByLabelText(providerLabel('cursor'))).not.toBeChecked();
+    expect(screen.getByText(/none selected means all providers/i)).toBeInTheDocument();
+  });
+});
+
+describe('buildInvalidateCardsRequest (nbrd)', () => {
+  const base = {
+    startDate: '2026-08-20T00:00',
+    endDate: '',
+    selectedCards: new Set(['session_title']),
+    reason: '  codex title repair ',
+    confirmInput: '12',
+  };
+
+  it('omits providers when none are selected', () => {
+    const req = buildInvalidateCardsRequest({ ...base, selectedProviders: new Set(), dryRun: true });
+    expect(req).not.toHaveProperty('providers');
+    expect(req).toMatchObject({
+      start_date: '2026-08-20T00:00:00Z',
+      card_types: ['session_title'],
+      reason: 'codex title repair',
+      dry_run: true,
+    });
+    expect(req).not.toHaveProperty('confirm');
+  });
+
+  it('includes the selected providers', () => {
+    const req = buildInvalidateCardsRequest({ ...base, selectedProviders: new Set(['codex']), dryRun: true });
+    expect(req.providers).toEqual(['codex']);
+  });
+
+  it('includes the typed confirmation only on execute', () => {
+    const req = buildInvalidateCardsRequest({ ...base, selectedProviders: new Set(), dryRun: false });
+    expect(req.confirm).toBe('12');
+    expect(req.dry_run).toBe(false);
   });
 });
 

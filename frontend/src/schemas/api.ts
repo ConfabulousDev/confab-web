@@ -848,6 +848,8 @@ export const InvalidateCardsRequestSchema = z.object({
   start_date: z.string(),
   end_date: z.string().optional(),
   card_types: z.array(z.string()).min(1),
+  // nbrd: optional canonical provider filter applied to every target; omitted = all.
+  providers: z.array(z.string()).optional(),
   reason: z.string().min(1).max(500),
   dry_run: z.boolean().optional(),
   // kyrr: on execute (dry_run=false), the admin must echo the affected-session count

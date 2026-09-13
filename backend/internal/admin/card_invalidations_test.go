@@ -148,6 +148,25 @@ func TestInvalidateCards_ValidationErrors(t *testing.T) {
 				Reason:    "r",
 			},
 		},
+		{
+			name: "unknown provider",
+			body: admin.InvalidateCardsRequest{
+				StartDate: "2026-04-01T00:00:00Z",
+				CardTypes: []string{"session_card_tokens"},
+				Providers: []string{"gpt-4"},
+				Reason:    "r",
+			},
+		},
+		{
+			// Wire input is canonical-only; the legacy alias is expanded server-side.
+			name: "legacy provider alias on the wire",
+			body: admin.InvalidateCardsRequest{
+				StartDate: "2026-04-01T00:00:00Z",
+				CardTypes: []string{"session_card_tokens"},
+				Providers: []string{"Claude Code"},
+				Reason:    "r",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -545,6 +564,87 @@ func TestListCardInvalidations_FilterByCorrelationID(t *testing.T) {
 	}
 }
 
+// TestInvalidateCards_SessionTitleWithProviderFilter covers the nbrd extension:
+// session_title is an accepted target, the providers filter scopes both card and
+// title candidates, and execute marks only title candidates for the worker.
+func TestInvalidateCards_SessionTitleWithProviderFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	os.Setenv("LOG_FORMAT", "json")
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	adminUser := testutil.CreateTestUser(t, env, "admin@example.com", "Admin")
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "admin@example.com")
+
+	now := time.Now().UTC()
+	// Codex, untitled, with a tokens card: a title candidate and a card row.
+	codexID := seedSessionWithTokens(t, env, user.ID, now.Add(-1*time.Hour))
+	if _, err := env.DB.Exec(env.Ctx, `UPDATE sessions SET session_type = 'codex', first_user_message = NULL WHERE id = $1`, codexID); err != nil {
+		t.Fatalf("make codex: %v", err)
+	}
+	// Claude Code, untitled, with a tokens card: outside the codex filter entirely.
+	claudeID := seedSessionWithTokens(t, env, user.ID, now.Add(-2*time.Hour))
+
+	ts := setupTestServer(t, env)
+	client := adminClient(t, env, ts, adminUser.ID)
+
+	request := func(dryRun bool, confirm string) admin.InvalidateCardsRequest {
+		return admin.InvalidateCardsRequest{
+			StartDate: now.Add(-4 * time.Hour).Format(time.RFC3339),
+			CardTypes: []string{"session_card_tokens", analytics.SessionTitleInvalidationTarget},
+			Providers: []string{"codex"},
+			Reason:    "codex title repair",
+			DryRun:    &dryRun,
+			Confirm:   confirm,
+		}
+	}
+
+	resp, err := client.Post("/api/v1/admin/cards/invalidate", request(true, ""))
+	if err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	testutil.RequireStatus(t, resp, http.StatusOK)
+	var preview admin.InvalidateCardsResponse
+	testutil.ParseJSON(t, resp, &preview)
+	if preview.AffectedSessions != 1 {
+		t.Errorf("dry-run AffectedSessions = %d, want 1 (codex only)", preview.AffectedSessions)
+	}
+	if preview.AffectedCards[analytics.SessionTitleInvalidationTarget] != 1 || preview.AffectedCards["session_card_tokens"] != 1 {
+		t.Errorf("dry-run AffectedCards = %v, want session_title=1 tokens=1", preview.AffectedCards)
+	}
+
+	resp, err = client.Post("/api/v1/admin/cards/invalidate", request(false, "1"))
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	testutil.RequireStatus(t, resp, http.StatusOK)
+
+	marked := func(sid string) bool {
+		var m bool
+		if err := env.DB.QueryRow(env.Ctx, `SELECT title_recompute_requested_at IS NOT NULL FROM sessions WHERE id = $1`, sid).Scan(&m); err != nil {
+			t.Fatalf("read marker: %v", err)
+		}
+		return m
+	}
+	if !marked(codexID) {
+		t.Error("codex session should be marked for title recompute")
+	}
+	if marked(claudeID) {
+		t.Error("claude session must not be marked (outside provider filter, not a title candidate)")
+	}
+	var claudeTokens int
+	if err := env.DB.QueryRow(env.Ctx, `SELECT COUNT(*) FROM session_card_tokens WHERE session_id = $1`, claudeID).Scan(&claudeTokens); err != nil {
+		t.Fatalf("count tokens: %v", err)
+	}
+	if claudeTokens != 1 {
+		t.Errorf("claude tokens card deleted despite provider filter (count %d)", claudeTokens)
+	}
+}
+
 // TestGetCardTypes_ReturnsAllCardTableNames is the vd31 contract: the admin
 // endpoint serves the backend's AllCardTableNames verbatim so the frontend
 // checkbox list can't drift from the source of truth. Pins that the two
@@ -576,7 +676,7 @@ func TestGetCardTypes_ReturnsAllCardTableNames(t *testing.T) {
 		}
 	})
 
-	t.Run("admin gets AllCardTableNames", func(t *testing.T) {
+	t.Run("admin gets AllInvalidationTargets", func(t *testing.T) {
 		client := adminClient(t, env, ts, adminUser.ID)
 		resp, err := client.Get("/api/v1/admin/cards/types")
 		if err != nil {
@@ -589,10 +689,10 @@ func TestGetCardTypes_ReturnsAllCardTableNames(t *testing.T) {
 		}
 		testutil.ParseJSON(t, resp, &body)
 
-		if !reflect.DeepEqual(body.CardTypes, analytics.AllCardTableNames) {
-			t.Errorf("card_types = %v, want %v", body.CardTypes, analytics.AllCardTableNames)
+		if !reflect.DeepEqual(body.CardTypes, analytics.AllInvalidationTargets) {
+			t.Errorf("card_types = %v, want %v", body.CardTypes, analytics.AllInvalidationTargets)
 		}
-		for _, want := range []string{"session_card_tokens_v2", "session_card_workflows"} {
+		for _, want := range []string{"session_card_tokens_v2", "session_card_workflows", analytics.SessionTitleInvalidationTarget} {
 			found := false
 			for _, ct := range body.CardTypes {
 				if ct == want {

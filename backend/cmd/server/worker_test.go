@@ -777,12 +777,70 @@ func TestWorkerRunOnce_NoStaleSessionsReturnsEarly(t *testing.T) {
 	w := newTestWorker(fp, WorkerConfig{MaxSessions: 10, MaxSearchIndexSessions: 10})
 	w.runOnce(context.Background())
 
-	if fp.findStaleCalls != 1 || fp.findSmartRecapCalls != 1 || fp.findSearchIndexCalls != 1 {
-		t.Errorf("Find* calls: stale=%d recap=%d search=%d; want 1/1/1",
-			fp.findStaleCalls, fp.findSmartRecapCalls, fp.findSearchIndexCalls)
+	if fp.findStaleCalls != 1 || fp.findSmartRecapCalls != 1 || fp.findSearchIndexCalls != 1 || fp.findTitleCalls != 1 {
+		t.Errorf("Find* calls: stale=%d recap=%d search=%d title=%d; want 1/1/1/1",
+			fp.findStaleCalls, fp.findSmartRecapCalls, fp.findSearchIndexCalls, fp.findTitleCalls)
+	}
+	if len(fp.regularCalls) != 0 || len(fp.recapCalls) != 0 || len(fp.searchIdxCalls) != 0 || len(fp.titleCalls) != 0 {
+		t.Error("Precompute* must not be called when all buckets empty")
+	}
+}
+
+// Bucket 4 (nbrd): sessions marked for session-title recompute.
+func TestWorkerRunOnce_ProcessesTitleRecomputeBucket(t *testing.T) {
+	var gotLimit int
+	fp := &fakePrecomputer{
+		findTitleFn: func(_ context.Context, limit int) ([]analytics.StaleSession, error) {
+			gotLimit = limit
+			return []analytics.StaleSession{sess("t1"), sess("t2")}, nil
+		},
+	}
+	w := newTestWorker(fp, WorkerConfig{MaxSessions: 7, MaxSearchIndexSessions: 10})
+	w.runOnce(context.Background())
+
+	if gotLimit != 7 {
+		t.Errorf("FindTitleRecomputeSessions limit = %d, want MaxSessions (7)", gotLimit)
+	}
+	if len(fp.titleCalls) != 2 || fp.titleCalls[0].SessionID != "t1" || fp.titleCalls[1].SessionID != "t2" {
+		t.Errorf("RecomputeSessionTitle calls: %+v", fp.titleCalls)
 	}
 	if len(fp.regularCalls) != 0 || len(fp.recapCalls) != 0 || len(fp.searchIdxCalls) != 0 {
-		t.Error("Precompute* must not be called when all buckets empty")
+		t.Error("other buckets must not be processed")
+	}
+}
+
+func TestWorkerRunOnce_TitleRecomputeDryRunDoesNotProcess(t *testing.T) {
+	fp := &fakePrecomputer{
+		findTitleFn: func(context.Context, int) ([]analytics.StaleSession, error) {
+			return []analytics.StaleSession{sess("t1")}, nil
+		},
+	}
+	w := newTestWorker(fp, WorkerConfig{MaxSessions: 10, MaxSearchIndexSessions: 10, DryRun: true})
+	w.runOnce(context.Background())
+
+	if fp.findTitleCalls != 1 {
+		t.Errorf("FindTitleRecomputeSessions calls = %d, want 1", fp.findTitleCalls)
+	}
+	if len(fp.titleCalls) != 0 {
+		t.Errorf("dry-run must not recompute titles; got %d calls", len(fp.titleCalls))
+	}
+}
+
+func TestWorkerRunOnce_FindTitleRecomputeErrorSkipsProcessing(t *testing.T) {
+	fp := &fakePrecomputer{
+		findStaleFn: func(context.Context, int) ([]analytics.StaleSession, error) {
+			return []analytics.StaleSession{sess("r1")}, nil
+		},
+		findTitleFn: func(context.Context, int) ([]analytics.StaleSession, error) {
+			return nil, errors.New("bucket4 find failed")
+		},
+	}
+	w := newTestWorker(fp, WorkerConfig{MaxSessions: 10, MaxSearchIndexSessions: 10})
+	w.runOnce(context.Background())
+
+	if len(fp.regularCalls) != 0 || len(fp.titleCalls) != 0 {
+		t.Errorf("no processing should happen when bucket4 Find fails; regular=%d title=%d",
+			len(fp.regularCalls), len(fp.titleCalls))
 	}
 }
 

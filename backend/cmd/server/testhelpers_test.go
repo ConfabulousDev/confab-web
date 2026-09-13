@@ -111,14 +111,34 @@ type fakePrecomputer struct {
 	precomputeRegFn   func(context.Context, analytics.StaleSession) error
 	precomputeRecapFn func(context.Context, analytics.StaleSession) error
 	buildSearchIdxFn  func(context.Context, analytics.StaleSession) error
+	findTitleFn       func(context.Context, int) ([]analytics.StaleSession, error)
+	recomputeTitleFn  func(context.Context, analytics.StaleSession) error
 
 	findStaleCalls       int
 	findSmartRecapCalls  int
 	findSearchIndexCalls int
+	findTitleCalls       int
 
 	regularCalls   []analytics.StaleSession
 	recapCalls     []analytics.StaleSession
 	searchIdxCalls []analytics.StaleSession
+	titleCalls     []analytics.StaleSession
+}
+
+func (f *fakePrecomputer) FindTitleRecomputeSessions(ctx context.Context, limit int) ([]analytics.StaleSession, error) {
+	f.findTitleCalls++
+	if f.findTitleFn != nil {
+		return f.findTitleFn(ctx, limit)
+	}
+	return nil, nil
+}
+
+func (f *fakePrecomputer) RecomputeSessionTitle(ctx context.Context, session analytics.StaleSession) error {
+	f.titleCalls = append(f.titleCalls, session)
+	if f.recomputeTitleFn != nil {
+		return f.recomputeTitleFn(ctx, session)
+	}
+	return nil
 }
 
 func (f *fakePrecomputer) FindStaleSessions(ctx context.Context, limit int) ([]analytics.StaleSession, error) {

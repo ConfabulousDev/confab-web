@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
+	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbadmincardinvalidations"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -386,6 +388,292 @@ func TestListRecent_OrdersByInvalidatedAtDesc(t *testing.T) {
 	}
 	if rows[0].AdminEmail != "admin@test.com" {
 		t.Errorf("AdminEmail = %q, want admin@test.com", rows[0].AdminEmail)
+	}
+}
+
+// seedProviderSession creates one in-window session with an explicit session_type
+// and first_user_message (nil = NULL). withTokens adds a session_card_tokens row.
+func seedProviderSession(t *testing.T, env *testutil.TestEnvironment, userID int64, sessionType string, firstUserMessage *string, lastMsg time.Time, withTokens bool) string {
+	t.Helper()
+	sid := uuid.NewString()
+	if _, err := env.DB.Exec(env.Ctx, `
+		INSERT INTO sessions (id, user_id, external_id, first_seen, last_message_at, session_type, first_user_message)
+		VALUES ($1, $2, $3, $4, $4, $5, $6)
+	`, sid, userID, "ext-"+sid[:8], lastMsg, sessionType, firstUserMessage); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+	if withTokens {
+		if _, err := env.DB.Exec(env.Ctx, `
+			INSERT INTO session_card_tokens (
+				session_id, version, computed_at, up_to_line,
+				input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, estimated_cost_usd
+			) VALUES ($1, 1, NOW(), 100, 0, 0, 0, 0, '0.00')
+		`, sid); err != nil {
+			t.Fatalf("insert tokens card: %v", err)
+		}
+	}
+	return sid
+}
+
+func strPtr(s string) *string { return &s }
+
+// titleRecomputeRequested reports whether the session's title_recompute_requested_at marker is set.
+func titleRecomputeRequested(t *testing.T, env *testutil.TestEnvironment, sessionID string) bool {
+	t.Helper()
+	var marked bool
+	if err := env.DB.QueryRow(env.Ctx,
+		`SELECT title_recompute_requested_at IS NOT NULL FROM sessions WHERE id = $1`, sessionID,
+	).Scan(&marked); err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+	return marked
+}
+
+func TestCountAffected_ProviderFilterNarrowsCardCountsIncludingLegacyAlias(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	inWindow := time.Now().UTC().Add(-2 * time.Hour)
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("hi"), inWindow, true)
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCodeLegacy, strPtr("hi"), inWindow, true)
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("hi"), inWindow, true)
+
+	store := &dbadmincardinvalidations.Store{DB: env.DB}
+	start := time.Now().UTC().Add(-4 * time.Hour)
+
+	result, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
+		StartDate: start,
+		CardTypes: []string{"session_card_tokens"},
+		Providers: models.ExpandWithAliases([]string{models.ProviderClaudeCode}),
+	})
+	if err != nil {
+		t.Fatalf("CountAffected: %v", err)
+	}
+	if result.AffectedSessions != 2 {
+		t.Errorf("AffectedSessions = %d, want 2 (claude-code + legacy 'Claude Code', not codex)", result.AffectedSessions)
+	}
+	if result.AffectedCards["session_card_tokens"] != 2 {
+		t.Errorf("AffectedCards[tokens] = %d, want 2", result.AffectedCards["session_card_tokens"])
+	}
+
+	// No provider filter → all three.
+	all, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
+		StartDate: start,
+		CardTypes: []string{"session_card_tokens"},
+	})
+	if err != nil {
+		t.Fatalf("CountAffected (no filter): %v", err)
+	}
+	if all.AffectedSessions != 3 || all.AffectedCards["session_card_tokens"] != 3 {
+		t.Errorf("unfiltered = %d sessions / %d cards, want 3 / 3", all.AffectedSessions, all.AffectedCards["session_card_tokens"])
+	}
+}
+
+func TestExecute_ProviderFilterScopesCardDeletes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	admin := testutil.CreateTestUser(t, env, "admin@test.com", "Admin")
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	inWindow := time.Now().UTC().Add(-2 * time.Hour)
+	codexID := seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("hi"), inWindow, true)
+	claudeID := seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("hi"), inWindow, true)
+
+	store := &dbadmincardinvalidations.Store{DB: env.DB}
+	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
+		CountRequest: dbadmincardinvalidations.CountRequest{
+			StartDate: time.Now().UTC().Add(-4 * time.Hour),
+			CardTypes: []string{"session_card_tokens"},
+			Providers: models.ExpandWithAliases([]string{models.ProviderCodex}),
+		},
+		AdminUserID: admin.ID,
+		Reason:      "codex only",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if res.Result.AffectedSessions != 1 {
+		t.Errorf("AffectedSessions = %d, want 1", res.Result.AffectedSessions)
+	}
+
+	countTokens := func(sid string) int {
+		var n int
+		if err := env.DB.QueryRow(env.Ctx, `SELECT COUNT(*) FROM session_card_tokens WHERE session_id = $1`, sid).Scan(&n); err != nil {
+			t.Fatalf("count tokens: %v", err)
+		}
+		return n
+	}
+	if n := countTokens(codexID); n != 0 {
+		t.Errorf("codex tokens cards = %d, want 0 (deleted)", n)
+	}
+	if n := countTokens(claudeID); n != 1 {
+		t.Errorf("claude tokens cards = %d, want 1 (outside provider filter)", n)
+	}
+}
+
+// TestCountAffected_SessionTitleCandidates pins the title candidate predicate:
+// Codex with NULL first_user_message, or Cursor whose first_user_message still
+// carries the <user_query> envelope. Nothing else qualifies.
+func TestCountAffected_SessionTitleCandidates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	inWindow := time.Now().UTC().Add(-2 * time.Hour)
+	outOfWindow := time.Now().UTC().Add(-48 * time.Hour)
+
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, false)                                            // ✓
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("already titled"), inWindow, false)                       // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderCursor, strPtr("<user_query>\nfix it\n</user_query>"), inWindow, false) // ✓
+	seedProviderSession(t, env, user.ID, models.ProviderCursor, strPtr("fix it"), inWindow, false)                              // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, nil, inWindow, false)                                       // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderOpencode, nil, inWindow, false)                                         // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, outOfWindow, false)                                         // ✗ (window)
+
+	store := &dbadmincardinvalidations.Store{DB: env.DB}
+	start := time.Now().UTC().Add(-4 * time.Hour)
+
+	result, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
+		StartDate: start,
+		CardTypes: []string{analytics.SessionTitleInvalidationTarget},
+	})
+	if err != nil {
+		t.Fatalf("CountAffected with session_title only must not reach table interpolation: %v", err)
+	}
+	if result.AffectedSessions != 2 {
+		t.Errorf("AffectedSessions = %d, want 2", result.AffectedSessions)
+	}
+	if got := result.AffectedCards[analytics.SessionTitleInvalidationTarget]; got != 2 {
+		t.Errorf("AffectedCards[session_title] = %d, want 2", got)
+	}
+
+	// Provider filter applies to title candidates too.
+	cursorOnly, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
+		StartDate: start,
+		CardTypes: []string{analytics.SessionTitleInvalidationTarget},
+		Providers: []string{models.ProviderCursor},
+	})
+	if err != nil {
+		t.Fatalf("CountAffected (cursor): %v", err)
+	}
+	if cursorOnly.AffectedSessions != 1 || cursorOnly.AffectedCards[analytics.SessionTitleInvalidationTarget] != 1 {
+		t.Errorf("cursor-only = %d sessions / %d titles, want 1 / 1",
+			cursorOnly.AffectedSessions, cursorOnly.AffectedCards[analytics.SessionTitleInvalidationTarget])
+	}
+}
+
+func TestCountAffected_UnionOfCardAndTitleSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	inWindow := time.Now().UTC().Add(-2 * time.Hour)
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, true)               // card + title
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, false)              // title only
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("x"), inWindow, true)  // card only
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("x"), inWindow, false) // neither
+
+	store := &dbadmincardinvalidations.Store{DB: env.DB}
+	result, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
+		StartDate: time.Now().UTC().Add(-4 * time.Hour),
+		CardTypes: []string{"session_card_tokens", analytics.SessionTitleInvalidationTarget},
+	})
+	if err != nil {
+		t.Fatalf("CountAffected: %v", err)
+	}
+	if result.AffectedSessions != 3 {
+		t.Errorf("AffectedSessions = %d, want 3 (distinct union)", result.AffectedSessions)
+	}
+	if result.AffectedCards["session_card_tokens"] != 2 {
+		t.Errorf("AffectedCards[tokens] = %d, want 2", result.AffectedCards["session_card_tokens"])
+	}
+	if result.AffectedCards[analytics.SessionTitleInvalidationTarget] != 2 {
+		t.Errorf("AffectedCards[session_title] = %d, want 2", result.AffectedCards[analytics.SessionTitleInvalidationTarget])
+	}
+}
+
+func TestExecute_SessionTitleMarksOnlyCandidatesAndAudits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+
+	admin := testutil.CreateTestUser(t, env, "admin@test.com", "Admin")
+	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
+	inWindow := time.Now().UTC().Add(-2 * time.Hour)
+	codexNull := seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, true)
+	claudeWithCard := seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("x"), inWindow, true)
+	codexTitled := seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("titled"), inWindow, false)
+
+	// Batch size 1 exercises the per-batch mark UPDATE across several commits.
+	store := &dbadmincardinvalidations.Store{DB: env.DB, BatchSize: 1}
+	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
+		CountRequest: dbadmincardinvalidations.CountRequest{
+			StartDate: time.Now().UTC().Add(-4 * time.Hour),
+			CardTypes: []string{"session_card_tokens", analytics.SessionTitleInvalidationTarget},
+		},
+		AdminUserID: admin.ID,
+		Reason:      "codex title repair",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if res.Result.AffectedSessions != 2 {
+		t.Errorf("AffectedSessions = %d, want 2", res.Result.AffectedSessions)
+	}
+	if got := res.Result.AffectedCards[analytics.SessionTitleInvalidationTarget]; got != 1 {
+		t.Errorf("AffectedCards[session_title] = %d, want 1", got)
+	}
+	if got := res.Result.AffectedCards["session_card_tokens"]; got != 2 {
+		t.Errorf("AffectedCards[tokens] = %d, want 2", got)
+	}
+
+	if !titleRecomputeRequested(t, env, codexNull) {
+		t.Error("codex NULL-title session should be marked for title recompute")
+	}
+	if titleRecomputeRequested(t, env, claudeWithCard) {
+		t.Error("claude session (card-affected only) must not be marked for title recompute")
+	}
+	if titleRecomputeRequested(t, env, codexTitled) {
+		t.Error("codex session with an existing title must not be marked")
+	}
+
+	rows, err := store.ListByCorrelationID(context.Background(), res.CorrelationID)
+	if err != nil {
+		t.Fatalf("ListByCorrelationID: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("audit rows = %d, want 2", len(rows))
+	}
+	for _, r := range rows {
+		if len(r.CardTypes) != 2 || r.CardTypes[0] != "session_card_tokens" || r.CardTypes[1] != analytics.SessionTitleInvalidationTarget {
+			t.Errorf("audit card_types = %v, want exactly as submitted", r.CardTypes)
+		}
+	}
+}
+
+func TestCountAffected_RejectsUnknownTarget(t *testing.T) {
+	store := &dbadmincardinvalidations.Store{}
+	_, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
+		StartDate: time.Now(),
+		CardTypes: []string{"sessions; DROP TABLE sessions"},
+	})
+	if err == nil {
+		t.Fatal("expected unknown card_type error before any SQL runs")
 	}
 }
 

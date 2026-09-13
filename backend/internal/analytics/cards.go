@@ -21,9 +21,27 @@ var AllCardTableNames = []string{
 	"session_card_smart_recap",
 }
 
-// IsKnownCardTableName reports whether name is one of AllCardTableNames.
+// IsKnownCardTableName reports whether name is one of AllCardTableNames. It is the
+// gate for every path that interpolates a card table name into SQL; non-table
+// invalidation targets (SessionTitleInvalidationTarget) must never pass it.
 func IsKnownCardTableName(name string) bool {
 	return slices.Contains(AllCardTableNames, name)
+}
+
+// SessionTitleInvalidationTarget is the non-card invalidation target (nbrd): it
+// marks title candidates (sessions.title_recompute_requested_at) so the
+// precompute worker re-derives first_user_message from stored data. See
+// session_title_recompute.go.
+const SessionTitleInvalidationTarget = "session_title"
+
+// AllInvalidationTargets is every value accepted in an admin invalidation
+// request's card_types: all card tables plus SessionTitleInvalidationTarget.
+// Served by GET /admin/cards/types.
+var AllInvalidationTargets = append(slices.Clone(AllCardTableNames), SessionTitleInvalidationTarget)
+
+// IsKnownInvalidationTarget reports whether name is one of AllInvalidationTargets.
+func IsKnownInvalidationTarget(name string) bool {
+	return slices.Contains(AllInvalidationTargets, name)
 }
 
 // Card version constants - increment when compute logic changes
