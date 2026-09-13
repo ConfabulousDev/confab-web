@@ -128,6 +128,66 @@ ${createSystemMessage(2)}`;
       typeName: 'custom-title',
       payload: { type: 'custom-title', customTitle: 'My session', sessionId: 'abc-123' },
     },
+    // Bookkeeping rows Claude Code 2.1.228+ emits (k6c3). Shapes taken from real
+    // session JSONL; values here are fake.
+    {
+      typeName: 'atis-latch',
+      payload: { type: 'atis-latch', atis: 'v1.fake-atis-token', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'file-history-delta',
+      payload: {
+        type: 'file-history-delta',
+        messageId: 'msg-uuid-1',
+        snapshotMessageId: 'snapshot-uuid-1',
+        trackingPath: 'src/example.ts',
+        backup: {
+          backupFileName: '0123456789abcdef@v1',
+          version: 1,
+          backupTime: '2026-01-01T00:00:00.000Z',
+          realParentDir: '/tmp/project/src',
+        },
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+    },
+    {
+      typeName: 'cost-state',
+      payload: {
+        type: 'cost-state',
+        sessionId: 'abc-123',
+        totalCostUSD: 1.25,
+        totalAPIDuration: 1000,
+        totalAPIDurationWithoutRetries: 900,
+        totalToolDuration: 500,
+        totalLinesAdded: 2,
+        totalLinesRemoved: 3,
+        totalDuration: 5000,
+        startTime: 1767225600000,
+        modelUsage: {
+          'claude-opus-5': {
+            inputTokens: 10,
+            outputTokens: 20,
+            thinkingTokens: 5,
+            cacheReadInputTokens: 100,
+            cacheCreationInputTokens: 50,
+            webSearchRequests: 0,
+            costUSD: 1.25,
+          },
+        },
+        hasUnknownModelCost: false,
+      },
+    },
+    {
+      typeName: 'bridge-session',
+      payload: {
+        type: 'bridge-session',
+        sessionId: 'abc-123',
+        bridgeSessionId: 'cse_fake',
+        lastSequenceNum: 0,
+        ownerAccountUuid: 'account-uuid-1',
+        ownerOrganizationUuid: 'org-uuid-1',
+      },
+    },
   ])('skips $typeName messages silently', ({ payload }) => {
     const skippedLine = JSON.stringify(payload);
 
