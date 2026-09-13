@@ -23,6 +23,12 @@ import { reportTranscriptErrors } from './transcriptErrorReporting';
 // ({agentColor}), `custom-title` ({customTitle}). Left unhandled they fall to the
 // UnknownMessageSchema catch-all and render as spurious "Unknown" cards (hundreds
 // per session). Shapes cross-checked against the open-source claude-code-log parser.
+//
+// k6c3: Claude Code bookkeeping rows we also skip — `atis-latch` ({atis, sessionId};
+// `atis` is an opaque server-side experiment-assignment token, re-written before
+// nearly every turn), `file-history-delta` (incremental form of
+// `file-history-snapshot`), `cost-state` (running totalCostUSD + per-model usage),
+// and `bridge-session` (Remote Control session binding).
 const SKIPPED_MESSAGE_TYPES = new Set([
   'progress',
   'permission-mode',
@@ -32,6 +38,10 @@ const SKIPPED_MESSAGE_TYPES = new Set([
   'mode',
   'agent-color',
   'custom-title',
+  'atis-latch',
+  'file-history-delta',
+  'cost-state',
+  'bridge-session',
 ]);
 
 // Track which sessions have already had errors reported (dedup across re-parses)
