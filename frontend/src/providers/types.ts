@@ -50,13 +50,13 @@ import type {
 } from '@/components/session/cursorCategories';
 import type { CursorRawEntry } from '@/services/cursorTranscriptService';
 
-export interface FilterAPI<TFilterState, TToggles> {
+interface FilterAPI<TFilterState, TToggles> {
   state: TFilterState;
   setState: (state: TFilterState, opts?: { replace?: boolean }) => void;
   toggles: TToggles;
 }
 
-export interface TranscriptPaneProps<TItem> {
+interface TranscriptPaneProps<TItem> {
   sessionId: string;
   items: TItem[];
   filteredItems: TItem[];

@@ -19,7 +19,7 @@ import {
 import styles from '../SessionSummaryPanel.module.css';
 import type { CardProps } from './types';
 
-export type TokensV2Model = {
+type TokensV2Model = {
   input: number;
   output: number;
   cache_read: number;

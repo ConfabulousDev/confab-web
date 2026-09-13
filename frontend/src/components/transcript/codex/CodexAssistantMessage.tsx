@@ -18,7 +18,7 @@ import CodexMessageImages from './CodexMessageImages';
 import RowActions from '../RowActions';
 import styles from './CodexMessage.module.css';
 
-export interface CodexAssistantMessageProps {
+interface CodexAssistantMessageProps {
   item: CodexAssistantItem;
   /**
    * Session ID for the per-row copy-link URL. Optional so the renderer can

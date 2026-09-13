@@ -56,7 +56,7 @@ const KNOWN_OPENCODE_PART_TYPES = new Set([
 // JSONL parsing
 // ============================================================================
 
-export interface OpenCodeParseResult {
+interface OpenCodeParseResult {
   rawLines: OpenCodeRawEntry[];
   /** Count of non-empty lines (including those that failed to parse), so the
    *  line-offset incremental fetch stays in sync with the file. */
@@ -287,7 +287,7 @@ async function fetchWithCache(
   return entry;
 }
 
-export interface ParsedOpenCodeTranscript {
+interface ParsedOpenCodeTranscript {
   sessionId: string;
   items: OpenCodeRenderItem[];
   rawLines: OpenCodeRawEntry[];

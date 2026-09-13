@@ -18,7 +18,7 @@ import { formatCodexTimestamp, formatDurationMs } from './codexFormat';
 import RowActions from '../RowActions';
 import styles from './CodexDividers.module.css';
 
-export interface CodexTurnAbortedDividerProps {
+interface CodexTurnAbortedDividerProps {
   item: CodexTurnAbortedItem;
   /** Session ID for the per-row copy-link URL (CF-360). Optional in tests. */
   sessionId?: string;

@@ -10,7 +10,7 @@ import CodexMessageTimeline from '@/components/transcript/codex/CodexMessageTime
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 import TranscriptPaneStatus from './TranscriptPaneStatus';
 
-export interface CodexTranscriptPaneProps {
+interface CodexTranscriptPaneProps {
   sessionId: string;
   /** Unfiltered render items — drives the timeline bar's segment layout. */
   items: CodexRenderItem[];

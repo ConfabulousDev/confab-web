@@ -79,7 +79,7 @@ function stringifyGenericInput(input: unknown): string {
 // only the fields each renderer cares about, with runtime guards so unfamiliar
 // payloads degrade gracefully instead of crashing.
 
-export interface PatchChange {
+interface PatchChange {
   type: string;
   content?: string;
 }
@@ -128,7 +128,7 @@ export function readWebSearchQueries(value: unknown): string[] {
 // projection use (no rendering / projection drift).
 
 /** Classification of an `update_plan` payload for the renderer + search. */
-export interface PlanSummary {
+interface PlanSummary {
   bucket: 'empty' | 'complete' | 'in_progress' | 'paused' | 'pending';
   /** Only set when `bucket === 'in_progress'`. */
   activeStep?: string;

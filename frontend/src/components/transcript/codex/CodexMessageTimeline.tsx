@@ -41,7 +41,7 @@ import { extractCodexItemText } from './extractCodexItemText';
 import { resolveCodexDeepLinkTarget } from './resolveCodexDeepLinkTarget';
 import styles from './CodexMessageTimeline.module.css';
 
-export interface CodexMessageTimelineProps {
+interface CodexMessageTimelineProps {
   /**
    * Unfiltered item stream — drives the timeline bar's segment layout so
    * turn boundaries stay correct even when individual rows are filtered out.

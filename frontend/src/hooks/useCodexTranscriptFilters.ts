@@ -97,7 +97,7 @@ const CONFIG = {
   hierarchicalKeys: HIERARCHICAL_KEYS,
 } satisfies ProviderTranscriptFiltersConfig<CodexFilterState>;
 
-export interface CodexTranscriptFiltersResult {
+interface CodexTranscriptFiltersResult {
   filterState: CodexFilterState;
   setFilterState: (state: CodexFilterState, opts?: { replace?: boolean }) => void;
   toggleCategory: (category: CodexCategory) => void;

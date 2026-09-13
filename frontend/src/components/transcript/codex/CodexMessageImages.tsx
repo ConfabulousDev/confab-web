@@ -7,7 +7,7 @@
 
 import styles from './CodexMessage.module.css';
 
-export interface CodexMessageImagesProps {
+interface CodexMessageImagesProps {
   images: string[];
   /** Alt-text prefix; final alt is `${altPrefix} #${i + 1}`. */
   altPrefix: string;

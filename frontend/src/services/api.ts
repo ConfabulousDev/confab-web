@@ -699,7 +699,7 @@ export const orgAnalyticsAPI = {
   },
 };
 
-export interface OrgReposParams {
+interface OrgReposParams {
   startDate?: string;
   endDate?: string;
 }

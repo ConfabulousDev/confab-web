@@ -593,7 +593,7 @@ const TrendsCardsSchema = z.object({
 // Mirrors SessionFilterOptions: lists reflect the caller's visible-session set
 // and are STATIC across active filter changes. Always present; empty arrays
 // when nothing is visible.
-export const TrendsFilterOptionsSchema = z.object({
+const TrendsFilterOptionsSchema = z.object({
   owners: z.array(z.string()),
   repos: z.array(z.string()),
   // 2hh1: distinct normalized model-family keys (family + '· fast' variants)
@@ -654,7 +654,6 @@ export type SmartRecapQuotaInfo = z.infer<typeof SmartRecapQuotaInfoSchema>;
 export type AnalyticsCards = z.infer<typeof AnalyticsCardsSchema>;
 export type SessionAnalytics = z.infer<typeof SessionAnalyticsSchema>;
 export type TrendsResponse = z.infer<typeof TrendsResponseSchema>;
-export type TrendsFilterOptions = z.infer<typeof TrendsFilterOptionsSchema>;
 export type TrendsOverviewCard = z.infer<typeof TrendsOverviewCardSchema>;
 export type TrendsTokensCard = z.infer<typeof TrendsTokensCardSchema>;
 export type TrendsTokensPerProvider = z.infer<typeof TrendsTokensPerProviderSchema>;
@@ -868,7 +867,7 @@ export const InvalidateCardsResponseSchema = z.object({
 });
 export type InvalidateCardsResponse = z.infer<typeof InvalidateCardsResponseSchema>;
 
-export const CardInvalidationRowSchema = z.object({
+const CardInvalidationRowSchema = z.object({
   id: z.number(),
   session_id: z.string(),
   admin_user_id: z.number(),
@@ -878,7 +877,6 @@ export const CardInvalidationRowSchema = z.object({
   correlation_id: z.string(),
   reason: z.string(),
 });
-export type CardInvalidationRow = z.infer<typeof CardInvalidationRowSchema>;
 
 export const CardInvalidationsListResponseSchema = z.object({
   rows: z.array(CardInvalidationRowSchema),
@@ -889,13 +887,12 @@ export type CardInvalidationsListResponse = z.infer<typeof CardInvalidationsList
 // stored session data whose family is absent from the active pricing table.
 // `last_seen` is the most recent tokens_v2 recompute time across the matching
 // sessions — a proxy for "last seen", not a true ingestion time.
-export const UnpricedModelRowSchema = z.object({
+const UnpricedModelRowSchema = z.object({
   provider: z.string(),
   family: z.string(),
   session_count: z.number(),
   last_seen: z.string(),
 });
-export type UnpricedModelRow = z.infer<typeof UnpricedModelRowSchema>;
 
 export const UnpricedModelsResponseSchema = z.object({
   models: z.array(UnpricedModelRowSchema),

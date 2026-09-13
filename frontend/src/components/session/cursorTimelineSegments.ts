@@ -22,7 +22,7 @@ import {
   useBlendedSegmentLayout,
 } from '@/components/transcript/timelineSegments';
 
-export type CursorTimelineSegment = SpeakerSegment;
+type CursorTimelineSegment = SpeakerSegment;
 
 /** Floor for user thinking-gap duration (also used for turn 1 / non-positive gaps). */
 const FIRST_TURN_USER_SEGMENT_MS = 1000;

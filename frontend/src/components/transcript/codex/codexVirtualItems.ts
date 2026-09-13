@@ -11,7 +11,7 @@ import type { CodexRenderItem } from '@/types/codexRenderItem';
 import { shouldShowDivider, formatDividerLabel } from '@/components/transcript/timelineUtils';
 
 /** Virtual-list item layer: real Codex items + injected time/day separators. */
-export type VirtualItem =
+type VirtualItem =
   | { type: 'item'; item: CodexRenderItem; index: number; isNewSpeaker: boolean }
   | { type: 'separator'; label: string };
 

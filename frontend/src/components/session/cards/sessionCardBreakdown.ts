@@ -1,7 +1,7 @@
 import type { SessionCardData } from '@/schemas/api';
 
 // Colors for the SessionCard bar chart.
-export const BREAKDOWN_COLORS = {
+const BREAKDOWN_COLORS = {
   humanPrompts: '#3b82f6', // blue
   toolResults: '#8b5cf6', // purple
   textResponses: '#22c55e', // green

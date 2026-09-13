@@ -10,7 +10,7 @@ import { getHighlightClass, highlightTextInHtml } from '@/utils/highlightSearch'
 import CodeBlock from '../CodeBlock';
 import styles from './CodexMessage.module.css';
 
-export interface CodexMessageBodyProps {
+interface CodexMessageBodyProps {
   text: string;
   /** CF-359: transcript search query — when set, matches inside the
    *  rendered markdown HTML are wrapped in `<mark>`. */

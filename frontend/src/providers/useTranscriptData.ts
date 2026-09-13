@@ -11,11 +11,11 @@ import type { OpaqueAdapter } from './types';
 
 const TRANSCRIPT_POLL_INTERVAL_MS = 15000;
 
-export interface TranscriptSeed {
+interface TranscriptSeed {
   raw: unknown[];
 }
 
-export interface TranscriptData {
+interface TranscriptData {
   items: unknown[];
   raw: unknown[];
   loading: boolean;
