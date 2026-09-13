@@ -110,7 +110,7 @@ func HandleGetTrends(database *db.DB) http.HandlerFunc {
 		// Parse repos filter (use empty slice, not nil, for correct JSON serialization)
 		repos := []string{}
 		if reposStr := r.URL.Query().Get("repos"); reposStr != "" {
-			for _, repo := range strings.Split(reposStr, ",") {
+			for repo := range strings.SplitSeq(reposStr, ",") {
 				if trimmed := strings.TrimSpace(repo); trimmed != "" {
 					repos = append(repos, trimmed)
 				}

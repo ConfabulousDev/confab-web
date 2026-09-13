@@ -17,11 +17,11 @@ import "time"
 type ParsedRollout struct {
 	Turns            []Turn
 	TokenUsage       TokenUsage
-	Model            string                 // from session_meta.model (older CLIs) or the first turn_context.model
-	ModelProvider    string                 // from session_meta (e.g. "openai")
-	CWD              string                 // from session_meta
-	CLIVersion       string                 // from session_meta.cli_version (e.g. "0.130.0")
-	GitInfo          map[string]interface{} // from session_meta (passthrough)
+	Model            string         // from session_meta.model (older CLIs) or the first turn_context.model
+	ModelProvider    string         // from session_meta (e.g. "openai")
+	CWD              string         // from session_meta
+	CLIVersion       string         // from session_meta.cli_version (e.g. "0.130.0")
+	GitInfo          map[string]any // from session_meta (passthrough)
 	Compactions      []CompactionEvent
 	ValidationErrors []ValidationError
 	TotalLines       int
@@ -151,9 +151,9 @@ type FileEdit struct {
 
 // Message is one user or assistant message from response_item.message.
 type Message struct {
-	Role      string    // "user" | "assistant"
-	Text      string    // concatenated input_text/output_text blocks, joined with "\n"
-	Phase     string    // assistant: "commentary" | "final"; empty for user
+	Role      string // "user" | "assistant"
+	Text      string // concatenated input_text/output_text blocks, joined with "\n"
+	Phase     string // assistant: "commentary" | "final"; empty for user
 	Timestamp time.Time
 }
 

@@ -668,7 +668,7 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
-		body := map[string]interface{}{"custom_title": "My Custom Title"}
+		body := map[string]any{"custom_title": "My Custom Title"}
 		resp, err := client.Patch("/api/v1/sessions/"+sessionID+"/title", body)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -704,7 +704,7 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 		client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
 		// Clear it by setting to null
-		body := map[string]interface{}{"custom_title": nil}
+		body := map[string]any{"custom_title": nil}
 		resp, err := client.Patch("/api/v1/sessions/"+sessionID+"/title", body)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -733,7 +733,7 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts).WithSession(otherSession)
 
-		body := map[string]interface{}{"custom_title": "Hacked Title"}
+		body := map[string]any{"custom_title": "Hacked Title"}
 		resp, err := client.Patch("/api/v1/sessions/"+sessionID+"/title", body)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -752,7 +752,7 @@ func TestUpdateSessionTitle_HTTP_Integration(t *testing.T) {
 		ts := setupTestServerWithEnv(t, env)
 		client := testutil.NewTestClient(t, ts) // No session
 
-		body := map[string]interface{}{"custom_title": "Test"}
+		body := map[string]any{"custom_title": "Test"}
 		resp, err := client.Patch("/api/v1/sessions/"+sessionID+"/title", body)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)

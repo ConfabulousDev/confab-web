@@ -2,6 +2,7 @@ package analytics_test
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -1278,8 +1279,9 @@ func TestGetTrends_TopSessions_PerProvider(t *testing.T) {
 	}
 }
 
+//go:fix inline
 func int64Ptr(v int64) *int64 {
-	return &v
+	return new(v)
 }
 
 // TestGetTrends_ProviderFilter (CF-424) covers the wire and SQL semantics
@@ -2155,7 +2157,7 @@ func TestGetTrends_TopSessionsLimit(t *testing.T) {
 	// Seed 30 priced sessions with strictly descending costs so ordering and
 	// limit boundaries are unambiguous. Session i has cost (30 - i).
 	const seeded = 30
-	for i := 0; i < seeded; i++ {
+	for i := range seeded {
 		name := "topn-session-" + decimal.NewFromInt(int64(i)).String()
 		sid := testutil.CreateTestSession(t, env, user.ID, name)
 		if err := store.UpsertCards(ctx, &analytics.Cards{TokensV2: v2TokensCard(sid, 1000, 500, 0, 0, float64(seeded-i))}); err != nil {
@@ -2220,12 +2222,7 @@ func TestGetTrends_TopSessionsLimit(t *testing.T) {
 }
 
 func trendsContainsStr(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
 // TestGetTrends_FilterOptions_ExcludesNonListable (0407) asserts the Trends

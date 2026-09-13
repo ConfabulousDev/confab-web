@@ -197,7 +197,7 @@ func TestAuthenticatePassword(t *testing.T) {
 		}
 
 		// Fail a few times
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			store.AuthenticatePassword(ctx, "reset@example.com", "wrongpassword")
 		}
 
@@ -237,7 +237,7 @@ func TestAuthenticatePasswordLockout(t *testing.T) {
 
 	t.Run("locks account after max failed attempts", func(t *testing.T) {
 		// Fail MaxFailedAttempts times
-		for i := 0; i < dbauth.MaxFailedAttempts; i++ {
+		for i := range dbauth.MaxFailedAttempts {
 			_, err := store.AuthenticatePassword(ctx, "lockout@example.com", "wrongpassword")
 			if i < dbauth.MaxFailedAttempts-1 {
 				if err != db.ErrInvalidCredentials {
@@ -261,7 +261,7 @@ func TestAuthenticatePasswordLockout(t *testing.T) {
 		}
 
 		// Lock the account
-		for i := 0; i < dbauth.MaxFailedAttempts; i++ {
+		for range dbauth.MaxFailedAttempts {
 			store.AuthenticatePassword(ctx, "locked@example.com", "wrongpassword")
 		}
 
@@ -281,7 +281,7 @@ func TestAuthenticatePasswordLockout(t *testing.T) {
 		}
 
 		// Fail 2 times
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			_, err := store.AuthenticatePassword(ctx, "counter@example.com", "wrongpassword")
 			if err != db.ErrInvalidCredentials {
 				t.Errorf("expected ErrInvalidCredentials, got %v", err)
@@ -381,7 +381,7 @@ func TestUpdateUserPassword(t *testing.T) {
 		}
 
 		// Lock the account
-		for i := 0; i < dbauth.MaxFailedAttempts; i++ {
+		for range dbauth.MaxFailedAttempts {
 			store.AuthenticatePassword(ctx, "lockedupdate@example.com", "wrongpassword")
 		}
 

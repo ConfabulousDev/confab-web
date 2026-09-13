@@ -514,7 +514,7 @@ func TestBootstrapAdminConcurrent(t *testing.T) {
 	errs := make([]error, goroutines)
 	start := make(chan struct{})
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()

@@ -231,7 +231,7 @@ func (h *Handlers) HandleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, ActionUserCreate, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, ActionUserCreate, map[string]any{
 		"created_user_id":    user.ID,
 		"created_user_email": email,
 	})
@@ -297,7 +297,7 @@ func (h *Handlers) setUserStatusAPI(w http.ResponseWriter, r *http.Request, stat
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, action, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, action, map[string]any{
 		"target_user_id":    userID,
 		"target_user_email": targetEmail,
 	})
@@ -377,7 +377,7 @@ func (h *Handlers) setUserAdminAPI(w http.ResponseWriter, r *http.Request, isAdm
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, action, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, action, map[string]any{
 		"target_user_id":    userID,
 		"target_user_email": targetUser.Email,
 	})
@@ -459,7 +459,7 @@ func (h *Handlers) HandleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, ActionUserDelete, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, ActionUserDelete, map[string]any{
 		"target_user_id":    userID,
 		"target_user_email": targetUser.Email,
 	})
@@ -536,7 +536,7 @@ func (h *Handlers) HandleCreateSystemShareAPI(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, ActionSystemShareCreate, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, ActionSystemShareCreate, map[string]any{
 		"session_id":  req.SessionID,
 		"share_id":    share.ID,
 		"external_id": share.ExternalID,
@@ -669,7 +669,7 @@ func (h *Handlers) HandleSetSmartRecapPrompt(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, ActionSettingUpdate, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, ActionSettingUpdate, map[string]any{
 		"key":        settingsKeySmartRecapPrompt,
 		"char_count": len(req.Instructions),
 	})
@@ -698,7 +698,7 @@ func (h *Handlers) HandleDeleteSmartRecapPrompt(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, ActionSettingReset, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, ActionSettingReset, map[string]any{
 		"key": settingsKeySmartRecapPrompt,
 	})
 
@@ -741,7 +741,7 @@ func (h *Handlers) HandleRegenerateAllSmartRecaps(w http.ResponseWriter, r *http
 		return
 	}
 
-	AuditLogFromRequest(r, h.DB, ActionSmartRecapRegenerateAll, map[string]interface{}{
+	AuditLogFromRequest(r, h.DB, ActionSmartRecapRegenerateAll, map[string]any{
 		"sessions_queued": count,
 	})
 

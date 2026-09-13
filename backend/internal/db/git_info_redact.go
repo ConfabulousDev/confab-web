@@ -22,13 +22,13 @@ import (
 // git_info JSONB blob; it is never mutated. A nil or non-map value (git_info
 // absent or of an unexpected shape) returns nil, as does a blob with no
 // whitelisted keys — fail-safe in every case.
-func SanitizeGitInfoForSharing(raw interface{}) interface{} {
-	m, ok := raw.(map[string]interface{})
+func SanitizeGitInfoForSharing(raw any) any {
+	m, ok := raw.(map[string]any)
 	if !ok {
 		return nil
 	}
 
-	out := make(map[string]interface{}, 2)
+	out := make(map[string]any, 2)
 
 	if branch, ok := m["branch"].(string); ok && branch != "" {
 		out["branch"] = branch

@@ -309,8 +309,8 @@ func TestOpenAIRecapLLM_TreatsUnusableResponsesAsFailures(t *testing.T) {
 
 func jsonTagNames(t reflect.Type) []string {
 	var names []string
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
+	for field := range t.Fields() {
+		tag := field.Tag.Get("json")
 		if tag == "" || tag == "-" {
 			continue
 		}
@@ -367,25 +367,25 @@ func TestSmartRecapJSONSchema_MatchesResultStructs(t *testing.T) {
 	assertStrictObjects(t, "$", schema)
 
 	props := schema["properties"].(map[string]any)
-	if got, want := schemaPropKeys(props), jsonTagNames(reflect.TypeOf(SmartRecapResult{})); !reflect.DeepEqual(got, want) {
+	if got, want := schemaPropKeys(props), jsonTagNames(reflect.TypeFor[SmartRecapResult]()); !reflect.DeepEqual(got, want) {
 		t.Errorf("top-level properties = %v, want SmartRecapResult json tags %v", got, want)
 	}
 
-	itemTags := jsonTagNames(reflect.TypeOf(AnnotatedItem{}))
-	resultType := reflect.TypeOf(SmartRecapResult{})
-	for i := 0; i < resultType.NumField(); i++ {
-		f := resultType.Field(i)
+	itemTags := jsonTagNames(reflect.TypeFor[AnnotatedItem]())
+	resultType := reflect.TypeFor[SmartRecapResult]()
+	for f := range resultType.Fields() {
+		f := f
 		name := strings.Split(f.Tag.Get("json"), ",")[0]
 		if name == "" {
 			continue
 		}
 		prop := props[name].(map[string]any)
 		switch f.Type {
-		case reflect.TypeOf(""):
+		case reflect.TypeFor[string]():
 			if prop["type"] != "string" {
 				t.Errorf("%s: type = %v, want string", name, prop["type"])
 			}
-		case reflect.TypeOf([]AnnotatedItem{}):
+		case reflect.TypeFor[[]AnnotatedItem]():
 			if prop["type"] != "array" {
 				t.Errorf("%s: type = %v, want array", name, prop["type"])
 				continue

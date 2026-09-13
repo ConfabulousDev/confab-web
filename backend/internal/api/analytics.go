@@ -362,9 +362,9 @@ type smartRecapContext struct {
 	sessionProvider string
 	externalID      string
 	lineCount       int64
-	transcript      string                 // pre-built XML transcript (empty if not yet built)
-	idMap           map[int]string         // sequential ID -> UUID map for transcript
-	cardStats       map[string]interface{} // computed card data for LLM context
+	transcript      string         // pre-built XML transcript (empty if not yet built)
+	idMap           map[int]string // sequential ID -> UUID map for transcript
+	cardStats       map[string]any // computed card data for LLM context
 	response        *analytics.AnalyticsResponse
 	log             *slog.Logger
 	isOwner         bool
@@ -592,7 +592,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		if err != nil {
 			log.Error("Failed to get cached cards", "error", err, "session_id", sessionID)
 		}
-		var cardStats map[string]interface{}
+		var cardStats map[string]any
 		if cached != nil {
 			cardStats = cached.ToResponse().Cards
 		}
@@ -635,7 +635,7 @@ func HandleRegenerateSmartRecap(database *db.DB, store *storage.S3Storage) http.
 		}
 
 		response := &analytics.AnalyticsResponse{
-			Cards: make(map[string]interface{}),
+			Cards: make(map[string]any),
 		}
 		if smartRecapConfig.QuotaEnabled() {
 			response.SmartRecapQuota = &analytics.SmartRecapQuotaInfo{

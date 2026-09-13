@@ -8,13 +8,13 @@ import (
 func TestExtractTextFromMessage(t *testing.T) {
 	tests := []struct {
 		name  string
-		entry map[string]interface{}
+		entry map[string]any
 		want  string
 	}{
 		{
 			name: "string content",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
+			entry: map[string]any{
+				"message": map[string]any{
 					"content": "Hello world",
 				},
 			},
@@ -22,10 +22,10 @@ func TestExtractTextFromMessage(t *testing.T) {
 		},
 		{
 			name: "array content with text block",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
-					"content": []interface{}{
-						map[string]interface{}{"type": "text", "text": "Array text"},
+			entry: map[string]any{
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "text", "text": "Array text"},
 					},
 				},
 			},
@@ -33,11 +33,11 @@ func TestExtractTextFromMessage(t *testing.T) {
 		},
 		{
 			name: "array content with image then text",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
-					"content": []interface{}{
-						map[string]interface{}{"type": "image", "source": map[string]interface{}{}},
-						map[string]interface{}{"type": "text", "text": "After image"},
+			entry: map[string]any{
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "image", "source": map[string]any{}},
+						map[string]any{"type": "text", "text": "After image"},
 					},
 				},
 			},
@@ -45,10 +45,10 @@ func TestExtractTextFromMessage(t *testing.T) {
 		},
 		{
 			name: "array content with only image",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
-					"content": []interface{}{
-						map[string]interface{}{"type": "image", "source": map[string]interface{}{}},
+			entry: map[string]any{
+				"message": map[string]any{
+					"content": []any{
+						map[string]any{"type": "image", "source": map[string]any{}},
 					},
 				},
 			},
@@ -56,15 +56,15 @@ func TestExtractTextFromMessage(t *testing.T) {
 		},
 		{
 			name: "no message field",
-			entry: map[string]interface{}{
+			entry: map[string]any{
 				"type": "user",
 			},
 			want: "",
 		},
 		{
 			name: "nil content",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
+			entry: map[string]any{
+				"message": map[string]any{
 					"content": nil,
 				},
 			},
@@ -72,8 +72,8 @@ func TestExtractTextFromMessage(t *testing.T) {
 		},
 		{
 			name: "empty string content",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
+			entry: map[string]any{
+				"message": map[string]any{
 					"content": "",
 				},
 			},
@@ -81,9 +81,9 @@ func TestExtractTextFromMessage(t *testing.T) {
 		},
 		{
 			name: "empty array content",
-			entry: map[string]interface{}{
-				"message": map[string]interface{}{
-					"content": []interface{}{},
+			entry: map[string]any{
+				"message": map[string]any{
+					"content": []any{},
 				},
 			},
 			want: "",

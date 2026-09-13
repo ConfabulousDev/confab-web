@@ -53,7 +53,7 @@ func (c jsonCol[V]) Value() (driver.Value, error) { return json.Marshal(*c.ptr) 
 // ("[]") rather than null, preserving the workflows card's stored shape.
 type jsonSliceCol[E any] struct{ ptr *[]E }
 
-func (c jsonSliceCol[E]) Scan(src any) error { return jsonCol[[]E]{c.ptr}.Scan(src) }
+func (c jsonSliceCol[E]) Scan(src any) error { return jsonCol[[]E](c).Scan(src) }
 
 func (c jsonSliceCol[E]) Value() (driver.Value, error) {
 	s := *c.ptr
@@ -410,9 +410,7 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 	errs := make(chan error, len(cardOps))
 
 	for _, op := range cardOps {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			assign, err := op.fetch(ctx, s, sessionID)
 			if err != nil {
 				errs <- fmt.Errorf("%s: %w", op.name, err)
@@ -421,20 +419,15 @@ func (s *Store) GetCards(ctx context.Context, sessionID string) (*Cards, error) 
 			mu.Lock()
 			assign(cards)
 			mu.Unlock()
-		}()
+		})
 	}
 
 	wg.Wait()
 	close(errs)
 
-	var allErrs []error
-	for err := range errs {
-		allErrs = append(allErrs, err)
+	if err := joinErrors(errs); err != nil {
+		return nil, err
 	}
-	if len(allErrs) > 0 {
-		return nil, errors.Join(allErrs...)
-	}
-
 	return cards, nil
 }
 
@@ -448,25 +441,25 @@ func (s *Store) UpsertCards(ctx context.Context, cards *Cards) error {
 		if !op.present(cards) {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := op.upsert(ctx, s, cards); err != nil {
 				errs <- fmt.Errorf("%s: %w", op.name, err)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
 	close(errs)
 
+	return joinErrors(errs)
+}
+
+// joinErrors drains a closed error channel and joins its contents,
+// returning nil if the channel was empty.
+func joinErrors(errs <-chan error) error {
 	var allErrs []error
 	for err := range errs {
 		allErrs = append(allErrs, err)
 	}
-	if len(allErrs) > 0 {
-		return errors.Join(allErrs...)
-	}
-
-	return nil
+	return errors.Join(allErrs...)
 }

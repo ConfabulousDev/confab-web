@@ -26,7 +26,7 @@ func ParseSuperAdminEmails(raw string) (map[string]struct{}, []string) {
 	if strings.TrimSpace(raw) == "" {
 		return set, warnings
 	}
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		trimmed := strings.TrimSpace(part)
 		if trimmed == "" {
 			warnings = append(warnings, "SUPER_ADMIN_EMAILS: skipped empty entry (stray comma?)")

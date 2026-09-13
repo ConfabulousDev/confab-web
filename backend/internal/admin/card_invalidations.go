@@ -226,7 +226,7 @@ func (h *Handlers) respondExecute(
 	})
 
 	if res != nil {
-		AuditLogFromRequest(r, h.DB, ActionCardInvalidate, map[string]interface{}{
+		AuditLogFromRequest(r, h.DB, ActionCardInvalidate, map[string]any{
 			"correlation_id":    res.CorrelationID.String(),
 			"card_types":        countReq.CardTypes,
 			"start_date":        countReq.StartDate.Format(time.RFC3339),

@@ -167,7 +167,7 @@ func (r *ComputeResult) ToCards(sessionID string, lineCount int64) *Cards {
 // ToResponse converts Cards to an AnalyticsResponse for the API.
 func (c *Cards) ToResponse() *AnalyticsResponse {
 	response := &AnalyticsResponse{
-		Cards: make(map[string]interface{}),
+		Cards: make(map[string]any),
 	}
 
 	// Get ComputedAt and ComputedLines from the first available card

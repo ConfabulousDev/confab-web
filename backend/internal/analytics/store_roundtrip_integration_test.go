@@ -10,8 +10,6 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
-func rtPtr[T any](v T) *T { return &v }
-
 // rtComputedAt is a microsecond-precision UTC instant so it round-trips through
 // Postgres timestamptz (microsecond precision) without truncation loss.
 var rtComputedAt = time.Date(2026, 2, 3, 4, 5, 6, 123456000, time.UTC)
@@ -40,8 +38,8 @@ func buildAllCards(sessionID string) *analytics.Cards {
 			SessionID: sessionID, Version: analytics.SessionCardVersion, ComputedAt: rtComputedAt, UpToLine: 100,
 			TotalMessages: 10, UserMessages: 4, AssistantMessages: 6,
 			HumanPrompts: 4, ToolResults: 3, TextResponses: 6, ToolCalls: 8, ThinkingBlocks: 2,
-			DurationMs: rtPtr(int64(54321)), ModelsUsed: []string{"sonnet", "haiku"},
-			CompactionAuto: 1, CompactionManual: 2, CompactionAvgTimeMs: rtPtr(99),
+			DurationMs: new(int64(54321)), ModelsUsed: []string{"sonnet", "haiku"},
+			CompactionAuto: 1, CompactionManual: 2, CompactionAvgTimeMs: new(99),
 		},
 		Tools: &analytics.ToolsCardRecord{
 			SessionID: sessionID, Version: analytics.ToolsCardVersion, ComputedAt: rtComputedAt, UpToLine: 100,
@@ -56,9 +54,9 @@ func buildAllCards(sessionID string) *analytics.Cards {
 		Conversation: &analytics.ConversationCardRecord{
 			SessionID: sessionID, Version: analytics.ConversationCardVersion, ComputedAt: rtComputedAt, UpToLine: 100,
 			UserTurns: 4, AssistantTurns: 6,
-			AvgAssistantTurnMs: rtPtr(int64(1500)), AvgUserThinkingMs: rtPtr(int64(800)),
-			TotalAssistantDurationMs: rtPtr(int64(9000)), TotalUserDurationMs: rtPtr(int64(3200)),
-			AssistantUtilizationPct: rtPtr(73.5),
+			AvgAssistantTurnMs: new(int64(1500)), AvgUserThinkingMs: new(int64(800)),
+			TotalAssistantDurationMs: new(int64(9000)), TotalUserDurationMs: new(int64(3200)),
+			AssistantUtilizationPct: new(73.5),
 		},
 		AgentsAndSkills: &analytics.AgentsAndSkillsCardRecord{
 			SessionID: sessionID, Version: analytics.AgentsAndSkillsCardVersion, ComputedAt: rtComputedAt, UpToLine: 100,

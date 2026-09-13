@@ -74,7 +74,7 @@ func TestGetMe_IsAdmin(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var body map[string]interface{}
+		var body map[string]any
 		testutil.ParseJSON(t, resp, &body)
 		if body["is_admin"] != true {
 			t.Errorf("expected is_admin=true, got %v", body["is_admin"])
@@ -96,7 +96,7 @@ func TestGetMe_IsAdmin(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var body map[string]interface{}
+		var body map[string]any
 		testutil.ParseJSON(t, resp, &body)
 		if body["is_admin"] != false {
 			t.Errorf("expected is_admin=false, got %v", body["is_admin"])
@@ -122,7 +122,7 @@ func TestAdminAPI_AuthEnforcement(t *testing.T) {
 	endpoints := []struct {
 		method string
 		path   string
-		body   interface{}
+		body   any
 	}{
 		{"GET", "/api/v1/admin/users", nil},
 		{"POST", "/api/v1/admin/users", emptyBody},
@@ -1430,7 +1430,7 @@ func TestAdminUnion_ColumnAdminGetsAccess(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		testutil.RequireStatus(t, resp, http.StatusOK)
-		var body map[string]interface{}
+		var body map[string]any
 		testutil.ParseJSON(t, resp, &body)
 		if body["is_admin"] != true {
 			t.Errorf("expected is_admin=true for column admin, got %v", body["is_admin"])

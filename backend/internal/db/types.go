@@ -16,8 +16,8 @@ const MaxCustomTitleLength = 255
 
 // SessionListItem represents a session in the list view
 type SessionListItem struct {
-	ID                    string     `json:"id"`                                // UUID primary key for URL routing
-	ExternalID            string     `json:"external_id"`                       // External system's session ID (e.g., Claude Code's ID)
+	ID                    string     `json:"id"`          // UUID primary key for URL routing
+	ExternalID            string     `json:"external_id"` // External system's session ID (e.g., Claude Code's ID)
 	FirstSeen             time.Time  `json:"first_seen"`
 	FileCount             int        `json:"file_count"`                        // Number of sync files
 	LastSyncTime          *time.Time `json:"last_sync_time,omitempty"`          // Last sync timestamp
@@ -29,19 +29,19 @@ type SessionListItem struct {
 	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
 	// time via models.NormalizeProvider so the public API never exposes the
 	// historical display form.
-	Provider              string     `json:"provider"`
-	TotalLines            int64      `json:"total_lines"`                       // Sum of last_synced_line across all files
+	Provider   string `json:"provider"`
+	TotalLines int64  `json:"total_lines"` // Sum of last_synced_line across all files
 	// TODO: Remove git_repo field and only return git_repo_url, let frontend parse the org/repo
-	GitRepo          *string    `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
-	GitRepoURL       *string    `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
-	GitBranch        *string    `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
-	GitHubPRs        []string   `json:"github_prs,omitempty"`         // Linked GitHub PR URLs (e.g., ["https://github.com/org/repo/pull/123"])
-	GitHubCommits    []string   `json:"github_commits,omitempty"`     // Linked GitHub commit SHAs (latest first)
-	IsOwner          bool       `json:"is_owner"`                     // true if user owns this session
-	AccessType       string     `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
-	SharedByEmail    *string    `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
-	OwnerEmail       string     `json:"owner_email"`                  // email of session owner (always populated)
-	EstimatedCostUSD *string    `json:"estimated_cost_usd,omitempty"` // Estimated API cost from analytics
+	GitRepo          *string  `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
+	GitRepoURL       *string  `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
+	GitBranch        *string  `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB
+	GitHubPRs        []string `json:"github_prs,omitempty"`         // Linked GitHub PR URLs (e.g., ["https://github.com/org/repo/pull/123"])
+	GitHubCommits    []string `json:"github_commits,omitempty"`     // Linked GitHub commit SHAs (latest first)
+	IsOwner          bool     `json:"is_owner"`                     // true if user owns this session
+	AccessType       string   `json:"access_type"`                  // "owner" | "private_share" | "public_share" | "system_share"
+	SharedByEmail    *string  `json:"shared_by_email,omitempty"`    // email of user who shared (if not owner)
+	OwnerEmail       string   `json:"owner_email"`                  // email of session owner (always populated)
+	EstimatedCostUSD *string  `json:"estimated_cost_usd,omitempty"` // Estimated API cost from analytics
 }
 
 // SessionListParams contains filtering and pagination parameters for listing sessions
@@ -76,8 +76,8 @@ type SessionFilterOptions struct {
 
 // SessionDetail represents detailed session information (sync-based model)
 type SessionDetail struct {
-	ID                    string           `json:"id"`                                // UUID primary key for URL routing
-	ExternalID            string           `json:"external_id"`                       // External system's session ID
+	ID         string `json:"id"`          // UUID primary key for URL routing
+	ExternalID string `json:"external_id"` // External system's session ID
 	// Provider is the canonical agent identifier ("claude-code" or "codex").
 	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
 	// time via models.NormalizeProvider.
@@ -87,16 +87,16 @@ type SessionDetail struct {
 	Summary               *string          `json:"summary,omitempty"`                 // First summary from transcript
 	FirstUserMessage      *string          `json:"first_user_message,omitempty"`      // First user message
 	FirstSeen             time.Time        `json:"first_seen"`
-	CWD              *string          `json:"cwd,omitempty" pii:"redact"`                // Working directory
-	TranscriptPath   *string          `json:"transcript_path,omitempty" pii:"redact"`    // Original transcript path
-	GitInfo          interface{}      `json:"git_info,omitempty"`                        // Git metadata
-	LastSyncAt       *time.Time       `json:"last_sync_at,omitempty"`                    // Last sync timestamp
-	Files            []SyncFileDetail `json:"files"`                                     // Sync files
-	Hostname         *string          `json:"hostname,omitempty" pii:"redact"`           // Client machine hostname (owner-only)
-	Username         *string          `json:"username,omitempty" pii:"redact"`           // OS username (owner-only)
-	IsOwner          *bool            `json:"is_owner,omitempty"`           // True if viewer is session owner (shared sessions only)
-	SharedByEmail    *string          `json:"shared_by_email,omitempty"`    // Email of session owner (non-owner access only)
-	OwnerEmail       string           `json:"owner_email"`                  // Email of session owner (always populated)
+	CWD                   *string          `json:"cwd,omitempty" pii:"redact"`             // Working directory
+	TranscriptPath        *string          `json:"transcript_path,omitempty" pii:"redact"` // Original transcript path
+	GitInfo               any              `json:"git_info,omitempty"`                     // Git metadata
+	LastSyncAt            *time.Time       `json:"last_sync_at,omitempty"`                 // Last sync timestamp
+	Files                 []SyncFileDetail `json:"files"`                                  // Sync files
+	Hostname              *string          `json:"hostname,omitempty" pii:"redact"`        // Client machine hostname (owner-only)
+	Username              *string          `json:"username,omitempty" pii:"redact"`        // OS username (owner-only)
+	IsOwner               *bool            `json:"is_owner,omitempty"`                     // True if viewer is session owner (shared sessions only)
+	SharedByEmail         *string          `json:"shared_by_email,omitempty"`              // Email of session owner (non-owner access only)
+	OwnerEmail            string           `json:"owner_email"`                            // Email of session owner (always populated)
 }
 
 // RedactForSharing strips PII fields that should not be visible to non-owners.

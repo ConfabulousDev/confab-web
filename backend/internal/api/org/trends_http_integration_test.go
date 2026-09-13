@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -554,14 +555,14 @@ func TestHandleGetTrends_OwnerValidationBounds(t *testing.T) {
 	client := testutil.NewTestClient(t, ts).WithSession(sessionToken)
 
 	// 51 owners — exceeds MaxFilterCount (50).
-	tooMany := ""
-	for i := 0; i < 51; i++ {
+	var tooMany strings.Builder
+	for i := range 51 {
 		if i > 0 {
-			tooMany += ","
+			tooMany.WriteString(",")
 		}
-		tooMany += "u" + strconv.Itoa(i) + "@x.test"
+		tooMany.WriteString("u" + strconv.Itoa(i) + "@x.test")
 	}
-	resp, err := client.Get("/api/v1/trends?owner=" + tooMany)
+	resp, err := client.Get("/api/v1/trends?owner=" + tooMany.String())
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

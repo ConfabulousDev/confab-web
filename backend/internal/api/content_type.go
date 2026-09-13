@@ -26,8 +26,8 @@ func validateContentType(next http.Handler) http.Handler {
 			// Extract media type (ignore charset and other parameters)
 			// e.g., "application/json; charset=utf-8" → "application/json"
 			mediaType := contentType
-			if idx := strings.Index(contentType, ";"); idx != -1 {
-				mediaType = strings.TrimSpace(contentType[:idx])
+			if before, _, ok := strings.Cut(contentType, ";"); ok {
+				mediaType = strings.TrimSpace(before)
 			}
 
 			// Must be application/json

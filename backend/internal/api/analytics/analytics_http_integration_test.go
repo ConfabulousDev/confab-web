@@ -642,7 +642,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_Exact(t *testing.T) {
 	if !ok {
 		t.Fatal("Cards[\"code_activity\"] missing")
 	}
-	codeActivity, ok := codeActivityRaw.(map[string]interface{})
+	codeActivity, ok := codeActivityRaw.(map[string]any)
 	if !ok {
 		t.Fatalf("Cards[\"code_activity\"] = %T, want map[string]interface{}", codeActivityRaw)
 	}
@@ -662,7 +662,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_Exact(t *testing.T) {
 
 // jsonNumber unwraps a JSON-decoded number (float64 from encoding/json) to int64.
 // Returns -1 for missing or non-numeric fields so test errors are obvious.
-func jsonNumber(v interface{}) int64 {
+func jsonNumber(v any) int64 {
 	switch n := v.(type) {
 	case float64:
 		return int64(n)
@@ -723,7 +723,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills(t *testing.T
 	if !ok {
 		t.Fatal("Cards[\"agents_and_skills\"] missing for Codex session with spawns")
 	}
-	payload, ok := raw.(map[string]interface{})
+	payload, ok := raw.(map[string]any)
 	if !ok {
 		t.Fatalf("Cards[\"agents_and_skills\"] = %T, want map[string]interface{}", raw)
 	}
@@ -733,7 +733,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills(t *testing.T
 	if got := jsonNumber(payload["skill_invocations"]); got != 0 {
 		t.Errorf("skill_invocations = %d, want 0 (fixture has no skills)", got)
 	}
-	agentStats, ok := payload["agent_stats"].(map[string]interface{})
+	agentStats, ok := payload["agent_stats"].(map[string]any)
 	if !ok {
 		t.Fatalf("agent_stats = %T, want map (keyed by agent_role)", payload["agent_stats"])
 	}
@@ -744,8 +744,8 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills(t *testing.T
 	}
 	// Tools card must NOT contain spawn_agent / wait_agent.
 	if toolsRaw, ok := result.Cards["tools"]; ok {
-		if toolsCard, ok := toolsRaw.(map[string]interface{}); ok {
-			if ts, ok := toolsCard["tool_stats"].(map[string]interface{}); ok {
+		if toolsCard, ok := toolsRaw.(map[string]any); ok {
+			if ts, ok := toolsCard["tool_stats"].(map[string]any); ok {
 				if _, present := ts["spawn_agent"]; present {
 					t.Error("tools.tool_stats[spawn_agent] present — should be routed to AgentsAndSkills only")
 				}
@@ -757,7 +757,7 @@ func TestGetSessionAnalytics_Codex_HTTP_Integration_AgentsAndSkills(t *testing.T
 	}
 }
 
-func mapKeys(m map[string]interface{}) []string {
+func mapKeys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

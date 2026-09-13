@@ -36,9 +36,9 @@ type clientErrorContext struct {
 
 // clientErrorReport is the request body for POST /api/v1/client-errors
 type clientErrorReport struct {
-	Category  string             `json:"category"`
-	SessionID string             `json:"session_id,omitempty"`
-	Errors    []clientErrorItem  `json:"errors"`
+	Category  string              `json:"category"`
+	SessionID string              `json:"session_id,omitempty"`
+	Errors    []clientErrorItem   `json:"errors"`
 	Context   *clientErrorContext `json:"context,omitempty"`
 }
 

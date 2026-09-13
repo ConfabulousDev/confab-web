@@ -115,7 +115,7 @@ func unionSessionIDs(cardTypes []string) string {
 
 // endArg converts an optional upper bound into a driver value. Nil stays nil so
 // the `$2::timestamptz IS NULL` guard in the query skips the upper-bound check.
-func endArg(end *time.Time) interface{} {
+func endArg(end *time.Time) any {
 	if end == nil {
 		return nil
 	}
@@ -219,10 +219,7 @@ func (s *Store) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResult
 
 	batchSize := s.batchSize()
 	for start := 0; start < len(ids); start += batchSize {
-		end := start + batchSize
-		if end > len(ids) {
-			end = len(ids)
-		}
+		end := min(start+batchSize, len(ids))
 		batch := ids[start:end]
 
 		perTable, err := s.executeBatch(ctx, req, batch, res.CorrelationID)

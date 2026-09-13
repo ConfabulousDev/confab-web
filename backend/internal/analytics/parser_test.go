@@ -122,13 +122,13 @@ func TestParseLine_CacheCreationBreakdown_Absent(t *testing.T) {
 // map (NOT json-tag unmarshalled), so the nested cache_creation object needs
 // explicit extraction (rd9v).
 func TestParseToolUseResult_CacheCreation(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"agentId": "agent-1",
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"input_tokens":                float64(10),
 			"output_tokens":               float64(20),
 			"cache_creation_input_tokens": float64(100),
-			"cache_creation": map[string]interface{}{
+			"cache_creation": map[string]any{
 				"ephemeral_5m_input_tokens": float64(40),
 				"ephemeral_1h_input_tokens": float64(60),
 			},
@@ -150,15 +150,15 @@ func TestParseToolUseResult_CacheCreation(t *testing.T) {
 // fields the hand-parse must extract explicitly (struct json tags alone do nothing
 // since parseToolUseResult reads from a map). Shape grounded in real session JSONL.
 func TestParseToolUseResult_BashFields(t *testing.T) {
-	m := map[string]interface{}{
-		"stdout":                  "hello\nworld",
-		"stderr":                  "",
-		"interrupted":             true,
-		"isImage":                 true,
-		"noOutputExpected":        true,
+	m := map[string]any{
+		"stdout":                   "hello\nworld",
+		"stderr":                   "",
+		"interrupted":              true,
+		"isImage":                  true,
+		"noOutputExpected":         true,
 		"returnCodeInterpretation": "No matches found",
-		"persistedOutputPath":     "/Users/x/.claude/projects/p/tool-results/abc.txt",
-		"persistedOutputSize":     float64(44276),
+		"persistedOutputPath":      "/Users/x/.claude/projects/p/tool-results/abc.txt",
+		"persistedOutputSize":      float64(44276),
 	}
 	r := parseToolUseResult(m)
 	if !r.Interrupted {
@@ -185,9 +185,9 @@ func TestParseToolUseResult_BashFields(t *testing.T) {
 // fields leaves them at their zero values, and the existing subagent path still
 // parses (the extraction is additive).
 func TestParseToolUseResult_BashFields_Absent(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"agentId": "agent-1",
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"input_tokens": float64(10),
 		},
 	}
@@ -206,9 +206,9 @@ func TestParseToolUseResult_BashFields_Absent(t *testing.T) {
 // TestParseToolUseResult_CacheCreation_Absent: subagent usage without the nested
 // object leaves CacheCreation nil.
 func TestParseToolUseResult_CacheCreation_Absent(t *testing.T) {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"agentId": "agent-1",
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"input_tokens":                float64(10),
 			"cache_creation_input_tokens": float64(100),
 		},

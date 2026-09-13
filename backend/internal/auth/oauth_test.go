@@ -113,7 +113,7 @@ func TestGenerateRandomString(t *testing.T) {
 		states := make(map[string]bool)
 		count := 100
 
-		for i := 0; i < count; i++ {
+		for range count {
 			str, err := generateRandomString(32)
 			if err != nil {
 				t.Fatalf("generateRandomString failed: %v", err)

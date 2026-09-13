@@ -40,7 +40,7 @@ func TestAllow_AllowsWithinBurst(t *testing.T) {
 	defer rl.Stop()
 
 	ctx := context.Background()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !rl.Allow(ctx, "client-a") {
 			t.Errorf("request %d should be allowed within burst", i+1)
 		}
@@ -100,14 +100,14 @@ func TestGetLimiter_ConcurrentLoadOrStore(t *testing.T) {
 
 	const n = 50
 	results := make(chan *rate.Limiter, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			results <- rl.getLimiter("shared")
 		}()
 	}
 
 	var first *rate.Limiter
-	for i := 0; i < n; i++ {
+	for range n {
 		got := <-results
 		if first == nil {
 			first = got
@@ -172,7 +172,7 @@ func TestBucketCap_EvictsOldest(t *testing.T) {
 	rl.maxAge = time.Hour // keep the background cleanup from interfering
 
 	ctx := context.Background()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		rl.Allow(ctx, fmt.Sprintf("key-%d", i))
 	}
 	// Make key-0 the unambiguously oldest by last access.
@@ -197,7 +197,7 @@ func TestBucketCap_NewKeyAdmittedAfterEviction(t *testing.T) {
 	rl.maxAge = time.Hour
 
 	ctx := context.Background()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		rl.Allow(ctx, fmt.Sprintf("key-%d", i))
 	}
 
@@ -242,7 +242,7 @@ func TestBucketCap_SequentialOverflowStaysBounded(t *testing.T) {
 	rl.maxAge = time.Hour // isolate from background cleanup
 
 	ctx := context.Background()
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		rl.Allow(ctx, fmt.Sprintf("attacker-%d", i))
 	}
 
@@ -268,7 +268,7 @@ func TestBucketCounter_Soft(t *testing.T) {
 	ctx := context.Background()
 	const n = 200
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

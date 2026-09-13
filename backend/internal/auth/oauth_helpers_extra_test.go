@@ -240,7 +240,7 @@ func TestWriteDeviceTokenError_FormatAndStatus(t *testing.T) {
 
 func TestSetOAuthLoginCookies_StateLengthAndUniqueness(t *testing.T) {
 	seen := map[string]bool{}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/login", nil)
 		state, _, _, _, err := setOAuthLoginCookies(rec, req)

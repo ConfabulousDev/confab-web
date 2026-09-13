@@ -12,7 +12,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func ptrInt64(v int64) *int64 { return &v }
+//go:fix inline
+func ptrInt64(v int64) *int64 { return new(v) }
 
 // minimalRollout builds a hand-crafted ParsedRollout with the minimum fields
 // each test needs. Avoids depending on the parser implementation (which is

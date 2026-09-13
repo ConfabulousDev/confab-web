@@ -49,7 +49,7 @@ func TestRateLimiter(t *testing.T) {
 		userID := int64(1)
 
 		// Should allow up to the limit
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			// First check if allowed
 			if !limiter.Allow(userID, 5) {
 				t.Errorf("expected request %d to be allowed", i+1)
@@ -64,7 +64,7 @@ func TestRateLimiter(t *testing.T) {
 		userID := int64(1)
 
 		// Fill up the limit
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			limiter.Record(userID)
 		}
 
@@ -79,7 +79,7 @@ func TestRateLimiter(t *testing.T) {
 		userID := int64(1)
 
 		// Record 3 emails
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			limiter.Record(userID)
 		}
 
@@ -105,7 +105,7 @@ func TestRateLimiter(t *testing.T) {
 		user2 := int64(2)
 
 		// Fill up user1's limit
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			limiter.Record(user1)
 		}
 
@@ -157,7 +157,7 @@ func TestRateLimitedService(t *testing.T) {
 		}
 
 		// Send 2 emails (at the limit)
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			err := service.SendShareInvitation(context.Background(), 1, params)
 			if err != nil {
 				t.Errorf("unexpected error on email %d: %v", i+1, err)
@@ -218,7 +218,7 @@ func TestRateLimitedService(t *testing.T) {
 		if err := service.CheckRateLimit(1, 3); err != nil {
 			t.Fatalf("pre-check of full batch should pass, got %v", err)
 		}
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if err := service.SendShareInvitation(context.Background(), 1, params); err != nil {
 				t.Fatalf("send %d should succeed after pre-check, got %v", i+1, err)
 			}
@@ -569,7 +569,7 @@ func captureLogs(t *testing.T, fn func(ctx context.Context)) []map[string]any {
 	ctx := logger.WithLogger(context.Background(), slog.New(h))
 	fn(ctx)
 	var records []map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
 		if line == "" {
 			continue
 		}
@@ -642,4 +642,3 @@ func TestHumanProviderLabel_KnownProvidersDoNotLog(t *testing.T) {
 		})
 	}
 }
-

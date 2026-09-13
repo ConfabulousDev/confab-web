@@ -12,7 +12,7 @@ import (
 // OrgReposResponse lists every repo with any session in the given date range
 // across all active users in the organization.
 type OrgReposResponse struct {
-	ComputedAt time.Time          `json:"computed_at"`
+	ComputedAt time.Time           `json:"computed_at"`
 	DateRange  analytics.DateRange `json:"date_range"`
 	// Repos is an alphabetically sorted slice of canonical owner/name strings
 	// extracted from sessions.git_info->>'repo_url'. Always non-nil (`[]` for

@@ -10,14 +10,14 @@ func makeCommandExpansionMessage(uuid, timestamp, skillName string) string {
 
 // makeSkillToolUseMessage creates an assistant message that invokes the Skill tool.
 func makeSkillToolUseMessage(uuid, timestamp, toolUseID, skillName string) string {
-	return makeAssistantMessage(uuid, timestamp, "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock(toolUseID, "Skill", map[string]interface{}{"skill": skillName}),
+	return makeAssistantMessage(uuid, timestamp, "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock(toolUseID, "Skill", map[string]any{"skill": skillName}),
 	})
 }
 
 // makeSkillToolResultMessage creates a user message with tool_result for a Skill invocation.
 func makeSkillToolResultMessage(uuid, timestamp, toolUseID string, isError bool) string {
-	return makeUserMessageWithToolResults(uuid, timestamp, []map[string]interface{}{
+	return makeUserMessageWithToolResults(uuid, timestamp, []map[string]any{
 		makeToolResultBlock(toolUseID, "skill expanded", isError),
 	})
 }
@@ -40,12 +40,12 @@ func TestIsCommandExpansionMessage(t *testing.T) {
 		},
 		{
 			name:     "user message with tool results",
-			jsonl:    makeUserMessageWithToolResults("u1", "2025-01-01T00:00:00Z", []map[string]interface{}{makeToolResultBlock("t1", "result", false)}),
+			jsonl:    makeUserMessageWithToolResults("u1", "2025-01-01T00:00:00Z", []map[string]any{makeToolResultBlock("t1", "result", false)}),
 			wantBool: false,
 		},
 		{
 			name:     "assistant message",
-			jsonl:    makeAssistantMessage("a1", "2025-01-01T00:00:00Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("hello")}),
+			jsonl:    makeAssistantMessage("a1", "2025-01-01T00:00:00Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("hello")}),
 			wantBool: false,
 		},
 	}
@@ -103,12 +103,12 @@ func TestSkillsAnalyzer_CommandExpansion(t *testing.T) {
 	// Transcript with both Skill tool invocations and command-expansion invocations
 	jsonl := // Skill tool invocation (pattern #1)
 		makeSkillToolUseMessage("a1", "2025-01-01T00:00:00Z", "tu1", "commit") + "\n" +
-		makeSkillToolResultMessage("u1", "2025-01-01T00:00:01Z", "tu1", false) + "\n" +
-		// Command-expansion invocation (pattern #2)
-		makeCommandExpansionMessage("u2", "2025-01-01T00:00:02Z", "interview") + "\n" +
-		makeAssistantMessage("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Starting interview")}) + "\n" +
-		// Another command-expansion
-		makeCommandExpansionMessage("u3", "2025-01-01T00:00:04Z", "commit") + "\n"
+			makeSkillToolResultMessage("u1", "2025-01-01T00:00:01Z", "tu1", false) + "\n" +
+			// Command-expansion invocation (pattern #2)
+			makeCommandExpansionMessage("u2", "2025-01-01T00:00:02Z", "interview") + "\n" +
+			makeAssistantMessage("a2", "2025-01-01T00:00:03Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Starting interview")}) + "\n" +
+			// Another command-expansion
+			makeCommandExpansionMessage("u3", "2025-01-01T00:00:04Z", "commit") + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {
@@ -178,7 +178,7 @@ func TestSkillsAnalyzer_OnlyToolInvocations(t *testing.T) {
 func TestSkillsAnalyzer_OnlyCommandExpansions(t *testing.T) {
 	// Only command-expansion pattern - no Skill tool
 	jsonl := makeCommandExpansionMessage("u1", "2025-01-01T00:00:00Z", "interview") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("response")}) + "\n" +
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("response")}) + "\n" +
 		makeCommandExpansionMessage("u2", "2025-01-01T00:00:02Z", "bugfix") + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
@@ -205,7 +205,7 @@ func TestSkillsAnalyzer_OnlyCommandExpansions(t *testing.T) {
 func TestSkillsAnalyzer_NoSkills(t *testing.T) {
 	// No skills at all
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("hi")}) + "\n"
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("hi")}) + "\n"
 
 	fc, err := NewFileCollection([]byte(jsonl))
 	if err != nil {

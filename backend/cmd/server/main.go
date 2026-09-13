@@ -273,7 +273,7 @@ func loadConfig() Config {
 	// Parse allowed email domains (optional, for on-prem deployments)
 	if allowedDomainsEnv := os.Getenv("ALLOWED_EMAIL_DOMAINS"); allowedDomainsEnv != "" {
 		var domains []string
-		for _, d := range strings.Split(allowedDomainsEnv, ",") {
+		for d := range strings.SplitSeq(allowedDomainsEnv, ",") {
 			d = strings.ToLower(strings.TrimSpace(d))
 			if d != "" {
 				domains = append(domains, d)
@@ -341,7 +341,7 @@ func loadConfig() Config {
 	// for cookie-based sessions). Browsers should refuse this combination, but
 	// some lenient clients honor it — fail loudly at startup so an operator
 	// can't silently expose authenticated endpoints to every origin.
-	for _, o := range strings.Split(allowedOrigins, ",") {
+	for o := range strings.SplitSeq(allowedOrigins, ",") {
 		if strings.TrimSpace(o) == "*" {
 			logFatal("invalid env var", "var", "ALLOWED_ORIGINS", "error", "wildcard '*' is not allowed: AllowCredentials=true requires an explicit origin list")
 		}

@@ -12,10 +12,10 @@ import "fmt"
 // (/tmp/galois-opencode/opencode.db). Unknown top-level fields and unknown
 // part types are allowed (forward-compat with future OpenCode releases),
 // matching the policy in validation.go::ValidateLine for Claude.
-func ValidateOpenCodeLine(raw map[string]interface{}) []ValidationError {
+func ValidateOpenCodeLine(raw map[string]any) []ValidationError {
 	var errors []ValidationError
 
-	info, ok := raw["info"].(map[string]interface{})
+	info, ok := raw["info"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "info",
@@ -28,7 +28,7 @@ func ValidateOpenCodeLine(raw map[string]interface{}) []ValidationError {
 		errors = append(errors, validateOpenCodeInfo(info)...)
 	}
 
-	parts, ok := raw["parts"].([]interface{})
+	parts, ok := raw["parts"].([]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "parts",
@@ -39,7 +39,7 @@ func ValidateOpenCodeLine(raw map[string]interface{}) []ValidationError {
 		return errors
 	}
 	for i, part := range parts {
-		partMap, ok := part.(map[string]interface{})
+		partMap, ok := part.(map[string]any)
 		if !ok {
 			errors = append(errors, ValidationError{
 				Path:     fmt.Sprintf("parts[%d]", i),
@@ -60,7 +60,7 @@ func ValidateOpenCodeLine(raw map[string]interface{}) []ValidationError {
 // validateOpenCodeInfo validates the per-message info object: required
 // identity fields, role-specific assistant requirements (modelID, providerID,
 // tokens), and the nested time.created timestamp every analyzer depends on.
-func validateOpenCodeInfo(info map[string]interface{}) []ValidationError {
+func validateOpenCodeInfo(info map[string]any) []ValidationError {
 	var errors []ValidationError
 
 	for _, field := range []string{"id", "sessionID"} {
@@ -94,7 +94,7 @@ func validateOpenCodeInfo(info map[string]interface{}) []ValidationError {
 		})
 	}
 
-	timeObj, ok := info["time"].(map[string]interface{})
+	timeObj, ok := info["time"].(map[string]any)
 	if !ok {
 		errors = append(errors, ValidationError{
 			Path:     "info.time",
@@ -122,7 +122,7 @@ func validateOpenCodeInfo(info map[string]interface{}) []ValidationError {
 				})
 			}
 		}
-		tokens, ok := info["tokens"].(map[string]interface{})
+		tokens, ok := info["tokens"].(map[string]any)
 		if !ok {
 			errors = append(errors, ValidationError{
 				Path:     "info.tokens",
@@ -144,7 +144,7 @@ func validateOpenCodeInfo(info map[string]interface{}) []ValidationError {
 // validateOpenCodeTokens checks the assistant message's tokens object:
 // input/output are required numbers; reasoning + cache.{read,write} are
 // optional but type-checked when present.
-func validateOpenCodeTokens(tokens map[string]interface{}) []ValidationError {
+func validateOpenCodeTokens(tokens map[string]any) []ValidationError {
 	var errors []ValidationError
 	for _, field := range []string{"input", "output"} {
 		if _, ok := tokens[field].(float64); !ok {
@@ -166,7 +166,7 @@ func validateOpenCodeTokens(tokens map[string]interface{}) []ValidationError {
 			})
 		}
 	}
-	if cache, ok := tokens["cache"].(map[string]interface{}); ok {
+	if cache, ok := tokens["cache"].(map[string]any); ok {
 		for _, field := range []string{"read", "write"} {
 			if v, ok := cache[field]; ok {
 				if _, ok := v.(float64); !ok {
@@ -186,7 +186,7 @@ func validateOpenCodeTokens(tokens map[string]interface{}) []ValidationError {
 // validateOpenCodePart dispatches by `type`, calling the per-type validator.
 // Unknown types are accepted without error (forward-compat with future
 // OpenCode releases), matching Claude's policy in validation.go.
-func validateOpenCodePart(part map[string]interface{}) []ValidationError {
+func validateOpenCodePart(part map[string]any) []ValidationError {
 	partType, _ := part["type"].(string)
 	if partType == "" {
 		return []ValidationError{{
@@ -227,7 +227,7 @@ func validateOpenCodePart(part map[string]interface{}) []ValidationError {
 				Received: typeOf(part["tool"]),
 			}}
 		}
-		if state, ok := part["state"].(map[string]interface{}); ok {
+		if state, ok := part["state"].(map[string]any); ok {
 			return validateOpenCodeToolState(state)
 		}
 	case "subtask":
@@ -256,7 +256,7 @@ func validateOpenCodePart(part map[string]interface{}) []ValidationError {
 
 // validateOpenCodeToolState validates the optional tool state sub-object:
 // when present, status is required and must be one of the observed states.
-func validateOpenCodeToolState(state map[string]interface{}) []ValidationError {
+func validateOpenCodeToolState(state map[string]any) []ValidationError {
 	status, _ := state["status"].(string)
 	switch status {
 	case "pending", "running", "completed", "error":

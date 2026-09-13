@@ -189,7 +189,7 @@ func TestSmartRecapCard_UpsertAndGet(t *testing.T) {
 		ModelUsed:                 "claude-haiku-4-5-20251101",
 		InputTokens:               1000,
 		OutputTokens:              200,
-		GenerationTimeMs:          intPtr(1500),
+		GenerationTimeMs:          new(1500),
 	}
 
 	// Upsert
@@ -316,8 +316,4 @@ func TestSmartRecapCard_GetNonExistent(t *testing.T) {
 	if card != nil {
 		t.Error("expected nil card for non-existent session")
 	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }

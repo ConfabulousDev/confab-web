@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
+	"github.com/go-chi/chi/v5"
 )
 
 // parseCommaSeparated splits a comma-separated query parameter into trimmed non-empty values.

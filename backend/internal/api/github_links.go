@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
@@ -18,6 +17,7 @@ import (
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/go-chi/chi/v5"
 )
 
 // GitHub URL patterns
@@ -229,7 +229,7 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 			links = []models.GitHubLink{}
 		}
 
-		respondJSON(w, http.StatusOK, map[string]interface{}{
+		respondJSON(w, http.StatusOK, map[string]any{
 			"links": links,
 		})
 	}
@@ -320,7 +320,7 @@ func extractPRLinkFromLine(line string) *models.GitHubLink {
 		return nil
 	}
 
-	var entry map[string]interface{}
+	var entry map[string]any
 	if err := json.Unmarshal([]byte(line), &entry); err != nil {
 		return nil
 	}
@@ -374,4 +374,3 @@ func extractPRLinkFromLine(line string) *models.GitHubLink {
 		Source:   models.GitHubLinkSourceTranscript,
 	}
 }
-

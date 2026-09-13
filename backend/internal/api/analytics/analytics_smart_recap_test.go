@@ -13,9 +13,9 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/anthropic"
 	dbsession "github.com/ConfabulousDev/confab-web/internal/db/session"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
-	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // =============================================================================
@@ -94,17 +94,17 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
 		// Parse response as raw map to check for is_stale field
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
 		// Get the cards map
-		cards, ok := rawResult["cards"].(map[string]interface{})
+		cards, ok := rawResult["cards"].(map[string]any)
 		if !ok {
 			t.Fatal("expected cards map in response")
 		}
 
 		// Get smart_recap card
-		smartRecap, ok := cards["smart_recap"].(map[string]interface{})
+		smartRecap, ok := cards["smart_recap"].(map[string]any)
 		if !ok {
 			t.Fatal("expected smart_recap card in response")
 		}
@@ -183,11 +183,11 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
-		cards := rawResult["cards"].(map[string]interface{})
-		smartRecap := cards["smart_recap"].(map[string]interface{})
+		cards := rawResult["cards"].(map[string]any)
+		smartRecap := cards["smart_recap"].(map[string]any)
 
 		// Verify cached content returned
 		if smartRecap["recap"] != cachedCard.Recap {
@@ -251,11 +251,11 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
 		// Verify quota IS included for owner
-		quota, hasQuota := rawResult["smart_recap_quota"].(map[string]interface{})
+		quota, hasQuota := rawResult["smart_recap_quota"].(map[string]any)
 		if !hasQuota {
 			t.Fatal("expected smart_recap_quota for owner")
 		}
@@ -318,11 +318,11 @@ func TestSmartRecap_ReturnsCachedCardWithoutStalenessCheck(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
-		cards := rawResult["cards"].(map[string]interface{})
-		smartRecap := cards["smart_recap"].(map[string]interface{})
+		cards := rawResult["cards"].(map[string]any)
+		smartRecap := cards["smart_recap"].(map[string]any)
 
 		// Verify expected fields are present
 		expectedFields := []string{
@@ -406,11 +406,11 @@ func TestSmartRecap_ErrorPropagation(t *testing.T) {
 		// Request should succeed (analytics endpoint returns partial results)
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
 		// Other cards should still be present
-		cards, ok := rawResult["cards"].(map[string]interface{})
+		cards, ok := rawResult["cards"].(map[string]any)
 		if !ok {
 			t.Fatal("expected cards map in response")
 		}
@@ -424,7 +424,7 @@ func TestSmartRecap_ErrorPropagation(t *testing.T) {
 		}
 
 		// card_errors should contain smart_recap error
-		cardErrors, hasErrors := rawResult["card_errors"].(map[string]interface{})
+		cardErrors, hasErrors := rawResult["card_errors"].(map[string]any)
 		if !hasErrors {
 			t.Fatal("expected card_errors in response when smart recap fails")
 		}
@@ -512,11 +512,11 @@ func TestSmartRecap_CacheHitVsMissPath(t *testing.T) {
 
 		testutil.RequireStatus(t, resp2, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp2, &rawResult)
 
-		cards := rawResult["cards"].(map[string]interface{})
-		smartRecap, ok := cards["smart_recap"].(map[string]interface{})
+		cards := rawResult["cards"].(map[string]any)
+		smartRecap, ok := cards["smart_recap"].(map[string]any)
 		if !ok {
 			t.Fatal("expected smart_recap card in response")
 		}
@@ -568,7 +568,7 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
 		// Verify suggested_session_title is present in response
@@ -607,7 +607,7 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
 		// Verify suggested_session_title is NOT present (omitempty)
@@ -681,11 +681,11 @@ func TestSuggestedTitle_IncludedInAnalyticsResponse(t *testing.T) {
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
 
-		var rawResult map[string]interface{}
+		var rawResult map[string]any
 		testutil.ParseJSON(t, resp, &rawResult)
 
 		// Verify smart recap card is present
-		cards := rawResult["cards"].(map[string]interface{})
+		cards := rawResult["cards"].(map[string]any)
 		if _, hasSmartRecap := cards["smart_recap"]; !hasSmartRecap {
 			t.Fatal("expected smart_recap card")
 		}
@@ -811,15 +811,15 @@ func runCacheMissGeneration(t *testing.T, mockURL string, vendorEnv map[string]s
 
 	testutil.RequireStatus(t, resp, http.StatusOK)
 
-	var rawResult map[string]interface{}
+	var rawResult map[string]any
 	testutil.ParseJSON(t, resp, &rawResult)
 
 	// Verify smart_recap card is present
-	cards, ok := rawResult["cards"].(map[string]interface{})
+	cards, ok := rawResult["cards"].(map[string]any)
 	if !ok {
 		t.Fatal("expected cards map in response")
 	}
-	smartRecap, ok := cards["smart_recap"].(map[string]interface{})
+	smartRecap, ok := cards["smart_recap"].(map[string]any)
 	if !ok {
 		t.Fatal("expected smart_recap card in response (generation should have succeeded)")
 	}
@@ -938,9 +938,9 @@ func TestSmartRecap_WireLLMProvider(t *testing.T) {
 			defer resp.Body.Close()
 			testutil.RequireStatus(t, resp, http.StatusOK)
 
-			var rawResult map[string]interface{}
+			var rawResult map[string]any
 			testutil.ParseJSON(t, resp, &rawResult)
-			smartRecap, ok := rawResult["cards"].(map[string]interface{})["smart_recap"].(map[string]interface{})
+			smartRecap, ok := rawResult["cards"].(map[string]any)["smart_recap"].(map[string]any)
 			if !ok {
 				t.Fatal("expected smart_recap card in response")
 			}

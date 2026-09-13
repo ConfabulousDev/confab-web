@@ -16,7 +16,7 @@ import (
 // re-downloads every agent file, so the counter reaches 2x the agent count.
 // Phase 4 implements the cache; the test then sees N downloads total.
 func TestClaudeRollout_AgentsCachedAcrossComputeAndPrepareTranscript(t *testing.T) {
-	mainJsonl := makeAssistantMessage("u1", "2026-05-16T10:00:00Z", "claude-sonnet-4-6", 50, 25, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("u1", "2026-05-16T10:00:00Z", "claude-sonnet-4-6", 50, 25, []map[string]any{
 		makeTextBlock("main response"),
 	}) + "\n"
 	main, err := parseTranscriptFile([]byte(mainJsonl), "")
@@ -24,7 +24,7 @@ func TestClaudeRollout_AgentsCachedAcrossComputeAndPrepareTranscript(t *testing.
 		t.Fatalf("parse main: %v", err)
 	}
 
-	agentJsonl := makeAssistantMessage("a1", "2026-05-16T10:00:01Z", "claude-sonnet-4-6", 30, 15, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("a1", "2026-05-16T10:00:01Z", "claude-sonnet-4-6", 30, 15, []map[string]any{
 		makeTextBlock("agent response"),
 	}) + "\n"
 
@@ -65,7 +65,7 @@ func TestClaudeRollout_AgentsCachedAcrossComputeAndPrepareTranscript(t *testing.
 // cache, a subsequent SearchText call must NOT trigger any additional
 // downloads.
 func TestClaudeRollout_SearchTextReusesAgentCache(t *testing.T) {
-	mainJsonl := makeAssistantMessage("u1", "2026-05-16T10:00:00Z", "claude-sonnet-4-6", 50, 25, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("u1", "2026-05-16T10:00:00Z", "claude-sonnet-4-6", 50, 25, []map[string]any{
 		makeTextBlock("main response"),
 	}) + "\n"
 	main, err := parseTranscriptFile([]byte(mainJsonl), "")
@@ -73,7 +73,7 @@ func TestClaudeRollout_SearchTextReusesAgentCache(t *testing.T) {
 		t.Fatalf("parse main: %v", err)
 	}
 
-	agentJsonl := makeAssistantMessage("a1", "2026-05-16T10:00:01Z", "claude-sonnet-4-6", 30, 15, []map[string]interface{}{
+	agentJsonl := makeAssistantMessage("a1", "2026-05-16T10:00:01Z", "claude-sonnet-4-6", 30, 15, []map[string]any{
 		makeTextBlock("agent response"),
 	}) + "\n"
 

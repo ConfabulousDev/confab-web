@@ -10,10 +10,10 @@ import (
 func TestComputeFromJSONL_TokenStats(t *testing.T) {
 	// Sample JSONL with two assistant messages
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 20, 30, []map[string]interface{}{
+		makeAssistantMessageFull("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, 20, 30, []map[string]any{
 			makeTextBlock("Hi"),
 		}) + "\n" +
-		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 200, 100, 0, 50, []map[string]interface{}{
+		makeAssistantMessageFull("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4-20241022", 200, 100, 0, 50, []map[string]any{
 			makeTextBlock("Hello"),
 		}) + "\n"
 
@@ -45,12 +45,12 @@ func TestComputeFromJSONL_TokenStats(t *testing.T) {
 func TestComputeFromJSONL_CompactionStats(t *testing.T) {
 	// Sample JSONL with compaction boundaries
 	jsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
+		makeAssistantMessage("a1", "2025-01-01T00:00:10Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hi")}) + "\n" +
 		makeCompactBoundaryMessageWithParent("c1", "2025-01-01T00:00:15Z", "auto", 50000, "a1") + "\n" +
 		makeUserMessage("u2", "2025-01-01T00:01:00Z", "continue") + "\n" +
-		makeAssistantMessage("a2", "2025-01-01T00:01:10Z", "claude-sonnet-4", 80, 40, []map[string]interface{}{makeTextBlock("Continuing")}) + "\n" +
+		makeAssistantMessage("a2", "2025-01-01T00:01:10Z", "claude-sonnet-4", 80, 40, []map[string]any{makeTextBlock("Continuing")}) + "\n" +
 		makeCompactBoundaryMessageWithParent("c2", "2025-01-01T00:02:00Z", "manual", 60000, "a2") + "\n" +
-		makeAssistantMessage("a3", "2025-01-01T00:02:20Z", "claude-sonnet-4", 90, 45, []map[string]interface{}{makeTextBlock("More")}) + "\n" +
+		makeAssistantMessage("a3", "2025-01-01T00:02:20Z", "claude-sonnet-4", 90, 45, []map[string]any{makeTextBlock("More")}) + "\n" +
 		makeCompactBoundaryMessageWithParent("c3", "2025-01-01T00:02:30Z", "auto", 70000, "a3") + "\n"
 
 	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
@@ -97,9 +97,9 @@ func TestComputeFromJSONL_EmptyContent(t *testing.T) {
 
 func TestComputeFromJSONL_MalformedLines(t *testing.T) {
 	// Should skip malformed lines without error
-	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hi")}) + "\n" +
+	jsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hi")}) + "\n" +
 		"not valid json\n" +
-		makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{makeTextBlock("Hello")}) + "\n"
+		makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", 100, 50, []map[string]any{makeTextBlock("Hello")}) + "\n"
 
 	result, err := ComputeFromJSONL(context.Background(), []byte(jsonl))
 	if err != nil {

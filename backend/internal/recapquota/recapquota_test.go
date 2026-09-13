@@ -268,7 +268,7 @@ func TestGetCount_CurrentMonth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrCreate failed: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := recapquota.Increment(ctx, conn, user.ID); err != nil {
 			t.Fatalf("Increment failed at %d: %v", i, err)
 		}
@@ -381,7 +381,7 @@ func TestListUserStats(t *testing.T) {
 	if _, err := recapquota.GetOrCreate(ctx, conn, user1.ID); err != nil {
 		t.Fatalf("GetOrCreate failed: %v", err)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if err := recapquota.Increment(ctx, conn, user1.ID); err != nil {
 			t.Fatalf("Increment failed: %v", err)
 		}
@@ -389,7 +389,7 @@ func TestListUserStats(t *testing.T) {
 	if _, err := recapquota.GetOrCreate(ctx, conn, user2.ID); err != nil {
 		t.Fatalf("GetOrCreate failed: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := recapquota.Increment(ctx, conn, user2.ID); err != nil {
 			t.Fatalf("Increment failed: %v", err)
 		}
@@ -499,7 +499,7 @@ func TestGetTotals(t *testing.T) {
 	if _, err := recapquota.GetOrCreate(ctx, conn, user1.ID); err != nil {
 		t.Fatalf("GetOrCreate failed: %v", err)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if err := recapquota.Increment(ctx, conn, user1.ID); err != nil {
 			t.Fatalf("Increment failed: %v", err)
 		}
@@ -507,7 +507,7 @@ func TestGetTotals(t *testing.T) {
 	if _, err := recapquota.GetOrCreate(ctx, conn, user2.ID); err != nil {
 		t.Fatalf("GetOrCreate failed: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := recapquota.Increment(ctx, conn, user2.ID); err != nil {
 			t.Fatalf("Increment failed: %v", err)
 		}

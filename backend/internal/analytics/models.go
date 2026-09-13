@@ -21,7 +21,7 @@ type AnalyticsResponse struct {
 	Compaction CompactionInfo `json:"compaction"`
 
 	// New cards-based format
-	Cards map[string]interface{} `json:"cards"`
+	Cards map[string]any `json:"cards"`
 
 	// Smart recap quota information (separate from cards since it's user-level, not session-level)
 	SmartRecapQuota *SmartRecapQuotaInfo `json:"smart_recap_quota,omitempty"`

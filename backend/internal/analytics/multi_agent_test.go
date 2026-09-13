@@ -37,62 +37,62 @@ func buildMultiAgentFixture(t *testing.T) *FileCollection {
 	t.Helper()
 
 	mainJsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "Hello, please explore") + "\n" +
-		makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{
+		makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{
 			makeTextBlock("I'll read and explore"),
-			makeToolUseBlock("toolu_read1", "Read", map[string]interface{}{"file_path": "/main.go"}),
-			makeToolUseBlock("toolu_task1", "Task", map[string]interface{}{"prompt": "explore", "subagent_type": "Explore"}),
+			makeToolUseBlock("toolu_read1", "Read", map[string]any{"file_path": "/main.go"}),
+			makeToolUseBlock("toolu_task1", "Task", map[string]any{"prompt": "explore", "subagent_type": "Explore"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_read1", "package main", false),
 		}) + "\n" +
-		makeUserMessageWithToolUseResult("u3", "2025-01-01T00:00:03Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u3", "2025-01-01T00:00:03Z", []map[string]any{
 			makeToolResultBlock("toolu_task1", "Done exploring", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"status":            "completed",
 			"agentId":           "agent1",
 			"totalToolUseCount": float64(10),
-			"usage":             map[string]interface{}{"input_tokens": float64(200), "output_tokens": float64(100)},
+			"usage":             map[string]any{"input_tokens": float64(200), "output_tokens": float64(100)},
 		}) + "\n" +
 		makeUserMessage("u4", "2025-01-01T00:01:00Z", "Now commit") + "\n" +
-		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:01:01Z", "claude-sonnet-4-20241022", 150, 75, []map[string]interface{}{
-			makeToolUseBlock("toolu_skill1", "Skill", map[string]interface{}{"skill": "commit", "args": "-m 'test'"}),
+		makeAssistantMessageWithStopReason("a2", "2025-01-01T00:01:01Z", "claude-sonnet-4-20241022", 150, 75, []map[string]any{
+			makeToolUseBlock("toolu_skill1", "Skill", map[string]any{"skill": "commit", "args": "-m 'test'"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u5", "2025-01-01T00:01:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u5", "2025-01-01T00:01:02Z", []map[string]any{
 			makeToolResultBlock("toolu_skill1", "Committed", false),
 		}) + "\n" +
-		makeAssistantMessage("a3", "2025-01-01T00:01:03Z", "claude-sonnet-4-20241022", 80, 40, []map[string]interface{}{
+		makeAssistantMessage("a3", "2025-01-01T00:01:03Z", "claude-sonnet-4-20241022", 80, 40, []map[string]any{
 			makeTextBlock("Done! Your key is [REDACTED:API_KEY] and done."),
 		}) + "\n"
 
-	agent1Jsonl := makeAssistantMessageWithStopReason("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 150, 75, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1_read", "Read", map[string]interface{}{"file_path": "/agent1.go"}),
+	agent1Jsonl := makeAssistantMessageWithStopReason("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 150, 75, []map[string]any{
+		makeToolUseBlock("toolu_a1_read", "Read", map[string]any{"file_path": "/agent1.go"}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]any{
 			makeToolResultBlock("toolu_a1_read", "package agent1", false),
 		}) + "\n" +
-		makeAssistantMessageWithStopReason("aa2", "2025-01-01T00:00:01.7Z", "claude-haiku-3", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_a1_write", "Write", map[string]interface{}{
+		makeAssistantMessageWithStopReason("aa2", "2025-01-01T00:00:01.7Z", "claude-haiku-3", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_a1_write", "Write", map[string]any{
 				"file_path": "/output.ts",
 				"content":   "line1\nline2\nline3",
 			}),
 		}, "tool_use") + "\n" +
-		makeAssistantMessage("aa3", "2025-01-01T00:00:01.8Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+		makeAssistantMessage("aa3", "2025-01-01T00:00:01.8Z", "claude-haiku-3", 50, 25, []map[string]any{
 			makeTextBlock("Found [REDACTED:PASSWORD] in config"),
 		}) + "\n"
 
-	agent2Jsonl := makeAssistantMessageWithStopReason("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 200, 100, []map[string]interface{}{
-		makeToolUseBlock("toolu_a2_grep", "Grep", map[string]interface{}{}),
-		makeToolUseBlock("toolu_a2_edit", "Edit", map[string]interface{}{
+	agent2Jsonl := makeAssistantMessageWithStopReason("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 200, 100, []map[string]any{
+		makeToolUseBlock("toolu_a2_grep", "Grep", map[string]any{}),
+		makeToolUseBlock("toolu_a2_edit", "Edit", map[string]any{
 			"file_path":  "/shared.go",
 			"old_string": "foo",
 			"new_string": "bar\nbaz",
 		}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("au2", "2025-01-01T00:00:02.6Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("au2", "2025-01-01T00:00:02.6Z", []map[string]any{
 			makeToolResultBlock("toolu_a2_grep", "found 3 matches", false),
 			makeToolResultBlock("toolu_a2_edit", "edit failed", true),
 		}) + "\n" +
-		makeAssistantMessage("ab2", "2025-01-01T00:00:02.7Z", "claude-opus-4", 80, 40, []map[string]interface{}{
+		makeAssistantMessage("ab2", "2025-01-01T00:00:02.7Z", "claude-opus-4", 80, 40, []map[string]any{
 			makeTextBlock("Error with [REDACTED:API_KEY] credential"),
 		}) + "\n"
 
@@ -303,21 +303,21 @@ func TestComputeFromFileCollection_MultiAgent(t *testing.T) {
 
 // TestTokensAnalyzer_MultipleAgents verifies token accumulation across multiple agents.
 func TestTokensAnalyzer_MultipleAgents(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{"subagent_type": "Explore"}),
-		makeToolUseBlock("toolu_2", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{"subagent_type": "Explore"}),
+		makeToolUseBlock("toolu_2", "Task", map[string]any{"subagent_type": "Explore"}),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{"agentId": "agent1", "usage": map[string]interface{}{"input_tokens": float64(999), "output_tokens": float64(999)}}) + "\n" +
-		makeUserMessageWithToolUseResult("u2", "2025-01-01T00:00:03Z", []map[string]interface{}{
+		}, map[string]any{"agentId": "agent1", "usage": map[string]any{"input_tokens": float64(999), "output_tokens": float64(999)}}) + "\n" +
+		makeUserMessageWithToolUseResult("u2", "2025-01-01T00:00:03Z", []map[string]any{
 			makeToolResultBlock("toolu_2", "Done", false),
-		}, map[string]interface{}{"agentId": "agent2", "usage": map[string]interface{}{"input_tokens": float64(888), "output_tokens": float64(888)}}) + "\n"
+		}, map[string]any{"agentId": "agent2", "usage": map[string]any{"input_tokens": float64(888), "output_tokens": float64(888)}}) + "\n"
 
-	agent1Jsonl := makeAssistantMessageFull("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 200, 100, 10, 20, []map[string]interface{}{
+	agent1Jsonl := makeAssistantMessageFull("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 200, 100, 10, 20, []map[string]any{
 		makeTextBlock("Agent 1"),
 	}) + "\n"
-	agent2Jsonl := makeAssistantMessageFull("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 300, 150, 30, 40, []map[string]interface{}{
+	agent2Jsonl := makeAssistantMessageFull("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 300, 150, 30, 40, []map[string]any{
 		makeTextBlock("Agent 2"),
 	}) + "\n"
 
@@ -355,24 +355,24 @@ func TestTokensAnalyzer_MultipleAgents(t *testing.T) {
 // TestTokensAnalyzer_MixedAgentCoverage tests partial agent file coverage:
 // agent1 has a file, agent2 does not (fallback used).
 func TestTokensAnalyzer_MixedAgentCoverage(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Task", map[string]interface{}{"subagent_type": "Explore"}),
-		makeToolUseBlock("toolu_2", "Task", map[string]interface{}{"subagent_type": "Explore"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4-20241022", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Task", map[string]any{"subagent_type": "Explore"}),
+		makeToolUseBlock("toolu_2", "Task", map[string]any{"subagent_type": "Explore"}),
 	}) + "\n" +
-		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u1", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_1", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"agentId": "agent1",
-			"usage":   map[string]interface{}{"input_tokens": float64(999), "output_tokens": float64(999)},
+			"usage":   map[string]any{"input_tokens": float64(999), "output_tokens": float64(999)},
 		}) + "\n" +
-		makeUserMessageWithToolUseResult("u2", "2025-01-01T00:00:03Z", []map[string]interface{}{
+		makeUserMessageWithToolUseResult("u2", "2025-01-01T00:00:03Z", []map[string]any{
 			makeToolResultBlock("toolu_2", "Done", false),
-		}, map[string]interface{}{
+		}, map[string]any{
 			"agentId": "agent2",
-			"usage":   map[string]interface{}{"input_tokens": float64(50), "output_tokens": float64(25)},
+			"usage":   map[string]any{"input_tokens": float64(50), "output_tokens": float64(25)},
 		}) + "\n"
 
-	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 200, 100, []map[string]interface{}{
+	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 200, 100, []map[string]any{
 		makeTextBlock("Agent 1"),
 	}) + "\n"
 
@@ -402,16 +402,16 @@ func TestTokensAnalyzer_MixedAgentCoverage(t *testing.T) {
 
 // TestToolsAnalyzer_MultipleAgents verifies tool counting across multiple agents.
 func TestToolsAnalyzer_MultipleAgents(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/main.go"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/main.go"}),
 	}) + "\n"
 
-	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1", "Read", map[string]interface{}{}),
-		makeToolUseBlock("toolu_a2", "Write", map[string]interface{}{}),
+	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_a1", "Read", map[string]any{}),
+		makeToolUseBlock("toolu_a2", "Write", map[string]any{}),
 	}) + "\n"
-	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_b1", "Grep", map[string]interface{}{}),
+	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_b1", "Grep", map[string]any{}),
 	}) + "\n"
 
 	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{
@@ -444,15 +444,15 @@ func TestToolsAnalyzer_MultipleAgents(t *testing.T) {
 
 // TestToolsAnalyzer_AgentToolErrors verifies tool error counting from agent files.
 func TestToolsAnalyzer_AgentToolErrors(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("ok"),
 	}) + "\n"
 
-	agentJsonl := makeAssistantMessageWithStopReason("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1", "Write", map[string]interface{}{}),
-		makeToolUseBlock("toolu_a2", "Write", map[string]interface{}{}),
+	agentJsonl := makeAssistantMessageWithStopReason("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_a1", "Write", map[string]any{}),
+		makeToolUseBlock("toolu_a2", "Write", map[string]any{}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]any{
 			makeToolResultBlock("toolu_a1", "ok", false),
 			makeToolResultBlock("toolu_a2", "permission denied", true),
 		}) + "\n"
@@ -483,13 +483,13 @@ func TestToolsAnalyzer_AgentToolErrors(t *testing.T) {
 
 // TestRedactionsAnalyzer_WithAgents verifies redaction counting across agents.
 func TestRedactionsAnalyzer_WithAgents(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Key is [REDACTED:API_KEY] and [REDACTED:API_KEY]"),
 	}) + "\n"
-	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("[REDACTED:PASSWORD] found [REDACTED:SECRET_KEY]"),
 	}) + "\n"
-	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]interface{}{
+	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]any{
 		makeTextBlock("No redactions here"),
 	}) + "\n"
 
@@ -522,25 +522,25 @@ func TestRedactionsAnalyzer_WithAgents(t *testing.T) {
 
 // TestCodeActivityAnalyzer_MultipleAgents verifies code activity merging across agents.
 func TestCodeActivityAnalyzer_MultipleAgents(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-		makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/main.go"}),
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+		makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/main.go"}),
 	}) + "\n"
 
-	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_a1", "Read", map[string]interface{}{"file_path": "/main.go"}), // same file
-		makeToolUseBlock("toolu_a2", "Write", map[string]interface{}{
+	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_a1", "Read", map[string]any{"file_path": "/main.go"}), // same file
+		makeToolUseBlock("toolu_a2", "Write", map[string]any{
 			"file_path": "/new.py",
 			"content":   "print('hello')\nprint('world')",
 		}),
 	}) + "\n"
 
-	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_b1", "Edit", map[string]interface{}{
+	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_b1", "Edit", map[string]any{
 			"file_path":  "/main.go",
 			"old_string": "old line",
 			"new_string": "new line 1\nnew line 2",
 		}),
-		makeToolUseBlock("toolu_b2", "Glob", map[string]interface{}{}),
+		makeToolUseBlock("toolu_b2", "Glob", map[string]any{}),
 	}) + "\n"
 
 	fc, err := NewFileCollectionWithAgents([]byte(mainJsonl), map[string][]byte{
@@ -587,17 +587,17 @@ func TestCodeActivityAnalyzer_MultipleAgents(t *testing.T) {
 
 // TestSessionAnalyzer_MultipleAgentModels verifies model collection from multiple agents.
 func TestSessionAnalyzer_MultipleAgentModels(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n"
-	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	agent1Jsonl := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Agent 1"),
 	}) + "\n"
-	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]interface{}{
+	agent2Jsonl := makeAssistantMessage("ab1", "2025-01-01T00:00:02.5Z", "claude-opus-4", 50, 25, []map[string]any{
 		makeTextBlock("Agent 2"),
 	}) + "\n"
 	// agent3 uses same model as main
-	agent3Jsonl := makeAssistantMessage("ac1", "2025-01-01T00:00:03.5Z", "claude-sonnet-4", 50, 25, []map[string]interface{}{
+	agent3Jsonl := makeAssistantMessage("ac1", "2025-01-01T00:00:03.5Z", "claude-sonnet-4", 50, 25, []map[string]any{
 		makeTextBlock("Agent 3"),
 	}) + "\n"
 
@@ -625,7 +625,7 @@ func TestSessionAnalyzer_MultipleAgentModels(t *testing.T) {
 
 // TestEmptyAgentFile verifies an empty agent file is handled gracefully.
 func TestEmptyAgentFile(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n"
 
@@ -654,12 +654,12 @@ func TestEmptyAgentFile(t *testing.T) {
 
 // TestAgentWithInvalidLines verifies an agent with only invalid JSON lines is handled.
 func TestAgentWithInvalidLines(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n"
 
 	invalidAgent := "not valid json\nalso not valid\n"
-	validAgent := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+	validAgent := makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
 		makeTextBlock("Valid agent"),
 	}) + "\n"
 
@@ -689,12 +689,12 @@ func TestAgentWithInvalidLines(t *testing.T) {
 // TestPrepareTranscript_WithAgents verifies that PrepareTranscript includes agent content.
 func TestPrepareTranscript_WithAgents(t *testing.T) {
 	mainJsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "Hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 			makeTextBlock("Main response"),
 		}) + "\n"
 
 	agentJsonl := makeUserMessage("au1", "2025-01-01T00:00:01.5Z", "Agent prompt") + "\n" +
-		makeAssistantMessage("aa1", "2025-01-01T00:00:01.6Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+		makeAssistantMessage("aa1", "2025-01-01T00:00:01.6Z", "claude-haiku-3", 50, 25, []map[string]any{
 			makeTextBlock("Agent response"),
 		}) + "\n"
 
@@ -733,17 +733,17 @@ func TestPrepareTranscript_WithAgents(t *testing.T) {
 // TestPrepareTranscript_ToolNameResolution verifies tool_use ID to name mapping within agent files.
 func TestPrepareTranscript_ToolNameResolution(t *testing.T) {
 	mainJsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "Read a file") + "\n" +
-		makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
-			makeToolUseBlock("toolu_main_1", "Read", map[string]interface{}{"file_path": "/test.txt"}),
+		makeAssistantMessageWithStopReason("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
+			makeToolUseBlock("toolu_main_1", "Read", map[string]any{"file_path": "/test.txt"}),
 		}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:02Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("u2", "2025-01-01T00:00:02Z", []map[string]any{
 			makeToolResultBlock("toolu_main_1", "file contents", false),
 		}) + "\n"
 
-	agentJsonl := makeAssistantMessageWithStopReason("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
-		makeToolUseBlock("toolu_agent_1", "Grep", map[string]interface{}{}),
+	agentJsonl := makeAssistantMessageWithStopReason("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
+		makeToolUseBlock("toolu_agent_1", "Grep", map[string]any{}),
 	}, "tool_use") + "\n" +
-		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]interface{}{
+		makeUserMessageWithToolResults("au1", "2025-01-01T00:00:01.6Z", []map[string]any{
 			makeToolResultBlock("toolu_agent_1", "matches found", false),
 		}) + "\n"
 
@@ -826,7 +826,7 @@ func TestComputeStreaming_MatchesFileCollection(t *testing.T) {
 
 // TestComputeStreaming_ProviderErrors verifies that agent provider errors are skipped gracefully.
 func TestComputeStreaming_ProviderErrors(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n"
 
@@ -836,7 +836,7 @@ func TestComputeStreaming_ProviderErrors(t *testing.T) {
 	}
 
 	validAgent, err := parseTranscriptFile([]byte(
-		makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+		makeAssistantMessage("aa1", "2025-01-01T00:00:01.5Z", "claude-haiku-3", 50, 25, []map[string]any{
 			makeTextBlock("Agent"),
 		})+"\n",
 	), "agent1")
@@ -874,7 +874,7 @@ func TestComputeStreaming_ProviderErrors(t *testing.T) {
 
 // TestComputeStreaming_NoAgents verifies streaming works with zero agents.
 func TestComputeStreaming_NoAgents(t *testing.T) {
-	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+	mainJsonl := makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 		makeTextBlock("Hello"),
 	}) + "\n"
 
@@ -903,12 +903,12 @@ func TestComputeStreaming_NoAgents(t *testing.T) {
 // TestExtractUserMessagesText_WithAgents verifies user messages from agents are included.
 func TestExtractUserMessagesText_WithAgents(t *testing.T) {
 	mainJsonl := makeUserMessage("u1", "2025-01-01T00:00:00Z", "Main user message") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]interface{}{
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 100, 50, []map[string]any{
 			makeTextBlock("Response"),
 		}) + "\n"
 
 	agentJsonl := makeUserMessage("au1", "2025-01-01T00:00:01.5Z", "Agent user message") + "\n" +
-		makeAssistantMessage("aa1", "2025-01-01T00:00:01.6Z", "claude-haiku-3", 50, 25, []map[string]interface{}{
+		makeAssistantMessage("aa1", "2025-01-01T00:00:01.6Z", "claude-haiku-3", 50, 25, []map[string]any{
 			makeTextBlock("Agent response"),
 		}) + "\n"
 

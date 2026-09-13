@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-func boolPtr(b bool) *bool { return &b }
-
 func strictRequest() *ResponsesRequest {
 	return &ResponsesRequest{
 		Model:           "gpt-5.6-luna",
@@ -20,7 +18,7 @@ func strictRequest() *ResponsesRequest {
 		Input:           "Summarize this transcript",
 		MaxOutputTokens: 1000,
 		Reasoning:       &Reasoning{Effort: "none"},
-		Store:           boolPtr(false),
+		Store:           new(false),
 		Text: &TextConfig{Format: TextFormat{
 			Type:   "json_schema",
 			Name:   "smart_recap",

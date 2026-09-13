@@ -44,7 +44,7 @@ var skillsInstructionsBlockPattern = regexp.MustCompile(`(?s)<skills_instruction
 
 // skillCatalogEntryPattern matches one bullet from the Available skills list:
 //
-//	- <name>: <description> (file: <path>)
+//   - <name>: <description> (file: <path>)
 var skillCatalogEntryPattern = regexp.MustCompile(`^-\s+(\S+?):\s+(.+?)\s+\(file:\s+(.+?)\)\s*$`)
 
 // maxCompletionTextLen caps SubagentSpawn.CompletionText to keep ParsedRollout
@@ -79,7 +79,7 @@ type payloadType struct {
 // See package documentation for the parsing contract.
 func ParseRollout(r io.Reader) (*ParsedRollout, error) {
 	rollout := &ParsedRollout{
-		GitInfo: map[string]interface{}{},
+		GitInfo: map[string]any{},
 	}
 	p := &parser{out: rollout}
 
@@ -167,17 +167,17 @@ func (p *parser) dispatch(typ string, ts time.Time, payload json.RawMessage, lin
 // ----------------------------------------------------------------------------
 
 type sessionMetaPayload struct {
-	Model         string                 `json:"model"`
-	ModelProvider string                 `json:"model_provider"`
-	CWD           string                 `json:"cwd"`
-	Git           map[string]interface{} `json:"git"`
-	CLIVersion    string                 `json:"cli_version"`
-	Source        json.RawMessage        `json:"source"`
-	ThreadSource  string                 `json:"thread_source"`
-	AgentNickname string                 `json:"agent_nickname"`
-	AgentRole     string                 `json:"agent_role"`
-	AgentType     string                 `json:"agent_type"` // legacy alias for agent_role
-	AgentPath     string                 `json:"agent_path"`
+	Model         string          `json:"model"`
+	ModelProvider string          `json:"model_provider"`
+	CWD           string          `json:"cwd"`
+	Git           map[string]any  `json:"git"`
+	CLIVersion    string          `json:"cli_version"`
+	Source        json.RawMessage `json:"source"`
+	ThreadSource  string          `json:"thread_source"`
+	AgentNickname string          `json:"agent_nickname"`
+	AgentRole     string          `json:"agent_role"`
+	AgentType     string          `json:"agent_type"` // legacy alias for agent_role
+	AgentPath     string          `json:"agent_path"`
 }
 
 // subAgentSourceWrapper decodes the {"sub_agent":{...}} variant. The inner
@@ -324,8 +324,8 @@ type customToolCallOutputPayload struct {
 }
 
 type webSearchCallPayload struct {
-	Status string                 `json:"status"`
-	Action map[string]interface{} `json:"action"`
+	Status string         `json:"status"`
+	Action map[string]any `json:"action"`
 }
 
 func (p *parser) handleResponseItem(ts time.Time, raw json.RawMessage, lineNum int) {
@@ -507,7 +507,7 @@ func extractSkillsCatalog(text string) []SkillAvailable {
 	}
 	var inAvailable bool
 	var out []SkillAvailable
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "### Available skills") {
 			inAvailable = true

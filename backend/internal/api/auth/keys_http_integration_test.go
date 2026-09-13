@@ -125,7 +125,7 @@ func TestCreateAPIKey_HTTP_Integration(t *testing.T) {
 		sessionToken := testutil.CreateTestWebSessionWithToken(t, env, user.ID)
 
 		// Fill the user up to the maximum number of API keys.
-		for i := 0; i < db.MaxAPIKeysPerUser; i++ {
+		for i := range db.MaxAPIKeysPerUser {
 			testutil.CreateTestAPIKey(t, env, user.ID, "hash"+strconv.Itoa(i), "Key "+strconv.Itoa(i))
 		}
 

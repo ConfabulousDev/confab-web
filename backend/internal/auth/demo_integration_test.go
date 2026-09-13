@@ -100,7 +100,7 @@ func TestBootstrapDemoIdentity_IdempotentReRun(t *testing.T) {
 	ctx := context.Background()
 	email := "demo@confabulous.dev"
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := auth.BootstrapDemoIdentity(ctx, env.DB, email, demoCSRFSecret); err != nil {
 			t.Fatalf("BootstrapDemoIdentity iteration %d: %v", i, err)
 		}

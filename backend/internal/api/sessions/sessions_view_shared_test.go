@@ -405,14 +405,14 @@ func TestListSessionsWithFilters_API(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "apifilter@test.com", "API Filter User")
 
 	// Create sessions with different repos
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("api-fe-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/frontend.git",
 			Branch:  "main",
 			Summary: "Frontend work",
 		})
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("api-be-%d", i), testutil.TestSessionFullOpts{
 			RepoURL: "https://github.com/org/backend.git",
 			Branch:  "main",
@@ -499,7 +499,7 @@ func TestListSessionsWithCursor_API(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "cursor@test.com", "Cursor User")
 
 	// Create 3 sessions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		testutil.CreateTestSessionFull(t, env, user.ID, fmt.Sprintf("cursor-%d", i), testutil.TestSessionFullOpts{
 			Summary: "Session content",
 		})

@@ -402,7 +402,7 @@ func TestFindStaleSessions_RespectsLimit(t *testing.T) {
 
 	// Create multiple stale sessions
 	user := testutil.CreateTestUser(t, env, "limit@test.com", "Limit User")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		sessionID := testutil.CreateTestSession(t, env, user.ID, "limit-external-id-"+string(rune('a'+i)))
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 100)
 	}
@@ -2922,7 +2922,7 @@ func TestFindStaleSmartRecapSessions_QuotaExceeded_Excluded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create quota: %v", err)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if err := recapquota.Increment(context.Background(), env.DB.Conn(), user.ID); err != nil {
 			t.Fatalf("failed to increment quota: %v", err)
 		}
@@ -2969,7 +2969,7 @@ func TestFindStaleSmartRecapSessions_QuotaUnderLimit_Included(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create quota: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := recapquota.Increment(context.Background(), env.DB.Conn(), user.ID); err != nil {
 			t.Fatalf("failed to increment quota: %v", err)
 		}
@@ -3019,7 +3019,7 @@ func TestFindStaleSmartRecapSessions_QuotaDisabled_Included(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create quota: %v", err)
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if err := recapquota.Increment(context.Background(), env.DB.Conn(), user.ID); err != nil {
 			t.Fatalf("failed to increment quota: %v", err)
 		}

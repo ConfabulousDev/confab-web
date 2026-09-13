@@ -168,7 +168,7 @@ func TestSmartRecapCardRecord_CanAcquireLock(t *testing.T) {
 		{
 			name: "fresh lock cannot acquire",
 			card: &SmartRecapCardRecord{
-				ComputingStartedAt: timePtr(time.Now().Add(-10 * time.Second)), // started 10 seconds ago
+				ComputingStartedAt: new(time.Now().Add(-10 * time.Second)), // started 10 seconds ago
 			},
 			lockTimeoutSeconds: 60,
 			want:               false,
@@ -176,7 +176,7 @@ func TestSmartRecapCardRecord_CanAcquireLock(t *testing.T) {
 		{
 			name: "stale lock can acquire",
 			card: &SmartRecapCardRecord{
-				ComputingStartedAt: timePtr(time.Now().Add(-120 * time.Second)), // started 2 minutes ago
+				ComputingStartedAt: new(time.Now().Add(-120 * time.Second)), // started 2 minutes ago
 			},
 			lockTimeoutSeconds: 60,
 			want:               true,
@@ -191,10 +191,6 @@ func TestSmartRecapCardRecord_CanAcquireLock(t *testing.T) {
 			}
 		})
 	}
-}
-
-func timePtr(t time.Time) *time.Time {
-	return &t
 }
 
 func TestRegularCardRecord_IsValid(t *testing.T) {

@@ -3,8 +3,8 @@ package analytics
 import "encoding/json"
 
 // makeBaseFields returns the common fields needed for all message types.
-func makeBaseFields(uuid, timestamp string) map[string]interface{} {
-	return map[string]interface{}{
+func makeBaseFields(uuid, timestamp string) map[string]any {
+	return map[string]any{
 		"uuid":        uuid,
 		"timestamp":   timestamp,
 		"parentUuid":  nil,
@@ -20,7 +20,7 @@ func makeBaseFields(uuid, timestamp string) map[string]interface{} {
 func makeUserMessage(uuid, timestamp, content string) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "user"
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"role":    "user",
 		"content": content,
 	}
@@ -29,10 +29,10 @@ func makeUserMessage(uuid, timestamp, content string) string {
 }
 
 // makeUserMessageWithToolResults creates a valid user message with tool results.
-func makeUserMessageWithToolResults(uuid, timestamp string, toolResults []map[string]interface{}) string {
+func makeUserMessageWithToolResults(uuid, timestamp string, toolResults []map[string]any) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "user"
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"role":    "user",
 		"content": toolResults,
 	}
@@ -41,10 +41,10 @@ func makeUserMessageWithToolResults(uuid, timestamp string, toolResults []map[st
 }
 
 // makeAssistantMessage creates a valid assistant message JSON.
-func makeAssistantMessage(uuid, timestamp, model string, inputTokens, outputTokens int64, content []map[string]interface{}) string {
+func makeAssistantMessage(uuid, timestamp, model string, inputTokens, outputTokens int64, content []map[string]any) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "assistant"
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"model":         model,
 		"id":            "msg-" + uuid,
 		"type":          "message",
@@ -52,7 +52,7 @@ func makeAssistantMessage(uuid, timestamp, model string, inputTokens, outputToke
 		"content":       content,
 		"stop_reason":   "end_turn",
 		"stop_sequence": nil,
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"input_tokens":  float64(inputTokens),
 			"output_tokens": float64(outputTokens),
 		},
@@ -62,10 +62,10 @@ func makeAssistantMessage(uuid, timestamp, model string, inputTokens, outputToke
 }
 
 // makeAssistantMessageFull creates a valid assistant message with all token fields.
-func makeAssistantMessageFull(uuid, timestamp, model string, inputTokens, outputTokens, cacheCreation, cacheRead int64, content []map[string]interface{}) string {
+func makeAssistantMessageFull(uuid, timestamp, model string, inputTokens, outputTokens, cacheCreation, cacheRead int64, content []map[string]any) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "assistant"
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"model":         model,
 		"id":            "msg-" + uuid,
 		"type":          "message",
@@ -73,11 +73,11 @@ func makeAssistantMessageFull(uuid, timestamp, model string, inputTokens, output
 		"content":       content,
 		"stop_reason":   "end_turn",
 		"stop_sequence": nil,
-		"usage": map[string]interface{}{
-			"input_tokens":                 float64(inputTokens),
-			"output_tokens":                float64(outputTokens),
-			"cache_creation_input_tokens":  float64(cacheCreation),
-			"cache_read_input_tokens":      float64(cacheRead),
+		"usage": map[string]any{
+			"input_tokens":                float64(inputTokens),
+			"output_tokens":               float64(outputTokens),
+			"cache_creation_input_tokens": float64(cacheCreation),
+			"cache_read_input_tokens":     float64(cacheRead),
 		},
 	}
 	b, _ := json.Marshal(m)
@@ -90,7 +90,7 @@ func makeCompactBoundaryMessage(uuid, timestamp, trigger string, preTokens int64
 	m["type"] = "system"
 	m["subtype"] = "compact_boundary"
 	m["isMeta"] = true
-	m["compactMetadata"] = map[string]interface{}{
+	m["compactMetadata"] = map[string]any{
 		"trigger":   trigger,
 		"preTokens": float64(preTokens),
 	}
@@ -105,7 +105,7 @@ func makeCompactBoundaryMessageWithParent(uuid, timestamp, trigger string, preTo
 	m["subtype"] = "compact_boundary"
 	m["isMeta"] = true
 	m["logicalParentUuid"] = logicalParentUuid
-	m["compactMetadata"] = map[string]interface{}{
+	m["compactMetadata"] = map[string]any{
 		"trigger":   trigger,
 		"preTokens": float64(preTokens),
 	}
@@ -114,24 +114,24 @@ func makeCompactBoundaryMessageWithParent(uuid, timestamp, trigger string, preTo
 }
 
 // makeTextBlock creates a text content block.
-func makeTextBlock(text string) map[string]interface{} {
-	return map[string]interface{}{
+func makeTextBlock(text string) map[string]any {
+	return map[string]any{
 		"type": "text",
 		"text": text,
 	}
 }
 
 // makeThinkingBlock creates a thinking content block.
-func makeThinkingBlock(thinking string) map[string]interface{} {
-	return map[string]interface{}{
+func makeThinkingBlock(thinking string) map[string]any {
+	return map[string]any{
 		"type":     "thinking",
 		"thinking": thinking,
 	}
 }
 
 // makeToolUseBlock creates a tool_use content block.
-func makeToolUseBlock(id, name string, input map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{
+func makeToolUseBlock(id, name string, input map[string]any) map[string]any {
+	return map[string]any{
 		"type":  "tool_use",
 		"id":    id,
 		"name":  name,
@@ -140,8 +140,8 @@ func makeToolUseBlock(id, name string, input map[string]interface{}) map[string]
 }
 
 // makeToolResultBlock creates a tool_result content block.
-func makeToolResultBlock(toolUseID, content string, isError bool) map[string]interface{} {
-	return map[string]interface{}{
+func makeToolResultBlock(toolUseID, content string, isError bool) map[string]any {
+	return map[string]any{
 		"type":        "tool_result",
 		"tool_use_id": toolUseID,
 		"content":     content,
@@ -151,10 +151,10 @@ func makeToolResultBlock(toolUseID, content string, isError bool) map[string]int
 
 // makeUserMessageWithToolUseResult creates a user message with tool results and a top-level toolUseResult.
 // Used for agent task results.
-func makeUserMessageWithToolUseResult(uuid, timestamp string, toolResults []map[string]interface{}, toolUseResult map[string]interface{}) string {
+func makeUserMessageWithToolUseResult(uuid, timestamp string, toolResults []map[string]any, toolUseResult map[string]any) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "user"
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"role":    "user",
 		"content": toolResults,
 	}
@@ -165,22 +165,22 @@ func makeUserMessageWithToolUseResult(uuid, timestamp string, toolResults []map[
 
 // makeAssistantMessageWithMsgID creates an assistant message with a specific API message ID.
 // Used to test deduplication of multi-line-per-response and context replay.
-func makeAssistantMessageWithMsgID(uuid, timestamp, model, msgID string, inputTokens, outputTokens int64, content []map[string]interface{}) string {
+func makeAssistantMessageWithMsgID(uuid, timestamp, model, msgID string, inputTokens, outputTokens int64, content []map[string]any) string {
 	return makeAssistantMessageWithMsgIDAndSpeed(uuid, timestamp, model, msgID, inputTokens, outputTokens, content, "")
 }
 
 // makeAssistantMessageWithMsgIDAndSpeed creates an assistant message with a specific API message ID and speed setting.
-func makeAssistantMessageWithMsgIDAndSpeed(uuid, timestamp, model, msgID string, inputTokens, outputTokens int64, content []map[string]interface{}, speed string) string {
+func makeAssistantMessageWithMsgIDAndSpeed(uuid, timestamp, model, msgID string, inputTokens, outputTokens int64, content []map[string]any, speed string) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "assistant"
-	usage := map[string]interface{}{
+	usage := map[string]any{
 		"input_tokens":  float64(inputTokens),
 		"output_tokens": float64(outputTokens),
 	}
 	if speed != "" {
 		usage["speed"] = speed
 	}
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"model":         model,
 		"id":            msgID,
 		"type":          "message",
@@ -195,10 +195,10 @@ func makeAssistantMessageWithMsgIDAndSpeed(uuid, timestamp, model, msgID string,
 }
 
 // makeAssistantMessageWithStopReason creates an assistant message with stop_reason and stop_sequence.
-func makeAssistantMessageWithStopReason(uuid, timestamp, model string, inputTokens, outputTokens int64, content []map[string]interface{}, stopReason string) string {
+func makeAssistantMessageWithStopReason(uuid, timestamp, model string, inputTokens, outputTokens int64, content []map[string]any, stopReason string) string {
 	m := makeBaseFields(uuid, timestamp)
 	m["type"] = "assistant"
-	m["message"] = map[string]interface{}{
+	m["message"] = map[string]any{
 		"model":         model,
 		"id":            "msg-" + uuid,
 		"type":          "message",
@@ -206,7 +206,7 @@ func makeAssistantMessageWithStopReason(uuid, timestamp, model string, inputToke
 		"content":       content,
 		"stop_reason":   stopReason,
 		"stop_sequence": nil,
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"input_tokens":  float64(inputTokens),
 			"output_tokens": float64(outputTokens),
 		},

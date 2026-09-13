@@ -397,4 +397,3 @@ const htmlTemplate = `<!DOCTYPE html>
     </table>
 </body>
 </html>`
-

@@ -205,7 +205,6 @@ func TestHandleCreateShareDisabled(t *testing.T) {
 	})
 }
 
-
 // fakeEmailRecorder is an email.Service that records every send so tests can
 // assert whether any email left the building. The upfront batch check must
 // reject an over-quota batch BEFORE the recipient loop, so no send is recorded.
@@ -253,7 +252,7 @@ func TestHandleCreateShare_DailyQuotaExceeded(t *testing.T) {
 	handler := HandleCreateShare(env.DB, "https://app.example.com", nil, true, 2)
 	accessStore := &dbaccess.Store{DB: env.DB}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rr := postShare(t, handler, owner.ID, sessionID, `{"is_public":true}`)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("share %d: expected 200, got %d (%s)", i+1, rr.Code, rr.Body.String())

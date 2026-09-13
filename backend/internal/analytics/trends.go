@@ -54,7 +54,7 @@ func resolveProviderFilter(providers []string) []string {
 // the data the user actually sees).
 type trendsQuery struct {
 	cteSQL string
-	args   []interface{}
+	args   []any
 }
 
 // buildTrendsQuery builds the shared CTE prelude. When modelFilterActive is
@@ -63,7 +63,7 @@ type trendsQuery struct {
 // time — see sessionsMatchingModels). An active-but-empty set yields zero rows
 // (correct: a model filter matching nothing must not fall back to "no filter").
 func buildTrendsQuery(userID int64, req TrendsRequest, modelSessionIDs []string, modelFilterActive bool) trendsQuery {
-	args := []interface{}{
+	args := []any{
 		userID,              // $1
 		req.StartTS,         // $2
 		req.EndTS,           // $3
@@ -160,13 +160,11 @@ func (s *Store) GetTrends(ctx context.Context, userID int64, req TrendsRequest) 
 	errChan := make(chan error, 9)
 
 	runAgg := func(_ string, fn func() error) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := fn(); err != nil {
 				errChan <- err
 			}
-		}()
+		})
 	}
 
 	runAgg("overview_activity", func() error {

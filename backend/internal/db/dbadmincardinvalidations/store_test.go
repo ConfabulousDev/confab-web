@@ -18,7 +18,7 @@ import (
 func seedSessionsAndCards(t *testing.T, env *testutil.TestEnvironment, userID int64, n int, lastMsg time.Time, withTokens, withRecap bool) []string {
 	t.Helper()
 	ids := make([]string, 0, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		sid := uuid.NewString()
 		_, err := env.DB.Exec(env.Ctx, `
 			INSERT INTO sessions (id, user_id, external_id, first_seen, last_message_at)

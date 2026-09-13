@@ -7,24 +7,24 @@ import (
 
 // fullGitInfo is a representative unmarshaled git_info blob carrying every
 // known producer key, including credential- and host-bearing ones.
-func fullGitInfo() map[string]interface{} {
-	return map[string]interface{}{
+func fullGitInfo() map[string]any {
+	return map[string]any{
 		"repo_url":       "https://alice:ghp_secrettoken@github.com/acme/widget.git",
 		"branch":         "feature/login",
 		"commit_sha":     "deadbeefcafebabe",
 		"commit_message": "fix: secret internal detail",
 		"author":         "Alice Owner <alice@example.com>",
 		"is_dirty":       true,
-		"remotes": []interface{}{
-			map[string]interface{}{"name": "origin", "fetch_url": "https://alice:ghp_secrettoken@github.com/acme/widget.git", "push_url": "git@github.com:acme/widget.git"},
-			map[string]interface{}{"name": "upstream", "fetch_url": "https://internal.example.com/acme/widget.git"},
+		"remotes": []any{
+			map[string]any{"name": "origin", "fetch_url": "https://alice:ghp_secrettoken@github.com/acme/widget.git", "push_url": "git@github.com:acme/widget.git"},
+			map[string]any{"name": "upstream", "fetch_url": "https://internal.example.com/acme/widget.git"},
 		},
 		"tracking_remote": "upstream",
 	}
 }
 
 func TestSanitizeGitInfoForSharing_KeepsBranchAndDisplayName(t *testing.T) {
-	out, ok := SanitizeGitInfoForSharing(fullGitInfo()).(map[string]interface{})
+	out, ok := SanitizeGitInfoForSharing(fullGitInfo()).(map[string]any)
 	if !ok {
 		t.Fatalf("expected map[string]interface{}, got %T", SanitizeGitInfoForSharing(fullGitInfo()))
 	}
@@ -39,7 +39,7 @@ func TestSanitizeGitInfoForSharing_KeepsBranchAndDisplayName(t *testing.T) {
 }
 
 func TestSanitizeGitInfoForSharing_DropsCredentialAndUrlBearingKeys(t *testing.T) {
-	out, ok := SanitizeGitInfoForSharing(fullGitInfo()).(map[string]interface{})
+	out, ok := SanitizeGitInfoForSharing(fullGitInfo()).(map[string]any)
 	if !ok {
 		t.Fatalf("expected map, got %T", SanitizeGitInfoForSharing(fullGitInfo()))
 	}
@@ -75,7 +75,7 @@ func TestSanitizeGitInfoForSharing_RepoDisplayFromVariousURLForms(t *testing.T) 
 		"https://github.com/acme/widget/":               "acme/widget",
 	}
 	for in, want := range cases {
-		out, _ := SanitizeGitInfoForSharing(map[string]interface{}{"repo_url": in}).(map[string]interface{})
+		out, _ := SanitizeGitInfoForSharing(map[string]any{"repo_url": in}).(map[string]any)
 		if out["repo_url"] != want {
 			t.Errorf("repo_url %q: expected display %q, got %v", in, want, out["repo_url"])
 		}
@@ -92,8 +92,8 @@ func TestSanitizeGitInfoForSharing_SingleSegmentCredentialURLDropped(t *testing.
 		"https://git.example.com/repo",
 		"git@git.example.com:repo.git",
 	} {
-		got := SanitizeGitInfoForSharing(map[string]interface{}{"repo_url": url})
-		out, _ := got.(map[string]interface{})
+		got := SanitizeGitInfoForSharing(map[string]any{"repo_url": url})
+		out, _ := got.(map[string]any)
 		if v, present := out["repo_url"]; present {
 			t.Errorf("repo_url %q: expected dropped (no clean owner/repo), got display %q", url, v)
 		}
@@ -109,7 +109,7 @@ func TestSanitizeGitInfoForSharing_NilAndNonMapAreSafe(t *testing.T) {
 		t.Errorf("expected nil for non-map input, got %v", got)
 	}
 	// A map with only unknown/unsafe keys yields nil (nothing to keep).
-	if got := SanitizeGitInfoForSharing(map[string]interface{}{"author": "Alice", "tracking_remote": "upstream"}); got != nil {
+	if got := SanitizeGitInfoForSharing(map[string]any{"author": "Alice", "tracking_remote": "upstream"}); got != nil {
 		t.Errorf("expected nil when no whitelisted keys present, got %v", got)
 	}
 }

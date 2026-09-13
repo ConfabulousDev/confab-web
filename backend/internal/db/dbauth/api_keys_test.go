@@ -466,7 +466,7 @@ func TestReplaceAPIKey_RespectsLimitForNewKeys(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "limit@test.com", "Limit User")
 
 	// Create keys up to the limit (using CreateAPIKeyWithReturn to bypass replace)
-	for i := 0; i < db.MaxAPIKeysPerUser; i++ {
+	for i := range db.MaxAPIKeysPerUser {
 		_, keyHash, _ := auth.GenerateAPIKey()
 		_, _, err := store.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, "Key "+string(rune('A'+i%26))+string(rune('0'+i/26)))
 		if err != nil {
@@ -498,7 +498,7 @@ func TestReplaceAPIKey_AllowsReplaceAtLimit(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "limit@test.com", "Limit User")
 
 	// Create keys up to the limit
-	for i := 0; i < db.MaxAPIKeysPerUser; i++ {
+	for i := range db.MaxAPIKeysPerUser {
 		_, keyHash, _ := auth.GenerateAPIKey()
 		_, _, err := store.CreateAPIKeyWithReturn(context.Background(), user.ID, keyHash, "Key "+string(rune('A'+i%26))+string(rune('0'+i/26)))
 		if err != nil {

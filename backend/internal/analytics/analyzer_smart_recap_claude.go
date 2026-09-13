@@ -247,14 +247,14 @@ func getAssistantTextContent(line *TranscriptLine) string {
 	}
 
 	// Array content - extract text blocks
-	contentArray, ok := line.Message.Content.([]interface{})
+	contentArray, ok := line.Message.Content.([]any)
 	if !ok {
 		return ""
 	}
 
 	var texts []string
 	for _, item := range contentArray {
-		blockMap, ok := item.(map[string]interface{})
+		blockMap, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -274,14 +274,14 @@ func getAssistantThinkingContent(line *TranscriptLine) string {
 		return ""
 	}
 
-	contentArray, ok := line.Message.Content.([]interface{})
+	contentArray, ok := line.Message.Content.([]any)
 	if !ok {
 		return ""
 	}
 
 	var thoughts []string
 	for _, item := range contentArray {
-		blockMap, ok := item.(map[string]interface{})
+		blockMap, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -306,14 +306,14 @@ func getToolResultBlocks(line *TranscriptLine, toolNameMap map[string]string) []
 		return nil
 	}
 
-	contentArray, ok := line.Message.Content.([]interface{})
+	contentArray, ok := line.Message.Content.([]any)
 	if !ok {
 		return nil
 	}
 
 	var blocks []toolResultBlock
 	for _, item := range contentArray {
-		blockMap, ok := item.(map[string]interface{})
+		blockMap, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}

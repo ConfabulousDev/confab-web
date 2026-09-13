@@ -148,7 +148,7 @@ func (s *Store) UpdateSyncFileState(ctx context.Context, sessionID, fileName, fi
 	}
 
 	sessionQuery := `UPDATE sessions SET last_sync_at = NOW()`
-	args := []interface{}{sessionID}
+	args := []any{sessionID}
 	argIdx := 2
 
 	if lastMessageAt != nil {

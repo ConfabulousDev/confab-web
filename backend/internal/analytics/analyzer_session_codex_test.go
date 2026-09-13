@@ -26,7 +26,7 @@ func TestComputeCodexSession_HumanPromptsExcludesToolOutputs(t *testing.T) {
 		Model: "gpt-5-codex",
 		Turns: []codex.Turn{{
 			TurnID:    "t1",
-			StartedAt: ptrTime(base),
+			StartedAt: new(base),
 			Model:     "gpt-5-codex",
 			UserMessages: []codex.Message{
 				{Role: "user", Text: "first prompt", Timestamp: base},
@@ -78,5 +78,3 @@ func TestComputeCodexSession_ThinkingBlocksMirrorsReasoningCount(t *testing.T) {
 		t.Errorf("ThinkingBlocks = %d, want 5 (sum of per-turn ReasoningCount)", out.ThinkingBlocks)
 	}
 }
-
-func ptrTime(t time.Time) *time.Time { return &t }

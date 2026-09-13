@@ -1,9 +1,9 @@
 package org_test
 
 import (
-	"github.com/ConfabulousDev/confab-web/internal/api"
 	"encoding/json"
 	"fmt"
+	"github.com/ConfabulousDev/confab-web/internal/api"
 	"io"
 	"net/http"
 	"net/url"

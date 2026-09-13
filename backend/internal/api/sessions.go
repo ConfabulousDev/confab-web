@@ -38,7 +38,7 @@ func extractSessionTitle(content []byte) string {
 			continue
 		}
 
-		var entry map[string]interface{}
+		var entry map[string]any
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}

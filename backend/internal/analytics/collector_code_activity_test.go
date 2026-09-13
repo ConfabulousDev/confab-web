@@ -116,7 +116,7 @@ func TestCountLines(t *testing.T) {
 // TestCodeActivityCollector_EmptySession tests behavior with no tool calls.
 func TestCodeActivityCollector_EmptySession(t *testing.T) {
 	content := []byte(makeUserMessage("u1", "2025-01-01T00:00:00Z", "hello") + "\n" +
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{makeTextBlock("hi")}))
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{makeTextBlock("hi")}))
 
 	result, err := ComputeFromJSONL(context.Background(), content)
 	if err != nil {
@@ -147,17 +147,17 @@ func TestCodeActivityCollector_EmptySession(t *testing.T) {
 func TestCodeActivityCollector_Deduplication(t *testing.T) {
 	// Two Read calls to the same file should count as 1 unique file
 	content := []byte(
-		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-			makeToolUseBlock("toolu_1", "Read", map[string]interface{}{"file_path": "/foo/bar.go"}),
+		makeAssistantMessage("a1", "2025-01-01T00:00:01Z", "claude-sonnet-4", 10, 5, []map[string]any{
+			makeToolUseBlock("toolu_1", "Read", map[string]any{"file_path": "/foo/bar.go"}),
 		}) + "\n" +
-			makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-				makeToolUseBlock("toolu_2", "Read", map[string]interface{}{"file_path": "/foo/bar.go"}),
+			makeAssistantMessage("a2", "2025-01-01T00:00:02Z", "claude-sonnet-4", 10, 5, []map[string]any{
+				makeToolUseBlock("toolu_2", "Read", map[string]any{"file_path": "/foo/bar.go"}),
 			}) + "\n" +
-			makeAssistantMessage("a3", "2025-01-01T00:00:03Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-				makeToolUseBlock("toolu_3", "Edit", map[string]interface{}{"file_path": "/foo/bar.go", "old_string": "a", "new_string": "b"}),
+			makeAssistantMessage("a3", "2025-01-01T00:00:03Z", "claude-sonnet-4", 10, 5, []map[string]any{
+				makeToolUseBlock("toolu_3", "Edit", map[string]any{"file_path": "/foo/bar.go", "old_string": "a", "new_string": "b"}),
 			}) + "\n" +
-			makeAssistantMessage("a4", "2025-01-01T00:00:04Z", "claude-sonnet-4", 10, 5, []map[string]interface{}{
-				makeToolUseBlock("toolu_4", "Edit", map[string]interface{}{"file_path": "/foo/bar.go", "old_string": "c", "new_string": "d"}),
+			makeAssistantMessage("a4", "2025-01-01T00:00:04Z", "claude-sonnet-4", 10, 5, []map[string]any{
+				makeToolUseBlock("toolu_4", "Edit", map[string]any{"file_path": "/foo/bar.go", "old_string": "c", "new_string": "d"}),
 			}))
 
 	result, err := ComputeFromJSONL(context.Background(), content)

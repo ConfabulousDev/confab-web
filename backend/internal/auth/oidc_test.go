@@ -197,7 +197,7 @@ func TestDiscoverOIDC(t *testing.T) {
 func TestOIDCUser_IsEmailVerified(t *testing.T) {
 	tests := []struct {
 		name     string
-		value    interface{}
+		value    any
 		expected bool
 	}{
 		{"bool true", true, true},
