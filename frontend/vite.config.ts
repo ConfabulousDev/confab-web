@@ -22,6 +22,14 @@ export default defineConfig({
         manualChunks: {
           // Keep recharts in its own chunk to avoid circular dependency warnings
           recharts: ['recharts'],
+          // Split eagerly-loaded vendor libraries out of the entry chunk (pfnq), one chunk
+          // per library so a dependency bump only invalidates that library's cache entry.
+          // Subpath entries must be listed explicitly; 'react-dom' alone does not pull in
+          // the client renderer imported via 'react-dom/client'.
+          react: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'scheduler'],
+          'react-router': ['react-router', 'react-router-dom'],
+          zod: ['zod'],
+          tanstack: ['@tanstack/react-query', '@tanstack/query-core'],
         },
       },
     },
