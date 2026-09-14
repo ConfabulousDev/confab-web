@@ -67,7 +67,6 @@ func TestSessionDetail_InterfaceFieldsAreClassified(t *testing.T) {
 
 	typ := reflect.TypeFor[SessionDetail]()
 	for field := range typ.Fields() {
-		field := field
 		if field.Type.Kind() != reflect.Interface {
 			continue
 		}

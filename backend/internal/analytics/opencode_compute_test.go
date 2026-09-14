@@ -39,7 +39,7 @@ func opencodeMinimalRollout() [][]*OpenCodeMessage {
 						Input: 10000, Output: 5000, Reasoning: 2000,
 						Cache: OpenCodeCache{Read: 3000, Write: 2000},
 					},
-					Time: OpenCodeTime{Created: 1717689600000, Completed: ptrInt64(1717689605000)},
+					Time: OpenCodeTime{Created: 1717689600000, Completed: new(int64(1717689605000))},
 				},
 				Parts: []OpenCodePart{
 					{ID: "prt_01JX0000000000000000000002", Type: "step-start", Snapshot: "abc123"},

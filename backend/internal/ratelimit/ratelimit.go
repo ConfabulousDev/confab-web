@@ -136,10 +136,7 @@ func (l *InMemoryRateLimiter) evictOldest() {
 		return
 	}
 
-	batch := max(l.maxBuckets/100, 1)
-	if batch > len(entries) {
-		batch = len(entries)
-	}
+	batch := min(max(l.maxBuckets/100, 1), len(entries))
 
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].when.Before(entries[j].when)

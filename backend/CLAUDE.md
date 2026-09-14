@@ -27,6 +27,10 @@ Sharded (parallel package-at-a-time, what CI runs):
 
 Integration tests use `testutil.SetupTestEnvironment(t)` for a containerized Postgres + MinIO.
 
+## Formatting
+
+CI runs `make fmt-check` (gofmt + `go fix -diff`) in the `backend-unit` job. Run `make fmt` before pushing. When bumping the Go version (`go.mod` + `ci.yml` together), also run `make fmt`: new toolchains add modernizers that the gate will flag.
+
 ## Code intelligence (Go LSP)
 
 If the Go LSP is available, use it when it helps — go-to-definition, find-references, and hover types beat grep for cross-file symbol and type work. Skip it when a plain read or grep is quicker.

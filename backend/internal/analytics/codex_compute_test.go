@@ -12,9 +12,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-//go:fix inline
-func ptrInt64(v int64) *int64 { return new(v) }
-
 // minimalRollout builds a hand-crafted ParsedRollout with the minimum fields
 // each test needs. Avoids depending on the parser implementation (which is
 // stubbed during Phase 3b).
@@ -29,7 +26,7 @@ func minimalRollout() *codex.ParsedRollout {
 				TurnID:      "t1",
 				StartedAt:   &started,
 				CompletedAt: &completed,
-				DurationMs:  ptrInt64(11000),
+				DurationMs:  new(int64(11000)),
 				Model:       "gpt-5",
 				UserMessages: []codex.Message{
 					{Role: "user", Text: "add the linear mcp"},

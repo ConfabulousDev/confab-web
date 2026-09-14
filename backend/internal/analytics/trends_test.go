@@ -1044,7 +1044,7 @@ func TestGetTrends_TopSessions(t *testing.T) {
 			Version:    analytics.SessionCardVersion,
 			ComputedAt: time.Now().UTC(),
 			UpToLine:   100,
-			DurationMs: int64Ptr(3600000), // 1 hour
+			DurationMs: new(int64(3600000)), // 1 hour
 		},
 	})
 	if err != nil {
@@ -1277,11 +1277,6 @@ func TestGetTrends_TopSessions_PerProvider(t *testing.T) {
 			t.Errorf("sessions[%d].Provider = %q, want %q (%s)", c.index, got.Provider, c.wantProvider, label)
 		}
 	}
-}
-
-//go:fix inline
-func int64Ptr(v int64) *int64 {
-	return new(v)
 }
 
 // TestGetTrends_ProviderFilter (CF-424) covers the wire and SQL semantics

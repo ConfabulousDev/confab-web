@@ -94,8 +94,6 @@ func readTitleState(t *testing.T, env *testutil.TestEnvironment, sessionID strin
 	return st
 }
 
-func strp(s string) *string { return &s }
-
 func deref(s *string) string {
 	if s == nil {
 		return ""
@@ -117,7 +115,7 @@ func TestFindTitleRecomputeSessions_ReturnsOnlyMarkedSessionsWithNormalizedProvi
 
 	markedCodex := seedTitleSession(t, env, user.ID, models.ProviderCodex, nil, true)
 	seedTitleSession(t, env, user.ID, models.ProviderCodex, nil, false)
-	markedLegacy := seedTitleSession(t, env, user.ID, models.ProviderClaudeCodeLegacy, strp("x"), true)
+	markedLegacy := seedTitleSession(t, env, user.ID, models.ProviderClaudeCodeLegacy, new("x"), true)
 
 	got, err := titlePrecomputer(env, env.Storage).FindTitleRecomputeSessions(context.Background(), 10)
 	if err != nil {
@@ -300,7 +298,7 @@ func TestRecomputeSessionTitle_CodexAlreadySetIsNotOverwritten(t *testing.T) {
 	env := testutil.SetupTestEnvironment(t)
 	env.CleanDB(t)
 	user := testutil.CreateTestUser(t, env, "codex@test.com", "Codex")
-	s := seedTitleSession(t, env, user.ID, models.ProviderCodex, strp("client supplied"), true)
+	s := seedTitleSession(t, env, user.ID, models.ProviderCodex, new("client supplied"), true)
 	seedCodexTranscript(t, env, s, codexChunk1(oldEraUserMessage))
 
 	if err := titlePrecomputer(env, env.Storage).RecomputeSessionTitle(context.Background(), s); err != nil {
@@ -419,7 +417,7 @@ func TestRecomputeSessionTitle_Cursor(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			env.CleanDB(t)
 			user := testutil.CreateTestUser(t, env, "cursor@test.com", "Cursor")
-			s := seedTitleSession(t, env, user.ID, models.ProviderCursor, strp(tc.stored), true)
+			s := seedTitleSession(t, env, user.ID, models.ProviderCursor, new(tc.stored), true)
 
 			if err := titlePrecomputer(env, env.Storage).RecomputeSessionTitle(context.Background(), s); err != nil {
 				t.Fatalf("RecomputeSessionTitle: %v", err)

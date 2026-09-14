@@ -415,8 +415,6 @@ func seedProviderSession(t *testing.T, env *testutil.TestEnvironment, userID int
 	return sid
 }
 
-func strPtr(s string) *string { return &s }
-
 // titleRecomputeRequested reports whether the session's title_recompute_requested_at marker is set.
 func titleRecomputeRequested(t *testing.T, env *testutil.TestEnvironment, sessionID string) bool {
 	t.Helper()
@@ -438,9 +436,9 @@ func TestCountAffected_ProviderFilterNarrowsCardCountsIncludingLegacyAlias(t *te
 
 	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
 	inWindow := time.Now().UTC().Add(-2 * time.Hour)
-	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("hi"), inWindow, true)
-	seedProviderSession(t, env, user.ID, models.ProviderClaudeCodeLegacy, strPtr("hi"), inWindow, true)
-	seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("hi"), inWindow, true)
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, new("hi"), inWindow, true)
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCodeLegacy, new("hi"), inWindow, true)
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, new("hi"), inWindow, true)
 
 	store := &dbadmincardinvalidations.Store{DB: env.DB}
 	start := time.Now().UTC().Add(-4 * time.Hour)
@@ -483,8 +481,8 @@ func TestExecute_ProviderFilterScopesCardDeletes(t *testing.T) {
 	admin := testutil.CreateTestUser(t, env, "admin@test.com", "Admin")
 	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
 	inWindow := time.Now().UTC().Add(-2 * time.Hour)
-	codexID := seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("hi"), inWindow, true)
-	claudeID := seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("hi"), inWindow, true)
+	codexID := seedProviderSession(t, env, user.ID, models.ProviderCodex, new("hi"), inWindow, true)
+	claudeID := seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, new("hi"), inWindow, true)
 
 	store := &dbadmincardinvalidations.Store{DB: env.DB}
 	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
@@ -532,13 +530,13 @@ func TestCountAffected_SessionTitleCandidates(t *testing.T) {
 	inWindow := time.Now().UTC().Add(-2 * time.Hour)
 	outOfWindow := time.Now().UTC().Add(-48 * time.Hour)
 
-	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, false)                                            // ✓
-	seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("already titled"), inWindow, false)                       // ✗
-	seedProviderSession(t, env, user.ID, models.ProviderCursor, strPtr("<user_query>\nfix it\n</user_query>"), inWindow, false) // ✓
-	seedProviderSession(t, env, user.ID, models.ProviderCursor, strPtr("fix it"), inWindow, false)                              // ✗
-	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, nil, inWindow, false)                                       // ✗
-	seedProviderSession(t, env, user.ID, models.ProviderOpencode, nil, inWindow, false)                                         // ✗
-	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, outOfWindow, false)                                         // ✗ (window)
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, false)                                         // ✓
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, new("already titled"), inWindow, false)                       // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderCursor, new("<user_query>\nfix it\n</user_query>"), inWindow, false) // ✓
+	seedProviderSession(t, env, user.ID, models.ProviderCursor, new("fix it"), inWindow, false)                              // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, nil, inWindow, false)                                    // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderOpencode, nil, inWindow, false)                                      // ✗
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, outOfWindow, false)                                      // ✗ (window)
 
 	store := &dbadmincardinvalidations.Store{DB: env.DB}
 	start := time.Now().UTC().Add(-4 * time.Hour)
@@ -581,10 +579,10 @@ func TestCountAffected_UnionOfCardAndTitleSessions(t *testing.T) {
 
 	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
 	inWindow := time.Now().UTC().Add(-2 * time.Hour)
-	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, true)               // card + title
-	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, false)              // title only
-	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("x"), inWindow, true)  // card only
-	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("x"), inWindow, false) // neither
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, true)            // card + title
+	seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, false)           // title only
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, new("x"), inWindow, true)  // card only
+	seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, new("x"), inWindow, false) // neither
 
 	store := &dbadmincardinvalidations.Store{DB: env.DB}
 	result, err := store.CountAffected(context.Background(), dbadmincardinvalidations.CountRequest{
@@ -616,8 +614,8 @@ func TestExecute_SessionTitleMarksOnlyCandidatesAndAudits(t *testing.T) {
 	user := testutil.CreateTestUser(t, env, "user@test.com", "User")
 	inWindow := time.Now().UTC().Add(-2 * time.Hour)
 	codexNull := seedProviderSession(t, env, user.ID, models.ProviderCodex, nil, inWindow, true)
-	claudeWithCard := seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, strPtr("x"), inWindow, true)
-	codexTitled := seedProviderSession(t, env, user.ID, models.ProviderCodex, strPtr("titled"), inWindow, false)
+	claudeWithCard := seedProviderSession(t, env, user.ID, models.ProviderClaudeCode, new("x"), inWindow, true)
+	codexTitled := seedProviderSession(t, env, user.ID, models.ProviderCodex, new("titled"), inWindow, false)
 
 	// Batch size 1 exercises the per-batch mark UPDATE across several commits.
 	store := &dbadmincardinvalidations.Store{DB: env.DB, BatchSize: 1}

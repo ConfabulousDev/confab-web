@@ -196,7 +196,7 @@ func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 					ModelID: "claude-sonnet-4-20250514", ProviderID: "anthropic",
 					Finish: &finish,
 					Tokens: OpenCodeTokens{Input: 1000, Output: 500},
-					Time:   OpenCodeTime{Created: 1717689510000, Completed: ptrInt64(1717689515000)},
+					Time:   OpenCodeTime{Created: 1717689510000, Completed: new(int64(1717689515000))},
 				},
 				Parts: []OpenCodePart{
 					{ID: "prt_02", Type: "text", Text: "reply 1"},
@@ -217,7 +217,7 @@ func TestComputeOpenCodeConversation_TurnWindows(t *testing.T) {
 					ModelID: "claude-sonnet-4-20250514", ProviderID: "anthropic",
 					Finish: &finish,
 					Tokens: OpenCodeTokens{Input: 2000, Output: 1000},
-					Time:   OpenCodeTime{Created: 1717689540000, Completed: ptrInt64(1717689550000)},
+					Time:   OpenCodeTime{Created: 1717689540000, Completed: new(int64(1717689550000))},
 				},
 				Parts: []OpenCodePart{
 					{ID: "prt_04", Type: "text", Text: "reply 2"},
