@@ -61,7 +61,6 @@ See [`API.md`](API.md) for the full REST reference. Quick links:
 - **[SECURITY.md](SECURITY.md)** - Complete security guide (authentication, CORS, CSRF, input validation, headers)
 - **[PERFORMANCE.md](PERFORMANCE.md)** - Performance optimization guide (rate limiting, compression, monitoring)
 - **[TEST.md](TEST.md)** - Testing guide
-- **[TODO.md](TODO.md)** - Future improvements and roadmap
 
 ## Database Schema
 
