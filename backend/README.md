@@ -75,7 +75,8 @@ Backend targets (run from `backend/`, or via the root `Makefile`):
 make test       # go test ./...
 make coverage   # sharded coverage (see internal/testutil/README.md)
 make build      # build the binary
-make fmt        # gofmt
+make fmt        # gofmt + go fix
+make fmt-check  # CI format gate (gofmt + go fix -diff)
 ```
 
 ## License

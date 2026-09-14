@@ -248,7 +248,6 @@ func TestCardsAllValid_Exhaustive(t *testing.T) {
 	cardsType := reflect.TypeFor[Cards]()
 	var cardFields []string
 	for field := range cardsType.Fields() {
-		field := field
 		if field.Type.Kind() == reflect.Pointer && strings.HasSuffix(field.Type.Elem().Name(), "CardRecord") {
 			cardFields = append(cardFields, field.Name)
 		}
