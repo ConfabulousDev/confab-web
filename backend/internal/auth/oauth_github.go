@@ -34,6 +34,14 @@ type githubEmail struct {
 	Verified bool   `json:"verified"`
 }
 
+// GitHub OAuth/API endpoints. Package-level vars (not consts) only so in-package
+// tests can point them at httptest servers; production never reassigns them.
+var (
+	githubTokenURL  = "https://github.com/login/oauth/access_token"
+	githubUserURL   = "https://api.github.com/user"
+	githubEmailsURL = "https://api.github.com/user/emails"
+)
+
 // HandleGitHubLogin initiates GitHub OAuth flow
 func HandleGitHubLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +208,7 @@ func exchangeGitHubCode(code, codeVerifier string, config *OAuthConfig) (string,
 		"code_verifier": {codeVerifier}, // PKCE (r9zn)
 	}
 
-	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token?"+data.Encode(), nil)
+	req, err := http.NewRequest("POST", githubTokenURL+"?"+data.Encode(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -233,7 +241,7 @@ func exchangeGitHubCode(code, codeVerifier string, config *OAuthConfig) (string,
 
 // getGitHubUser fetches user info from GitHub
 func getGitHubUser(accessToken string) (*githubUser, error) {
-	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	req, err := http.NewRequest("GET", githubUserURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +280,7 @@ func getGitHubUser(accessToken string) (*githubUser, error) {
 
 // getGitHubPrimaryEmail fetches primary email from GitHub
 func getGitHubPrimaryEmail(accessToken string) (string, error) {
-	req, err := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
+	req, err := http.NewRequest("GET", githubEmailsURL, nil)
 	if err != nil {
 		return "", err
 	}

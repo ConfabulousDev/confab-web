@@ -1,13 +1,14 @@
 # email
 
-Email sending via the Resend API, with per-user sliding-window rate limiting and a mock service for tests.
+Email sending via the Resend API, with per-user sliding-window rate limiting.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `email.go` | `Service` interface, `ResendService` implementation, `RateLimitedService` wrapper, `EmailRateLimiter`, HTML/text email templates, `MockService`, and the `humanProviderLabel` / `composeSubject` helpers for provider-aware wording |
-| `email_test.go` | Tests for `EmailRateLimiter`, `MockService`, template rendering, and the provider-aware wording matrix (`claude-code` / `codex` / legacy / empty / unknown) including an ERROR-log assertion via the `captureLogs` helper |
+| `email.go` | `Service` interface, `ResendService` implementation (send endpoint in the unexported `resendEmailsURL` var so tests can point it at a fake server), `RateLimitedService` wrapper, `EmailRateLimiter`, HTML/text email templates, and the `humanProviderLabel` / `composeSubject` helpers for provider-aware wording |
+| `email_test.go` | Tests for `EmailRateLimiter`, `RateLimitedService` (via an in-test `mockService`), template rendering, and the provider-aware wording matrix (`claude-code` / `codex` / legacy / empty / unknown) including an ERROR-log assertion via the `captureLogs` helper |
+| `resend_http_test.go` | `NewResendService` fields and `ResendService.SendShareInvitation` against an `httptest` fake Resend API: authenticated JSON request shape, 4xx/5xx and transport errors, canceled context |
 | `errors.go` | Package-level sentinel error `ErrRateLimitExceeded` |
 
 ## Key Types
@@ -17,7 +18,6 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 - **`RateLimitedService`** -- Wraps any `Service` with per-user hourly rate limiting. Checks the limit before delegating to the inner service.
 - **`EmailRateLimiter`** -- Sliding-window rate limiter that tracks exact send timestamps per user ID. Thread-safe via `sync.Mutex`.
 - **`ShareInvitationParams`** -- Parameters for a share invitation email: recipient, sharer info, session title, share URL, optional expiration, plus `Provider` (canonical session type — drives subject/body wording) and `ShareID` (DB share row ID — surfaces in the unknown-provider ERROR log).
-- **`MockService`** -- Test double that records sent emails and can be configured to fail.
 
 ## Key API
 
@@ -25,7 +25,6 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 - **`NewRateLimitedService(service Service, limitPerHour int) *RateLimitedService`** -- Wraps a service with rate limiting.
 - **`(*RateLimitedService).SendShareInvitation(ctx, userID, params) error`** -- Checks rate limit, records the attempt, then sends. Returns `ErrRateLimitExceeded` if over limit.
 - **`(*RateLimitedService).CheckRateLimit(userID, count) error`** -- Fail-fast batch pre-check: reports whether sending `count` emails would fit the per-hour limit **without recording** them, so a multi-recipient share can be rejected up front (returning `ErrRateLimitExceeded`) before any individual email is sent. Because it only checks (no record), calling it before the per-send loop does not double-count.
-- **`NewMockService() *MockService`** -- Creates a mock that records `SentEmails` for assertions.
 
 ## How to Extend
 
@@ -34,7 +33,7 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 1. Define a new params struct (like `ShareInvitationParams`).
 2. Add a new method to the `Service` interface.
 3. Implement the method on `ResendService` with HTML and text templates.
-4. Add the method to `MockService` for testing.
+4. Add the method to the test doubles that implement `Service` (e.g. `mockService` in `email_test.go`) and cover the Resend request in `resend_http_test.go`.
 5. If rate limiting applies, add a corresponding method on `RateLimitedService`.
 
 ## Invariants
@@ -49,8 +48,6 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 
 **Separate rate limiter from `internal/ratelimit`.** The generic rate limiter uses token buckets (`golang.org/x/time/rate`) which allow bursts. Email rate limiting requires strict "X per hour" enforcement to stay within provider quotas and prevent spam. A sliding-window algorithm with exact timestamp tracking achieves this.
 
-**Mock service in production code.** `MockService` lives in the main package (not a `_test.go` file) so that other packages' tests can import and use it without circular dependencies.
-
 **Resend as the email provider.** The `Service` interface abstracts the provider, so switching from Resend to another API only requires a new implementation.
 
 **`humanProviderLabel` is local.** The provider→phrase mapping lives in this package rather than next to `models.NormalizeProvider`, since email is the only consumer today. The helper still calls `models.NormalizeProvider` internally so legacy `"Claude Code"` rows do not trigger the unknown-provider log. If a second caller needs the same mapping, lift it to `internal/models/provider.go` per CLAUDE.md's "Where shared code lives" rule.
@@ -61,7 +58,7 @@ Email sending via the Resend API, with per-user sliding-window rate limiting and
 go test ./internal/email/...
 ```
 
-Tests exercise the `EmailRateLimiter` sliding window logic and the `MockService`. The `ResendService` is not unit-tested against the real API; it relies on the interface abstraction and integration testing.
+Tests exercise the `EmailRateLimiter` sliding window, `RateLimitedService`, template rendering, and `ResendService` against an `httptest` fake Resend API (`resend_http_test.go` overrides the unexported `resendEmailsURL`; those tests must not call `t.Parallel()`). The real Resend API is never called in tests.
 
 ## Dependencies
 
