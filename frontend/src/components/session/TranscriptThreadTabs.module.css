@@ -1,75 +1,219 @@
+/* we3k: thread switcher bar. Chips (not underline tabs) so it reads as a
+   lighter second level under Summary / Transcript. Tokens only. */
+
 .bar {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  min-width: 0;
-  padding: 0 var(--spacing-md);
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border-light);
   flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 40px;
+  min-width: 0;
+  padding-inline: var(--spacing-md);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.threadsArea,
+.tablist,
+.scrollArea {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.threadsArea,
+.scrollArea {
+  position: relative;
 }
 
 .tablist {
-  display: flex;
-  flex: 1;
   gap: var(--spacing-xs);
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 
-.tab {
+.divider {
   flex-shrink: 0;
-  max-width: 220px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-xs);
-  font-weight: var(--font-medium);
+  width: 1px;
+  height: 18px;
+  background: var(--color-border);
+}
+
+/* No native scrollbar in any engine (overrides the global ::-webkit-scrollbar). */
+.scroller {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  align-self: stretch;
+  gap: 2px;
+  min-width: 0;
+  padding-inline: var(--spacing-xs);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 32px;
+  scrollbar-width: none;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+/* Edge fades on the side with hidden chips. Masks use alpha only, so they are theme-safe. */
+.fadeStart {
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+
+.fadeEnd {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+.fadeBoth {
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
+.step {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   color: var(--color-text-secondary);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
+  transform: translateY(-50%);
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.tab:hover {
+.step:hover {
   color: var(--color-text-primary);
+  border-color: var(--color-border-dark);
 }
 
-.tab:focus-visible {
+.step svg {
+  width: 12px;
+  height: 12px;
+}
+
+.stepStart {
+  left: 0;
+}
+
+.stepStart svg {
+  transform: rotate(180deg);
+}
+
+.stepEnd {
+  right: 0;
+}
+
+.chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 28px;
+  padding-inline: var(--spacing-sm);
+  font-family: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.chip:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.chip:focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline-offset: 1px;
 }
 
-.tabActive {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+.chipActive,
+.chipActive:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .label {
-  display: block;
+  max-width: 40ch;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.backLink {
-  flex-shrink: 0;
-  padding: var(--spacing-xs) 0;
-  font-size: var(--font-xs);
-  color: var(--color-accent);
-  white-space: nowrap;
-  background: none;
-  border: none;
-  cursor: pointer;
+.nestedMark,
+.caret {
+  display: inline-flex;
+  color: var(--color-text-muted);
 }
 
-.backLink:hover {
-  text-decoration: underline;
+.caret svg {
+  width: 10px;
+  height: 10px;
+  transform: rotate(90deg);
 }
 
-.backLink:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.detailsTitle {
+  font-weight: var(--font-semibold);
+}
+
+.detailsList {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--spacing-sm);
+  margin: 0;
+}
+
+.detailsList dt {
+  color: var(--color-text-muted);
+}
+
+.detailsList dd {
+  margin: 0;
+}
+
+.detailsNote {
+  color: var(--color-text-muted);
+}
+
+/* Touch and narrow screens: swipe the strip, use All subagents to jump (D15). */
+@media (pointer: coarse), (max-width: 480px) {
+  .step {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .bar {
+    padding-inline: var(--spacing-sm);
+  }
+
+  .label {
+    max-width: 22ch;
+  }
 }

@@ -18,6 +18,7 @@ import {
   agentToolUse,
   asyncAgentResult,
   subagentAssistantText,
+  taskNotificationMessage,
 } from '@/test-fixtures/claudeSubagent';
 import type { SessionDetail } from '@/schemas/api';
 import type { SessionAnalytics } from '@/schemas/api';
@@ -337,8 +338,13 @@ describe('SessionViewer / subagent thread tabs', () => {
     const user = userEvent.setup();
     const onThreadChange = vi.fn();
     render(viewer({ activeThreadId: null, onThreadChange }));
-    await user.click(screen.getByRole('tab', { name: 'Write tests' }));
+    await user.click(screen.getByRole('tab', { name: /^Write tests/ }));
     expect(onThreadChange).toHaveBeenCalledWith('a2', undefined);
+  });
+
+  it('names each strip chip with its subagent status', () => {
+    render(viewer());
+    expect(screen.getByRole('tab', { name: 'Explore the codebase, running' })).toBeInTheDocument();
   });
 
   it('switches pane items and header counts to the opened thread (uncontrolled)', () => {
@@ -353,16 +359,20 @@ describe('SessionViewer / subagent thread tabs', () => {
     expect(claudePaneProps.current?.activeThreadId).toBe('a1');
     expect(claudePaneProps.current?.allMessages).toEqual(a1Messages);
     expect(filterCounts()).toEqual(countClaudeCategories(a1Messages));
-    expect(screen.getByRole('tab', { name: 'Explore the codebase' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /^Explore the codebase/ })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('opens an id-labeled tab for a deep-linked agent not launched from Main, without a back link', () => {
+  it('opens an id-labeled tab for a deep-linked agent not launched from Main, with no Go to parent', async () => {
+    const user = userEvent.setup();
     render(viewer({ activeThreadId: 'zz-unknown', onThreadChange: () => {} }));
-    expect(screen.getByRole('tab', { name: 'zz-unknown' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('button', { name: /Launched from/ })).not.toBeInTheDocument();
+    const deepLinked = screen.getByRole('tab', { name: 'zz-unknown, status unknown' });
+    expect(deepLinked).toHaveAttribute('aria-selected', 'true');
+    await user.click(deepLinked);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Go to parent/ })).not.toBeInTheDocument();
   });
 
-  it('adds a nested agent opened from inside a subagent tab, labeled with its parent', () => {
+  it('places a nested agent opened from inside a subagent tab right after its parent, with its own label', () => {
     const onThreadChange = vi.fn();
     const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
 
@@ -372,19 +382,59 @@ describe('SessionViewer / subagent thread tabs', () => {
     expect(onThreadChange).toHaveBeenCalledWith('child', undefined);
 
     rerender(viewer({ activeThreadId: 'child', onThreadChange }));
-    expect(screen.getByRole('tab', { name: 'Explore the codebase › Nested helper' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('button', { name: '← Launched from Explore the codebase' })).toBeInTheDocument();
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Main',
+      'Explore the codebase',
+      'Nested helper',
+      'Write tests',
+    ]);
+    expect(screen.getByRole('tab', { name: 'Nested helper, running' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: /Launched from/ })).not.toBeInTheDocument();
   });
 
-  it('back link returns to Main at the launching row', async () => {
+  it("Go to parent from a nested agent returns to the parent subagent's launch row", async () => {
+    const user = userEvent.setup();
+    const onThreadChange = vi.fn();
+    const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
+    act(() => {
+      openThread('child');
+    });
+    rerender(viewer({ activeThreadId: 'child', onThreadChange }));
+    onThreadChange.mockClear();
+
+    await user.click(screen.getByRole('tab', { name: /^Nested helper/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Go to parent (Explore the codebase)' }));
+    expect(onThreadChange).toHaveBeenCalledWith('a1', 's3');
+  });
+
+  it('Go to parent returns to Main at the launching row', async () => {
     const user = userEvent.setup();
     const onThreadChange = vi.fn();
     render(viewer({ activeThreadId: 'a1', onThreadChange }));
-    await user.click(screen.getByRole('button', { name: '← Launched from Main' }));
+    await user.click(screen.getByRole('tab', { name: /^Explore the codebase/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Go to parent (Main)' }));
     expect(onThreadChange).toHaveBeenCalledWith(null, 'r1');
+  });
+
+  it("refreshes a nested agent's status whenever its parent thread's transcript updates, and keeps it", () => {
+    const onThreadChange = vi.fn();
+    const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
+    act(() => {
+      openThread('child');
+    });
+    rerender(viewer({ activeThreadId: 'child', onThreadChange }));
+    expect(screen.getByRole('tab', { name: 'Nested helper, running' })).toBeInTheDocument();
+
+    const a1Finished = [
+      ...a1Messages,
+      taskNotificationMessage('s4', { taskId: 'child', toolUseId: 'tn', status: 'completed' }),
+    ];
+    const threadMessages = { a1: a1Finished, child: childMessages };
+    rerender(viewer({ activeThreadId: 'a1', onThreadChange, initialThreadMessages: threadMessages }));
+    expect(screen.getByRole('tab', { name: 'Nested helper, completed' })).toBeInTheDocument();
+
+    rerender(viewer({ activeThreadId: 'child', onThreadChange, initialThreadMessages: threadMessages }));
+    expect(screen.getByRole('tab', { name: 'Nested helper, completed' })).toBeInTheDocument();
   });
 
   it('renders no strip for Codex sessions even with a thread id', async () => {

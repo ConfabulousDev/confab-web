@@ -16,8 +16,28 @@ import {
   agentFileName,
   buildClaudeAgentIndex,
   getTaskNotificationText,
+  normalizeAgentStatus,
   parseTaskNotification,
 } from './claudeAgentIndex';
+
+// we3k D3: one status vocabulary for the thread strip, dropdowns and SubagentCard.
+describe('normalizeAgentStatus', () => {
+  it.each([
+    ['running', 'running'],
+    ['completed', 'completed'],
+    ['error', 'failed'],
+    ['failed', 'failed'],
+    ['killed', 'stopped'],
+  ])('maps %s to %s', (raw, expected) => {
+    expect(normalizeAgentStatus(raw)).toBe(expected);
+  });
+
+  it('maps unrecognized, empty or missing statuses to unknown', () => {
+    expect(normalizeAgentStatus('paused')).toBe('unknown');
+    expect(normalizeAgentStatus('')).toBe('unknown');
+    expect(normalizeAgentStatus(undefined)).toBe('unknown');
+  });
+});
 
 describe('agentFileName', () => {
   it('constructs the CLI naming contract agent-<id>.jsonl', () => {

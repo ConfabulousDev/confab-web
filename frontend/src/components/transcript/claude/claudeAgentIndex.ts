@@ -21,6 +21,27 @@ import {
   isToolUseBlock,
   isUserMessage,
 } from '@/types';
+import type { TranscriptThreadStatus } from '@/providers/types';
+
+/**
+ * we3k D3: raw index / notification status → the shared display vocabulary used
+ * by the thread strip, its dropdowns and `SubagentCard`. Real notifications
+ * carry `completed`, `failed` and `killed`; the index adds `running` / `error`.
+ */
+export function normalizeAgentStatus(status: string | undefined): TranscriptThreadStatus {
+  switch (status) {
+    case 'running':
+    case 'completed':
+      return status;
+    case 'error':
+    case 'failed':
+      return 'failed';
+    case 'killed':
+      return 'stopped';
+    default:
+      return 'unknown';
+  }
+}
 
 /** `Agent` is current; `Task` is the legacy name (backend `isAgentToolName` accepts both). */
 const AGENT_TOOL_NAMES = new Set(['Agent', 'Task']);

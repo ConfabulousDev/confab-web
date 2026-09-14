@@ -78,6 +78,38 @@ export const Finished: Story = {
   },
 };
 
+/** we3k: a `failed` notification renders with error styling. */
+export const FinishedFailed: Story = {
+  args: {
+    variant: 'finished',
+    agent: { ...baseAgent, status: 'failed' },
+    status: 'failed',
+    summary: 'Agent "Explore the auth middleware" failed',
+    rawLabel: 'Raw notification',
+    children: (
+      <pre style={{ margin: 0 }}>
+        {'<task-notification>\n<task-id>a1b2c3d4e5f60718</task-id>\n<status>failed</status>\n</task-notification>'}
+      </pre>
+    ),
+  },
+};
+
+/** we3k: a `killed` notification reads as stopped, in neutral styling. */
+export const FinishedStopped: Story = {
+  args: {
+    variant: 'finished',
+    agent: { ...baseAgent, status: 'killed' },
+    status: 'killed',
+    summary: 'Agent "Explore the auth middleware" was stopped',
+    rawLabel: 'Raw notification',
+    children: (
+      <pre style={{ margin: 0 }}>
+        {'<task-notification>\n<task-id>a1b2c3d4e5f60718</task-id>\n<status>killed</status>\n</task-notification>'}
+      </pre>
+    ),
+  },
+};
+
 export const UntitledWithoutOpenAction: Story = {
   args: {
     variant: 'launch',

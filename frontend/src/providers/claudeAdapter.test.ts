@@ -15,7 +15,12 @@ import { computeSessionMeta } from '@/utils/sessionMeta';
 import type { TokenUsage } from '@/utils/tokenStats';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
 import { claudeAdapter } from './claudeAdapter';
-import { agentToolUse, asyncAgentResult, syncAgentResult } from '@/test-fixtures/claudeSubagent';
+import {
+  agentToolUse,
+  asyncAgentResult,
+  syncAgentResult,
+  taskNotificationMessage,
+} from '@/test-fixtures/claudeSubagent';
 
 vi.mock('@/services/claudeTranscriptService', () => ({
   fetchParsedClaudeTranscript: vi.fn(),
@@ -338,9 +343,52 @@ describe('claudeAdapter.threads', () => {
       asyncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2', description: 'Write tests' }),
     ];
     expect(claudeAdapter.threads?.discover(items, null)).toEqual([
-      { id: 'a1', fileName: 'agent-a1.jsonl', label: 'Explore', parentThreadId: null, launchTargetId: 'r1' },
-      { id: 'a2', fileName: 'agent-a2.jsonl', label: 'Write tests', parentThreadId: null, launchTargetId: 'r2' },
+      {
+        id: 'a1',
+        fileName: 'agent-a1.jsonl',
+        label: 'Explore',
+        parentThreadId: null,
+        launchTargetId: 'r1',
+        status: 'running',
+        model: 'claude-opus-5',
+      },
+      {
+        id: 'a2',
+        fileName: 'agent-a2.jsonl',
+        label: 'Write tests',
+        parentThreadId: null,
+        launchTargetId: 'r2',
+        status: 'running',
+        model: 'claude-opus-5',
+      },
     ]);
+  });
+
+  // we3k: provider-agnostic display fields for the thread strip.
+  it('fills normalized status, agent type, model and duration display fields', () => {
+    const items: TranscriptLine[] = [
+      agentToolUse({ uuid: 'u1', toolUseId: 't1', description: 'Find callers', subagentType: 'Explore', model: 'claude-haiku-4-5' }),
+      syncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1', totalDurationMs: 90_000 }),
+      agentToolUse({ uuid: 'u2', toolUseId: 't2', description: 'Broken' }),
+      syncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2', isError: true }),
+      agentToolUse({ uuid: 'u3', toolUseId: 't3', description: 'Background' }),
+      asyncAgentResult({ uuid: 'r3', toolUseId: 't3', agentId: 'a3', description: 'Background' }),
+      taskNotificationMessage('n3', { taskId: 'a3', toolUseId: 't3', status: 'killed' }),
+    ];
+    const refs = claudeAdapter.threads?.discover(items, null) ?? [];
+    expect(refs[0]).toMatchObject({ status: 'completed', subtitle: 'Explore', model: 'claude-haiku-4-5', durationMs: 90_000 });
+    expect(refs[1]).toMatchObject({ status: 'failed' });
+    expect(refs[2]).toMatchObject({ status: 'stopped', model: 'claude-opus-5' });
+  });
+
+  it('flips a running agent to completed once its notification lands', () => {
+    const launched: TranscriptLine[] = [
+      agentToolUse({ uuid: 'u1', toolUseId: 't1', description: 'Background' }),
+      asyncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1', description: 'Background' }),
+    ];
+    expect(claudeAdapter.threads?.discover(launched, null)[0]?.status).toBe('running');
+    const finished = [...launched, taskNotificationMessage('n1', { taskId: 'a1', toolUseId: 't1' })];
+    expect(claudeAdapter.threads?.discover(finished, null)[0]?.status).toBe('completed');
   });
 
   it('records the parent thread id for agents discovered inside a subagent stream', () => {

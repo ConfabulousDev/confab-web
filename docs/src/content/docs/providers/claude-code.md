@@ -29,8 +29,10 @@ When a session launches subagents with the Agent tool (or the older Task tool), 
 
 Select **Open transcript** on a card to read that subagent's own conversation. It opens in a tab under **Transcript**, next to **Main**:
 
-- Subagents launched from the main conversation get a tab each, in launch order. A subagent launched by another subagent gets a tab once you open it.
-- **← Launched from …** returns to the conversation that launched the subagent, at the launch point.
+- Subagents launched from the main conversation get a tab each, in launch order. A subagent launched by another subagent gets a tab right after its parent once you open it.
+- Each tab shows the subagent's status: running, completed, failed, or stopped. Hover or focus a tab for its type, model, and duration.
+- Select the open subagent's tab for **Go to parent**, which returns to the conversation that launched it at the launch point, and **Copy link to this subagent**.
+- **All subagents** lists every subagent with its status, type, model, and duration, so you can jump to any of them. Long lists get a filter.
 - The open tab is in the URL (`?agent=<id>`), so links copied from a subagent tab open that tab. Anyone who can view the session can view its subagents.
 - Transcript filters apply to whichever tab is open. Search runs within the open tab.
 - A running subagent's tab updates live. If its transcript hasn't synced yet, the tab says so and loads when it arrives.
