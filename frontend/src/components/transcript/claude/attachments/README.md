@@ -22,9 +22,12 @@ way it wraps `FileSnapshotContent`.
 - `EditedFileSnippet.tsx` — Strips `cat -n` line-number prefixes from the
   snippet and renders via `CodeBlock` with language inferred from the filename
   extension.
-- `QueuedCommand.tsx` — Branches on `commandMode`. `task-notification` payloads
-  render as a monospace `<pre>`; everything else renders through the shared
-  markdown helper (`@/utils/renderMarkdownToHtml`).
+- `QueuedCommand.tsx` — Branches on `commandMode`. A `task-notification` for a
+  subagent in the timeline's agent index (et0r, via `useClaudeThread` +
+  `findNotifiedAgent`) renders a "Subagent finished" `SubagentCard` with the
+  raw XML collapsed underneath; other `task-notification` payloads (e.g.
+  background commands) render as a monospace `<pre>`; everything else renders
+  through the shared markdown helper (`@/utils/renderMarkdownToHtml`).
 - `ToolDelta.tsx` — Shared component for `deferred_tools_delta` and
   `mcp_instructions_delta`. Header text differs by subtype; added and removed
   name lists render as always-expanded chip lists.

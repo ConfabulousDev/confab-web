@@ -73,6 +73,36 @@ interface TranscriptPaneProps<TItem> {
    *  panes ignore them (they carry real per-message times). */
   firstSeen?: string | null;
   lastSyncAt?: string | null;
+  /** et0r: the open subagent thread; null/undefined = Main. Only threads-capable panes read it. */
+  activeThreadId?: string | null;
+  /** et0r: switch to a thread. Present only when the adapter has `threads`. */
+  onOpenThread?: (threadId: string) => void;
+  /** et0r D7: the active thread's file isn't uploaded yet (404); the hook is retrying. */
+  notSynced?: boolean;
+}
+
+/**
+ * et0r: one transcript thread (a subagent) rendered as a subtab under
+ * Transcript. Produced by an adapter's optional `threads` capability.
+ */
+export interface TranscriptThreadRef {
+  /** Provider thread id (Claude: agentId). */
+  id: string;
+  /** Session file holding the thread's transcript. */
+  fileName: string;
+  /** Tab label; duplicates are suffixed " (2)", " (3)". */
+  label: string;
+  /** null = launched from Main; undefined = unknown (e.g. a deep link). */
+  parentThreadId: string | null | undefined;
+  /** Id of the launching row in the parent thread (for the back link). */
+  launchTargetId?: string;
+}
+
+interface TranscriptThreadsCapability<TItem> {
+  /** Threads launched from `items` (one thread's full item stream), in launch order. */
+  discover(items: TItem[], parentThreadId: string | null): TranscriptThreadRef[];
+  /** File name for a thread id not (yet) discovered — deep links. */
+  fileNameFor(threadId: string): string;
 }
 
 export interface SessionMetaFallback {
@@ -165,6 +195,12 @@ export interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
    * tier) defines this. CF-436.
    */
   readonly tokensFastTooltip?: string;
+
+  /**
+   * et0r: optional multi-thread transcripts (subagents as subtabs). Only
+   * Claude implements it today; SessionViewer renders no strip without it.
+   */
+  readonly threads?: TranscriptThreadsCapability<TItem>;
 
   FilterDropdown: FC<{
     counts: TCounts;

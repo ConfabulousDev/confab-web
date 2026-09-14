@@ -134,3 +134,61 @@ describe.each(PROVIDER_CASES)(
     });
   }
 );
+
+// et0r: `?agent=<agentId>` selects a subagent subtab under Transcript.
+describe('SessionDetailPage subagent thread param', () => {
+  beforeEach(() => {
+    sessionViewerCalls.length = 0;
+    sessionRef.current = makeSessionDetailFixture('claude-code', { id: 'test-session-uuid' });
+  });
+
+  function lastProps() {
+    const call = sessionViewerCalls[sessionViewerCalls.length - 1];
+    if (!call) throw new Error('SessionViewer was never rendered');
+    return call[0];
+  }
+
+  it('passes the agent param as activeThreadId', () => {
+    renderWithRouter('/sessions/test-session-uuid?tab=transcript&agent=a1');
+    expect(lastProps().activeThreadId).toBe('a1');
+  });
+
+  it('passes null activeThreadId when the agent param is absent', () => {
+    renderWithRouter('/sessions/test-session-uuid?tab=transcript');
+    expect(lastProps().activeThreadId).toBeNull();
+  });
+
+  it('forces the transcript tab when the agent param is present', () => {
+    renderWithRouter('/sessions/test-session-uuid?agent=a1');
+    expect(lastProps().activeTab).toBe('transcript');
+  });
+
+  it('clears agent and msg when switching to the summary tab', () => {
+    renderWithRouter('/sessions/test-session-uuid?tab=transcript&agent=a1&msg=m1');
+    act(() => {
+      lastProps().onTabChange('summary');
+    });
+    expect(lastProps().activeTab).toBe('summary');
+    expect(lastProps().activeThreadId).toBeNull();
+    expect(lastProps().targetId).toBeUndefined();
+  });
+
+  it('sets agent and clears msg on a thread change without a target', () => {
+    renderWithRouter('/sessions/test-session-uuid?tab=transcript&msg=m1');
+    act(() => {
+      lastProps().onThreadChange('a2');
+    });
+    expect(lastProps().activeThreadId).toBe('a2');
+    expect(lastProps().targetId).toBeUndefined();
+    expect(lastProps().activeTab).toBe('transcript');
+  });
+
+  it('clears agent and sets msg when returning to Main at the launching row', () => {
+    renderWithRouter('/sessions/test-session-uuid?tab=transcript&agent=a1');
+    act(() => {
+      lastProps().onThreadChange(null, 'launch-row');
+    });
+    expect(lastProps().activeThreadId).toBeNull();
+    expect(lastProps().targetId).toBe('launch-row');
+  });
+});

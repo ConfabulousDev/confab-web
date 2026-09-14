@@ -6,10 +6,19 @@
 // rollout for session_meta.model → turn_context.model. Replaces CF-383's
 // line-1-only `fetchCodexSessionMeta` approach.
 
+import { isValidElement } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import SessionViewer from './SessionViewer';
+import type { TranscriptLine } from '@/types';
+import { countClaudeCategories } from './claudeCategories';
+import {
+  agentToolUse,
+  asyncAgentResult,
+  subagentAssistantText,
+} from '@/test-fixtures/claudeSubagent';
 import type { SessionDetail } from '@/schemas/api';
 import type { SessionAnalytics } from '@/schemas/api';
 import { makeSessionDetailFixture } from '@/test-fixtures/session';
@@ -34,9 +43,15 @@ vi.mock('@/hooks/useAnalyticsPolling', () => ({
   })),
 }));
 
-// Stub heavy transcript panes — we're only asserting Summary-tab routing.
+// Stub heavy transcript panes — we're only asserting routing. The Claude stub
+// captures its props so et0r thread tests can inspect items / activeThreadId
+// and invoke onOpenThread.
+const claudePaneProps: { current: Record<string, unknown> | undefined } = { current: undefined };
 vi.mock('./ClaudeTranscriptPane', () => ({
-  default: () => <div data-testid="claude-transcript-pane" />,
+  default: (props: Record<string, unknown>) => {
+    claudePaneProps.current = props;
+    return <div data-testid="claude-transcript-pane" />;
+  },
 }));
 vi.mock('./CodexTranscriptPane', () => ({
   default: () => <div data-testid="codex-transcript-pane" />,
@@ -243,5 +258,148 @@ describe('SessionViewer / Codex transcript lift', () => {
       expect(headerProps.current).toBeDefined();
     });
     expect(fetchParsedCodexTranscript).not.toHaveBeenCalled();
+  });
+});
+
+// et0r: subagent subtabs under the Transcript tab.
+describe('SessionViewer / subagent thread tabs', () => {
+  const claudeSession = makeSession({
+    provider: 'claude-code',
+    files: [
+      {
+        file_name: 'transcript.jsonl',
+        file_type: 'transcript',
+        last_synced_line: 3,
+        updated_at: '2026-09-13T10:00:00Z',
+      },
+    ],
+  });
+
+  const mainMessages: TranscriptLine[] = [
+    agentToolUse({ uuid: 'u1', toolUseId: 't1', description: 'Explore the codebase', subagentType: 'Explore' }),
+    asyncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1', description: 'Explore the codebase' }),
+    agentToolUse({ uuid: 'u2', toolUseId: 't2', description: 'Write tests' }),
+    asyncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2', description: 'Write tests' }),
+  ];
+
+  const a1Messages: TranscriptLine[] = [
+    subagentAssistantText('s1', 'a1', 'Looking around'),
+    agentToolUse({ uuid: 's2', toolUseId: 'tn', description: 'Nested helper', agentId: 'a1' }),
+    asyncAgentResult({ uuid: 's3', toolUseId: 'tn', agentId: 'child', description: 'Nested helper' }),
+  ];
+
+  const childMessages: TranscriptLine[] = [subagentAssistantText('c1', 'child', 'Helping')];
+
+  function viewer(props: Partial<React.ComponentProps<typeof SessionViewer>> = {}) {
+    return (
+      <MemoryRouter>
+        <SessionViewer
+          session={claudeSession}
+          activeTab="transcript"
+          onTabChange={() => {}}
+          initialMessages={mainMessages}
+          initialThreadMessages={{ a1: a1Messages, child: childMessages }}
+          {...props}
+        />
+      </MemoryRouter>
+    );
+  }
+
+  function filterCounts() {
+    const slot = headerProps.current?.filterSlot;
+    if (!isValidElement<{ counts: unknown }>(slot)) throw new Error('filterSlot not rendered');
+    return slot.props.counts;
+  }
+
+  function openThread(threadId: string) {
+    const onOpenThread = claudePaneProps.current?.onOpenThread;
+    if (typeof onOpenThread !== 'function') throw new Error('onOpenThread not provided to the pane');
+    onOpenThread(threadId);
+  }
+
+  it('renders no strip when the session has no subagents', () => {
+    render(viewer({ initialMessages: [subagentAssistantText('x', 'none', 'plain')] }));
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  });
+
+  it('renders Main plus one tab per main-launched subagent, in launch order', () => {
+    render(viewer());
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Main', 'Explore the codebase', 'Write tests']);
+  });
+
+  it('hides the strip on the Summary tab', () => {
+    render(viewer({ activeTab: 'summary', initialAnalytics: codexAnalytics }));
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+  });
+
+  it('calls onThreadChange when a subagent tab is clicked (controlled)', async () => {
+    const user = userEvent.setup();
+    const onThreadChange = vi.fn();
+    render(viewer({ activeThreadId: null, onThreadChange }));
+    await user.click(screen.getByRole('tab', { name: 'Write tests' }));
+    expect(onThreadChange).toHaveBeenCalledWith('a2', undefined);
+  });
+
+  it('switches pane items and header counts to the opened thread (uncontrolled)', () => {
+    render(viewer());
+    expect(claudePaneProps.current?.allMessages).toEqual(mainMessages);
+    expect(filterCounts()).toEqual(countClaudeCategories(mainMessages));
+
+    act(() => {
+      openThread('a1');
+    });
+
+    expect(claudePaneProps.current?.activeThreadId).toBe('a1');
+    expect(claudePaneProps.current?.allMessages).toEqual(a1Messages);
+    expect(filterCounts()).toEqual(countClaudeCategories(a1Messages));
+    expect(screen.getByRole('tab', { name: 'Explore the codebase' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens an id-labeled tab for a deep-linked agent not launched from Main, without a back link', () => {
+    render(viewer({ activeThreadId: 'zz-unknown', onThreadChange: () => {} }));
+    expect(screen.getByRole('tab', { name: 'zz-unknown' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: /Launched from/ })).not.toBeInTheDocument();
+  });
+
+  it('adds a nested agent opened from inside a subagent tab, labeled with its parent', () => {
+    const onThreadChange = vi.fn();
+    const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
+
+    act(() => {
+      openThread('child');
+    });
+    expect(onThreadChange).toHaveBeenCalledWith('child', undefined);
+
+    rerender(viewer({ activeThreadId: 'child', onThreadChange }));
+    expect(screen.getByRole('tab', { name: 'Explore the codebase › Nested helper' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: '← Launched from Explore the codebase' })).toBeInTheDocument();
+  });
+
+  it('back link returns to Main at the launching row', async () => {
+    const user = userEvent.setup();
+    const onThreadChange = vi.fn();
+    render(viewer({ activeThreadId: 'a1', onThreadChange }));
+    await user.click(screen.getByRole('button', { name: '← Launched from Main' }));
+    expect(onThreadChange).toHaveBeenCalledWith(null, 'r1');
+  });
+
+  it('renders no strip for Codex sessions even with a thread id', async () => {
+    render(
+      <MemoryRouter>
+        <SessionViewer
+          session={makeSession()}
+          activeTab="transcript"
+          onTabChange={() => {}}
+          activeThreadId="a1"
+          onThreadChange={() => {}}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(fetchParsedCodexTranscript).toHaveBeenCalled());
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
   });
 });

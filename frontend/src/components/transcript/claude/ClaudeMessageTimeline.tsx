@@ -21,6 +21,8 @@ import {
 import { TimeSeparator } from '@/components/transcript/TimeSeparator';
 import { useSegmentLayout } from '@/components/transcript/timelineSegments';
 import { buildVirtualItems, type VirtualItem } from './claudeVirtualItems';
+import { buildClaudeAgentIndex } from './claudeAgentIndex';
+import { ClaudeThreadContext, type ClaudeThreadContextValue } from './claudeThreadContext';
 import styles from './ClaudeMessageTimeline.module.css';
 
 interface ClaudeMessageTimelineProps {
@@ -29,6 +31,8 @@ interface ClaudeMessageTimelineProps {
   targetMessageUuid?: string; // Deep-link target message UUID
   sessionId?: string; // Session ID for copy-link URLs
   isCostMode?: boolean; // When true, show cost heatmap and per-message cost badges
+  activeThreadId?: string | null; // et0r: subagent thread shown; null/undefined = Main
+  onOpenThread?: (threadId: string) => void; // et0r: open a subagent thread from its card
 }
 
 /**
@@ -87,7 +91,7 @@ function CostBarSlot({ messages, messageCosts, totalCost, selectedIndex, onSeek 
   );
 }
 
-function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode }: ClaudeMessageTimelineProps) {
+function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, activeThreadId, onOpenThread }: ClaudeMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -98,6 +102,17 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
 
   // Build tool name map from all messages (not just filtered)
   const toolNameMap = useMemo(() => buildToolNameMap(allMessages), [allMessages]);
+
+  // et0r: subagent index over the full stream (not just filtered) so a card
+  // resolves its agent even when the launching tool_use row is filtered out.
+  const threadContext = useMemo<ClaudeThreadContextValue>(
+    () => ({
+      agentIndex: buildClaudeAgentIndex(allMessages),
+      onOpenThread,
+      activeThreadId: activeThreadId ?? null,
+    }),
+    [allMessages, onOpenThread, activeThreadId],
+  );
 
   // Compute per-message cost map (allMessages index → $ cost) — only when cost mode is on.
   // Deduplicates by message.id: multiple JSONL lines share the same message.id
@@ -422,107 +437,109 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
   }
 
   return (
-    <div className={styles.timelineContainer}>
-      <div ref={parentRef} className={styles.timeline}>
-        <ScrollNavButtons
-          scrollRef={parentRef}
-          onScrollToTop={scrollToTop}
-          onScrollToBottom={scrollToBottom}
-          contentDependency={messages.length}
-          onSearchClick={search.open}
-          rightOffset={isCostMode ? SCROLL_NAV_COST_MODE_RIGHT : undefined}
+    <ClaudeThreadContext.Provider value={threadContext}>
+      <div className={styles.timelineContainer}>
+        <div ref={parentRef} className={styles.timeline}>
+          <ScrollNavButtons
+            scrollRef={parentRef}
+            onScrollToTop={scrollToTop}
+            onScrollToBottom={scrollToBottom}
+            contentDependency={messages.length}
+            onSearchClick={search.open}
+            rightOffset={isCostMode ? SCROLL_NAV_COST_MODE_RIGHT : undefined}
+          />
+
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const item = virtualItems[virtualItem.index];
+              if (!item) return null;
+
+              const isMessage = item.type === 'message';
+              const isSelected = isMessage && item.index === selectedIndex;
+
+              return (
+                <div
+                  key={virtualItem.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualItem.index}
+                  onMouseEnter={isMessage ? () => handleMessageHover(item.index) : undefined}
+                >
+                  {item.type === 'separator' ? (
+                    <TimeSeparator label={item.label} />
+                  ) : (
+                    <ClaudeTimelineMessage
+                      message={item.message}
+                      toolNameMap={toolNameMap}
+                      previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
+                      isSelected={isSelected}
+                      isDeepLinkTarget={targetMessageAllIndex !== null && item.index === targetMessageAllIndex}
+                      isCurrentSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
+                      searchQuery={search.isOpen ? search.highlightQuery : undefined}
+                      sessionId={sessionId}
+                      roleLabel={getClaudeRoleLabel(item.message)}
+                      isCostMode={isCostMode}
+                      messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
+                      correctedTokenUsage={isCostMode ? correctedUsageByIndex.get(item.index) : undefined}
+                      onSkipToNext={nextOfSameRole.has(item.filteredIndex)
+                        ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
+                        : undefined}
+                      onSkipToPrevious={prevOfSameRole.has(item.filteredIndex)
+                        ? () => scrollToFilteredIndex(prevOfSameRole.get(item.filteredIndex)!)
+                        : undefined}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={`${styles.costBarWrapper} ${isCostMode ? styles.costBarWrapperVisible : ''}`}>
+          {isCostMode && (
+            <CostBarSlot
+              messages={allMessages}
+              messageCosts={messageCosts}
+              totalCost={totalCost}
+              selectedIndex={effectiveSelectedIndex}
+              onSeek={scrollToMessage}
+            />
+          )}
+        </div>
+
+        <TimelineBar
+          messages={allMessages}
+          selectedIndex={effectiveSelectedIndex}
+          visibleIndices={visibleIndices}
+          onSeek={scrollToMessage}
         />
 
-        <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
-          {virtualizer.getVirtualItems().map((virtualItem) => {
-            const item = virtualItems[virtualItem.index];
-            if (!item) return null;
-
-            const isMessage = item.type === 'message';
-            const isSelected = isMessage && item.index === selectedIndex;
-
-            return (
-              <div
-                key={virtualItem.index}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
-                ref={virtualizer.measureElement}
-                data-index={virtualItem.index}
-                onMouseEnter={isMessage ? () => handleMessageHover(item.index) : undefined}
-              >
-                {item.type === 'separator' ? (
-                  <TimeSeparator label={item.label} />
-                ) : (
-                  <ClaudeTimelineMessage
-                    message={item.message}
-                    toolNameMap={toolNameMap}
-                    previousMessage={item.filteredIndex > 0 ? messages[item.filteredIndex - 1] : undefined}
-                    isSelected={isSelected}
-                    isDeepLinkTarget={targetMessageAllIndex !== null && item.index === targetMessageAllIndex}
-                    isCurrentSearchMatch={search.currentMatchFilteredIndex === item.filteredIndex}
-                    searchQuery={search.isOpen ? search.highlightQuery : undefined}
-                    sessionId={sessionId}
-                    roleLabel={getClaudeRoleLabel(item.message)}
-                    isCostMode={isCostMode}
-                    messageCost={isCostMode ? messageCosts.get(item.index) : undefined}
-                    correctedTokenUsage={isCostMode ? correctedUsageByIndex.get(item.index) : undefined}
-                    onSkipToNext={nextOfSameRole.has(item.filteredIndex)
-                      ? () => scrollToFilteredIndex(nextOfSameRole.get(item.filteredIndex)!)
-                      : undefined}
-                    onSkipToPrevious={prevOfSameRole.has(item.filteredIndex)
-                      ? () => scrollToFilteredIndex(prevOfSameRole.get(item.filteredIndex)!)
-                      : undefined}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className={`${styles.costBarWrapper} ${isCostMode ? styles.costBarWrapperVisible : ''}`}>
-        {isCostMode && (
-          <CostBarSlot
-            messages={allMessages}
-            messageCosts={messageCosts}
-            totalCost={totalCost}
-            selectedIndex={effectiveSelectedIndex}
-            onSeek={scrollToMessage}
+        {search.isOpen && (
+          <TranscriptSearchBar
+            query={search.query}
+            onQueryChange={search.setQuery}
+            currentMatch={search.matches.length > 0 ? search.currentMatchIndex + 1 : 0}
+            totalMatches={search.matches.length}
+            onNext={search.goToNextMatch}
+            onPrev={search.goToPreviousMatch}
+            onClose={search.close}
+            inputRef={search.inputRef}
           />
         )}
       </div>
-
-      <TimelineBar
-        messages={allMessages}
-        selectedIndex={effectiveSelectedIndex}
-        visibleIndices={visibleIndices}
-        onSeek={scrollToMessage}
-      />
-
-      {search.isOpen && (
-        <TranscriptSearchBar
-          query={search.query}
-          onQueryChange={search.setQuery}
-          currentMatch={search.matches.length > 0 ? search.currentMatchIndex + 1 : 0}
-          totalMatches={search.matches.length}
-          onNext={search.goToNextMatch}
-          onPrev={search.goToPreviousMatch}
-          onClose={search.close}
-          inputRef={search.inputRef}
-        />
-      )}
-    </div>
+    </ClaudeThreadContext.Provider>
   );
 }
 

@@ -15,7 +15,7 @@ import {
   countClaudeCategories,
   claudeItemMatchesFilter,
 } from '@/components/session/claudeCategories';
-import { isAssistantMessage } from '@/types';
+import { isAssistantMessage, type TranscriptLine } from '@/types';
 import { computeSessionMeta } from '@/utils/sessionMeta';
 import {
   calculateCost,
@@ -25,7 +25,35 @@ import {
 } from '@/utils/tokenStats';
 import ClaudeFilterDropdown from '@/components/session/ClaudeFilterDropdown';
 import ClaudeTranscriptPane from '@/components/session/ClaudeTranscriptPane';
-import type { ClaudeAdapter } from './types';
+import {
+  agentDisplayName,
+  agentFileName,
+  buildClaudeAgentIndex,
+} from '@/components/transcript/claude/claudeAgentIndex';
+import type { ClaudeAdapter, TranscriptThreadRef } from './types';
+
+/**
+ * et0r: subagents launched from one thread's stream, as subtab refs. Labels
+ * fall back description → subagent_type → agentId; duplicates get " (n)".
+ */
+function discoverClaudeThreads(
+  items: TranscriptLine[],
+  parentThreadId: string | null,
+): TranscriptThreadRef[] {
+  const labelCounts = new Map<string, number>();
+  return Array.from(buildClaudeAgentIndex(items).agents.values(), (agent) => {
+    const base = agentDisplayName(agent);
+    const count = (labelCounts.get(base) ?? 0) + 1;
+    labelCounts.set(base, count);
+    return {
+      id: agent.agentId,
+      fileName: agent.fileName,
+      label: count === 1 ? base : `${base} (${count})`,
+      parentThreadId,
+      launchTargetId: agent.resultMessageUuid,
+    };
+  });
+}
 
 export const claudeAdapter: ClaudeAdapter = {
   id: 'claude-code',
@@ -75,6 +103,11 @@ export const claudeAdapter: ClaudeAdapter = {
 
   countCategories: countClaudeCategories,
   itemMatchesFilter: claudeItemMatchesFilter,
+
+  threads: {
+    discover: discoverClaudeThreads,
+    fileNameFor: agentFileName,
+  },
 
   tokensCostTooltip:
     'Estimated API cost based on token usage and model pricing (assumes 5-minute prompt caching)',
@@ -160,6 +193,9 @@ export const claudeAdapter: ClaudeAdapter = {
     error,
     targetId,
     isCostMode,
+    activeThreadId,
+    onOpenThread,
+    notSynced,
   }) {
     return (
       <ClaudeTranscriptPane
@@ -170,6 +206,9 @@ export const claudeAdapter: ClaudeAdapter = {
         sessionId={sessionId}
         targetMessageUuid={targetId}
         isCostMode={isCostMode}
+        activeThreadId={activeThreadId}
+        onOpenThread={onOpenThread}
+        notSynced={notSynced}
       />
     );
   },

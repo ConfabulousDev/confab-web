@@ -1,5 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { TranscriptLine, ContentBlock, TextBlock } from '@/types';
+import { useOpenOnRisingEdge } from '@/hooks/useOpenOnRisingEdge';
+import SubagentCard from './SubagentCard';
+import { findNotifiedAgent, getTaskNotificationText, parseTaskNotification } from './claudeAgentIndex';
+import { useClaudeThread } from './claudeThreadContext';
 import { BashToolResultSchema, type BashToolResult } from '@/schemas/claudeTranscript';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
@@ -214,15 +218,8 @@ interface UnknownRawJsonProps {
 function UnknownRawJson({ message, searchQuery, isCurrentSearchMatch }: UnknownRawJsonProps) {
   // Controlled `open` so the user can still toggle, auto-opened on the rising
   // edge of becoming the active match so the highlight is visible without an
-  // extra click (React "adjust state on prop change" pattern, same as
-  // UnknownRawDetails).
-  const [open, setOpen] = useState(false);
-  const [prevIsCurrentMatch, setPrevIsCurrentMatch] = useState(false);
-  const isCurrentMatch = !!isCurrentSearchMatch;
-  if (isCurrentMatch !== prevIsCurrentMatch) {
-    setPrevIsCurrentMatch(isCurrentMatch);
-    if (isCurrentMatch) setOpen(true);
-  }
+  // extra click (same as UnknownRawDetails).
+  const [open, setOpen] = useOpenOnRisingEdge(!!isCurrentSearchMatch);
 
   return (
     <details
@@ -244,6 +241,7 @@ function UnknownRawJson({ message, searchQuery, isCurrentSearchMatch }: UnknownR
 function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelected, isDeepLinkTarget, isCurrentSearchMatch, searchQuery, sessionId, onSkipToNext, onSkipToPrevious, roleLabel: roleLabelProp, isCostMode, messageCost, correctedTokenUsage }: ClaudeTimelineMessageProps) {
   const { copy: copyText, copied: textCopied } = useCopyToClipboard();
   const { copy: copyLink, copied: linkCopied } = useCopyToClipboard();
+  const { agentIndex, onOpenThread, activeThreadId } = useClaudeThread();
 
   const styleClass = getStyleClass(message);
   const roleLabel = getClaudeRoleLabel(message);
@@ -266,6 +264,20 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
   // Bash `toolUseResult` metadata (interrupted / persisted-output / exit-code
   // interpretation) rides on the message as a sibling of its tool_result block.
   const bashToolUseResult = useMemo(() => getBashToolUseResult(message), [message]);
+
+  // et0r D5: a `<task-notification>` user message for a known subagent renders
+  // as a "Subagent finished" card. Background-command notifications (no
+  // matching agent) keep the plain text body. Queued-command attachment
+  // notifications are handled in QueuedCommand.
+  const agentNotification = useMemo(() => {
+    if (!isUserMessage(message)) return null;
+    const text = getTaskNotificationText(message);
+    if (!text) return null;
+    const notification = parseTaskNotification(text);
+    if (!notification) return null;
+    const agent = findNotifiedAgent(agentIndex, notification);
+    return agent ? { text, notification, agent } : null;
+  }, [message, agentIndex]);
 
   // Get timestamp if available
   const timestamp = 'timestamp' in message && typeof message.timestamp === 'string' ? message.timestamp : undefined;
@@ -322,7 +334,8 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
 
   function handleCopyLink() {
     if (!messageUuid || !sessionId) return;
-    copyLink(`${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${messageUuid}`);
+    const agentParam = activeThreadId ? `&agent=${encodeURIComponent(activeThreadId)}` : '';
+    copyLink(`${window.location.origin}/sessions/${sessionId}?tab=transcript&msg=${messageUuid}${agentParam}`);
   }
 
   const className = [
@@ -339,7 +352,8 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <span className={styles.role}>{roleLabel}</span>
-          {agentId && <span className={styles.agentBadge}>{agentId}</span>}
+          {/* et0r D14: redundant inside the agent's own thread (every row matches). */}
+          {agentId && agentId !== activeThreadId && <span className={styles.agentBadge}>{agentId}</span>}
           {skillName && <span className={styles.skillBadge}>/{skillName}</span>}
           {timestamp && <span className={styles.timestamp}>{formatTimestamp(timestamp)}</span>}
         </div>
@@ -460,17 +474,55 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
           <AwaySummary message={message} />
         ) : isInformationalMessage(message) ? (
           <InformationalBanner message={message} />
-        ) : (
-          contentBlocks.map((block, i) => (
-            <ContentBlockComponent
-              key={i}
-              block={block}
-              toolName={getToolNameForResult(block, toolNameMap)}
+        ) : agentNotification ? (
+          <SubagentCard
+            variant="finished"
+            agent={agentNotification.agent}
+            status={agentNotification.notification.status}
+            summary={agentNotification.notification.summary}
+            rawLabel="Raw notification"
+            onOpenThread={onOpenThread}
+            isCurrentSearchMatch={isCurrentSearchMatch}
+          >
+            <CodeBlock
+              code={agentNotification.text}
+              language="xml"
               searchQuery={searchQuery}
               isCurrentSearchMatch={isCurrentSearchMatch}
-              toolUseResult={isToolResultBlock(block) ? bashToolUseResult : undefined}
             />
-          ))
+          </SubagentCard>
+        ) : (
+          contentBlocks.map((block, i) => {
+            const rendered = (
+              <ContentBlockComponent
+                key={i}
+                block={block}
+                toolName={getToolNameForResult(block, toolNameMap)}
+                searchQuery={searchQuery}
+                isCurrentSearchMatch={isCurrentSearchMatch}
+                toolUseResult={isToolResultBlock(block) ? bashToolUseResult : undefined}
+              />
+            );
+            // et0r D4/D8: an Agent/Task tool_result becomes a launch card with
+            // the raw result collapsed underneath.
+            const launchedAgent = isToolResultBlock(block)
+              ? agentIndex.byToolUseId.get(block.tool_use_id)
+              : undefined;
+            return launchedAgent ? (
+              <SubagentCard
+                key={i}
+                variant="launch"
+                agent={launchedAgent}
+                rawLabel="Raw result"
+                onOpenThread={onOpenThread}
+                isCurrentSearchMatch={isCurrentSearchMatch}
+              >
+                {rendered}
+              </SubagentCard>
+            ) : (
+              rendered
+            );
+          })
         )}
         {isUnknownMessage && (
           <>

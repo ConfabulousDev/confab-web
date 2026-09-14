@@ -23,6 +23,20 @@ Each Claude Code session produces these cards:
 - **Conversation** — turn structure, active time, message counts.
 - **Repo activity** — files touched, language breakdown.
 
+## Subagents
+
+When a session launches subagents with the Agent tool (or the older Task tool), the transcript shows each launch as a subagent card: its description, type, model, and status. Foreground agents also show duration, tokens, and tool-use count. When a background agent finishes, its completion appears as a "Subagent finished" card.
+
+Select **Open transcript** on a card to read that subagent's own conversation. It opens in a tab under **Transcript**, next to **Main**:
+
+- Subagents launched from the main conversation get a tab each, in launch order. A subagent launched by another subagent gets a tab once you open it.
+- **← Launched from …** returns to the conversation that launched the subagent, at the launch point.
+- The open tab is in the URL (`?agent=<id>`), so links copied from a subagent tab open that tab. Anyone who can view the session can view its subagents.
+- Transcript filters apply to whichever tab is open. Search runs within the open tab.
+- A running subagent's tab updates live. If its transcript hasn't synced yet, the tab says so and loads when it arrives.
+
+Subagents started by workflow runs don't appear in the transcript yet.
+
 ## Pricing
 
 Confabulous tracks pricing for every published Claude model. New models are added to the pricing table as Anthropic publishes them.

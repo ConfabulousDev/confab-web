@@ -5,6 +5,13 @@ import type { SessionAnalytics, GitHubLink } from '@/services/api';
 import type { RawCodexLine } from '@/schemas/codexTranscript';
 import { KeyboardShortcutProvider } from '@/contexts/KeyboardShortcutContext';
 import { makeSessionDetailFixture } from '@/test-fixtures/session';
+import {
+  agentToolUse,
+  asyncAgentResult,
+  syncAgentResult,
+  taskNotificationMessage,
+  subagentAssistantText,
+} from '@/test-fixtures/claudeSubagent';
 import SessionViewer from './SessionViewer';
 import { buildCodexAnalyticsFixture } from './codexAnalyticsFixture';
 
@@ -323,6 +330,47 @@ export const WithCustomTitle: Story = {
     isOwner: true,
     isShared: false,
     initialMessages: mockMessages,
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
+  },
+};
+
+/**
+ * et0r: Claude session that launched subagents. Opens on the Transcript tab;
+ * the subtab strip lists Main + each subagent. Click a card's
+ * "Open transcript →" or a tab to switch threads; the nested helper inside
+ * "Explore the auth middleware" joins the strip when opened.
+ */
+const subagentMainMessages: TranscriptLine[] = [
+  mockUserMessage,
+  agentToolUse({ uuid: 'sa-u1', toolUseId: 'toolu_sa1', description: 'Explore the auth middleware', subagentType: 'Explore', timestamp: '2025-01-15T10:00:10Z' }),
+  asyncAgentResult({ uuid: 'sa-r1', toolUseId: 'toolu_sa1', agentId: 'a1b2c3d4e5f60718', description: 'Explore the auth middleware', timestamp: '2025-01-15T10:00:11Z' }),
+  agentToolUse({ uuid: 'sa-u2', toolUseId: 'toolu_sa2', description: 'Find every caller of resolveRepo', subagentType: 'general-purpose', timestamp: '2025-01-15T10:00:12Z' }),
+  syncAgentResult({ uuid: 'sa-r2', toolUseId: 'toolu_sa2', agentId: 'b2c3d4e5f6071829', timestamp: '2025-01-15T10:01:30Z' }),
+  taskNotificationMessage('sa-n1', { taskId: 'a1b2c3d4e5f60718', toolUseId: 'toolu_sa1', summary: 'Agent "Explore the auth middleware" finished' }, '2025-01-15T10:03:00Z'),
+];
+
+export const WithSubagents: Story = {
+  args: {
+    session: mockSession,
+    isOwner: true,
+    isShared: false,
+    activeTab: 'transcript',
+    onTabChange: () => {},
+    initialMessages: subagentMainMessages,
+    initialThreadMessages: {
+      a1b2c3d4e5f60718: [
+        subagentAssistantText('sa-a1', 'a1b2c3d4e5f60718', 'Reading `internal/auth/middleware.go` first.', '2025-01-15T10:00:20Z'),
+        agentToolUse({ uuid: 'sa-a2', toolUseId: 'toolu_nested', description: 'Read session store', agentId: 'a1b2c3d4e5f60718', timestamp: '2025-01-15T10:00:30Z' }),
+        asyncAgentResult({ uuid: 'sa-a3', toolUseId: 'toolu_nested', agentId: 'c3d4e5f607182930', description: 'Read session store', timestamp: '2025-01-15T10:00:31Z' }),
+      ],
+      b2c3d4e5f6071829: [
+        subagentAssistantText('sa-b1', 'b2c3d4e5f6071829', 'Found 4 call sites in backend/internal/db.', '2025-01-15T10:01:00Z'),
+      ],
+      c3d4e5f607182930: [
+        subagentAssistantText('sa-c1', 'c3d4e5f607182930', 'The session store lives in internal/db/dbauth.', '2025-01-15T10:00:40Z'),
+      ],
+    },
     initialAnalytics: mockAnalytics,
     initialGithubLinks: mockGithubLinks,
   },
