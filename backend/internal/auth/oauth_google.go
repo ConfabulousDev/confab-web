@@ -27,6 +27,13 @@ type googleUser struct {
 	Picture       string `json:"picture"`
 }
 
+// Google OAuth endpoints. Package-level vars (not consts) only so in-package
+// tests can point them at httptest servers; production never reassigns them.
+var (
+	googleTokenURL    = "https://oauth2.googleapis.com/token"
+	googleUserinfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
+)
+
 // HandleGoogleLogin initiates Google OAuth flow
 func HandleGoogleLogin(config *OAuthConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +201,7 @@ func exchangeGoogleCode(code, codeVerifier string, config *OAuthConfig) (string,
 		"code_verifier": {codeVerifier}, // PKCE (r9zn)
 	}
 
-	resp, err := oauthHTTPClient().PostForm("https://oauth2.googleapis.com/token", data)
+	resp, err := oauthHTTPClient().PostForm(googleTokenURL, data)
 	if err != nil {
 		return "", err
 	}
@@ -227,7 +234,7 @@ func exchangeGoogleCode(code, codeVerifier string, config *OAuthConfig) (string,
 
 // getGoogleUser fetches user info from Google
 func getGoogleUser(accessToken string) (*googleUser, error) {
-	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	req, err := http.NewRequest("GET", googleUserinfoURL, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -154,6 +154,11 @@ func NewResendService(apiKey, fromAddress, fromName, frontendURL string) *Resend
 	}
 }
 
+// resendEmailsURL is the Resend send endpoint. A package-level var (not a
+// const) only so in-package tests can point it at an httptest server;
+// production never reassigns it.
+var resendEmailsURL = "https://api.resend.com/emails"
+
 // resendRequest is the request body for Resend API
 type resendRequest struct {
 	From    string   `json:"from"`
@@ -221,7 +226,7 @@ func (s *ResendService) SendShareInvitation(ctx context.Context, params ShareInv
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.resend.com/emails", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", resendEmailsURL, bytes.NewReader(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

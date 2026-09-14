@@ -3,10 +3,57 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
+
+// TestRedirectUserIneligible maps each checkUserEligibility outcome to its
+// login-page error code. The server_error branch is not reachable through the
+// callbacks without sabotaging the DB, so the mapping is asserted directly.
+func TestRedirectUserIneligible(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		wantCode string
+		wantDesc string
+	}{
+		{"domain not permitted", errEmailDomainNotPermitted, "access_denied", "Your email domain is not permitted. Contact your administrator."},
+		{"wrapped user cap", fmt.Errorf("check: %w", errUserCapReached), "access_denied", "This application has reached its user limit. Please contact the administrator."},
+		{"eligibility check failure", errors.New("connection refused"), "server_error", "An error occurred. Please try again later."},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			redirectUserIneligible(rec, httptest.NewRequest(http.MethodGet, "/cb", nil), "http://frontend.test", "github", "a@example.com", c.err)
+
+			if rec.Code != http.StatusTemporaryRedirect {
+				t.Fatalf("status = %d, want 307", rec.Code)
+			}
+			raw := rec.Header().Get("Location")
+			loc, err := url.Parse(raw)
+			if err != nil {
+				t.Fatalf("bad Location %q: %v", raw, err)
+			}
+			if got := loc.Scheme + "://" + loc.Host + loc.Path; got != "http://frontend.test/login" {
+				t.Errorf("redirect = %q, want http://frontend.test/login", got)
+			}
+			if got := loc.Query().Get("error"); got != c.wantCode {
+				t.Errorf("error = %q, want %q", got, c.wantCode)
+			}
+			if got := loc.Query().Get("error_description"); got != c.wantDesc {
+				t.Errorf("error_description = %q, want %q", got, c.wantDesc)
+			}
+			// Internal error text must never reach the login page.
+			if strings.Contains(raw, url.QueryEscape(c.err.Error())) {
+				t.Errorf("internal error text leaked into redirect: %q", raw)
+			}
+		})
+	}
+}
 
 // TestValidateOAuthCallback covers the shared state+PKCE+code validation block
 // extracted from the three OAuth callbacks (e7py). It must reproduce the exact
