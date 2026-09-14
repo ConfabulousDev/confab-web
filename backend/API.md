@@ -4,7 +4,7 @@ This document describes the backend API surface for the Confab web application. 
 
 ## Authentication
 
-The API uses two authentication methods:
+Endpoints use one of four authentication modes. Each endpoint section below names the mode it requires.
 
 ### 1. API Key Authentication (CLI)
 Used by CLI tools. All CLI requests include these headers:
@@ -16,7 +16,13 @@ User-Agent: confab/1.2.3 (darwin; arm64)
 The `User-Agent` header includes CLI version, OS, and architecture.
 
 ### 2. Session Cookie Authentication (Web)
-Used by the web frontend. Session cookie (`confab_session`) is set after OAuth login. CSRF protection is provided automatically via Fetch metadata validation (no token required).
+Used by the web frontend. Session cookie (`confab_session`) is set after OAuth or password login. CSRF protection is provided automatically via Fetch metadata validation (no token required). Requests without a valid session get `401`.
+
+### 3. Session Cookie or API Key
+A few endpoints shared by the CLI and the web UI accept either credential (see [Session Cookie or API Key](#session-cookie-or-api-key)). CSRF validation runs only when the request authenticates with the session cookie; `Authorization: Bearer` requests skip it.
+
+### 4. Optional Authentication (Canonical Session Access)
+Canonical session reads (see [Canonical Session Access](#canonical-session-access-optional-auth)) resolve the caller in this order: API key, then session cookie, then demo auto-impersonation (when `DEMO_IDENTITY_EMAIL` is set), then anonymous. Anonymous callers reach only public shares. When `ALLOWED_EMAIL_DOMAINS` is set, anonymous requests get `401` instead.
 
 ## Base URL
 
@@ -410,7 +416,7 @@ Authorization: Bearer <api_key>
 }
 ```
 
-**Access rules:** Follows the canonical access model (CF-132). Owner always has access. Recipient shares, system shares, and public shares also grant access. The `SHARE_ALL_SESSIONS` env var (on-prem) is respected.
+**Access rules:** Follows the canonical access model (CF-132). Owner always has access. Recipient shares, system shares, and public shares also grant access. The `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` env var (on-prem) is respected.
 
 **Error responses:**
 - `400` — Invalid `max_chars` value
@@ -486,6 +492,32 @@ Uses canonical access model (CF-132). Validates the file exists in the session's
 - `404` — Session not found, no access, or file not found
 
 ---
+
+## Web Endpoints (Session Auth)
+
+Endpoints used by the web dashboard. All require [session cookie authentication](#2-session-cookie-authentication-web) (CSRF enforced via Fetch metadata); a missing or invalid session returns `401`. "Owner" in the Auth column means the caller must own the session; non-owners get `403` or `404`, depending on the endpoint.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/me` | Session | Current user, plus onboarding flags `has_own_sessions` and `has_api_keys`, and `is_admin` (`SUPER_ADMIN_EMAILS` or `users.is_admin`). |
+| `POST` | `/api/v1/keys` | Session | Create an API key from `{"name": "..."}` (default `"API Key"`). The raw `key` appears only in this response. `409` on a duplicate name or the per-user key limit. |
+| `GET` | `/api/v1/keys` | Session | List the caller's API keys (`id`, `user_id`, `name`, `created_at`, `last_used_at`; never the key). |
+| `DELETE` | `/api/v1/keys/{id}` | Session | Delete one of the caller's API keys. `204`; `404` if not found. |
+| `GET` | `/api/v1/sessions` | Session | Cursor-paginated list of sessions visible to the caller (owned, recipient-shared, system-shared, or all sessions with `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true`), plus filter options. Query: `repo`, `branch`, `owner`, `pr`, `provider` (comma-separated), `q`, `cursor`. |
+| `PATCH` | `/api/v1/sessions/{id}/title` | Session, owner | Set `custom_title` (max 255 chars), or `null` to revert to the derived title. Returns the updated session detail. |
+| `DELETE` | `/api/v1/sessions/{id}` | Session, owner | Delete a session, its stored transcript chunks, and dependent rows (sync files, shares). |
+| `POST` | `/api/v1/sessions/{id}/share` | Session, owner | Create a share from `is_public`, `recipients` (required unless public), `expires_in_days`, `skip_notifications`. Emails recipients unless skipped. `403` when `ENABLE_SHARE_CREATION` is off; `429` on the daily share or email quota. |
+| `GET` | `/api/v1/sessions/{id}/shares` | Session, owner | List shares for one session. |
+| `GET` | `/api/v1/shares` | Session | List shares across all sessions the caller owns. |
+| `DELETE` | `/api/v1/shares/{shareID}` | Session, owner | Revoke a share. `204`; `404` if not found or not the caller's. |
+| `DELETE` | `/api/v1/sessions/{id}/github-links/{linkID}` | Session, owner | Remove a GitHub link from a session. `204`. |
+| `POST` | `/api/v1/sessions/{id}/analytics/smart-recap/regenerate` | Session, owner | Regenerate the smart recap synchronously and return it in the [session analytics](#get-session-analytics) response shape. `404` when smart recap is disabled; `403` for non-owners or an exhausted recap quota; `409` while a generation is in progress. |
+| `POST` | `/api/v1/client-errors` | Session | Log frontend error reports (e.g. transcript schema drift) server-side. Body: `category`, `errors` (1-50 items, each with non-empty `details`), optional `session_id` and `context`. |
+| `GET` | `/api/v1/trends` | Session | Aggregated analytics across visible sessions. See [Trends](#trends-aggregated-analytics). |
+| `GET` | `/api/v1/org/analytics` | Session | Per-user organization analytics. Registered only when `ENABLE_ORG_ANALYTICS=true`. See [Organization Analytics](#organization-analytics). |
+| `GET` | `/api/v1/org/repos` | Session | Repo list for the organization filter. Registered only when `ENABLE_ORG_ANALYTICS=true`. See [List Organization Repos](#list-organization-repos). |
+
+Admin routes under `/api/v1/admin/` use the same session + CSRF chain plus an admin check; see [Admin Endpoints](#admin-endpoints-super-admin-only).
 
 ### Trends (Aggregated Analytics)
 
@@ -821,6 +853,30 @@ Requires `ENABLE_ORG_ANALYTICS=true`. Same privacy model and middleware chain as
 
 ---
 
+## Session Cookie or API Key
+
+These endpoints accept either a session cookie or an `Authorization: Bearer` API key. CSRF validation runs only for cookie-authenticated requests.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/sessions/by-external-id/{external_id}` | Session or API key | Look up one of the caller's own sessions by its CLI `external_id`. Returns `{"session_id": "<uuid>"}`; `404` if not found or not owned. |
+| `POST` | `/api/v1/sessions/{id}/github-links` | Session or API key, owner | Link a GitHub PR or commit URL to a session. Body: `url`, `source` (`cli_hook` or `manual`), optional `link_type` (must match the URL) and `title`. Returns `201` with the created link. |
+
+---
+
+## Canonical Session Access (Optional Auth)
+
+Session reads that serve owners, share recipients, and anonymous viewers of public shares from one URL. Authentication is [optional](#4-optional-authentication-canonical-session-access). Access resolves in order: owner, then recipient share, then system share (any authenticated user; every session when `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true`), then public share. The [External API](#external-api-endpoints-api-key-auth) endpoints use the same model with API key auth.
+
+Unless noted, a caller without access gets `401` ("Sign in to view this session") when the session has non-public shares that signing in could unlock, otherwise `404`. A session whose owner is deactivated returns `403`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/sessions/{id}` | Optional | Session detail: metadata, git info, and `files` (sync files with `last_synced_line`). `hostname`, `username`, `cwd`, and `transcript_path` are owner-only; public-share viewers don't receive `owner_email`. |
+| `GET` | `/api/v1/sessions/{id}/sync/file` | Optional | Raw JSONL of one sync file as `text/plain`. Query: `file_name` (required), `line_offset` (return only lines after it). No access returns `404`. |
+| `GET` | `/api/v1/sessions/{id}/analytics` | Optional | Computed session analytics. See [Get Session Analytics](#get-session-analytics). |
+| `GET` | `/api/v1/sessions/{id}/github-links` | Optional | `{"links": [...]}` for anyone with session access; `404` otherwise. |
+
 ### Session Analytics
 
 #### Get Session Analytics
@@ -828,7 +884,7 @@ Requires `ENABLE_ORG_ANALYTICS=true`. Same privacy model and middleware chain as
 GET /api/v1/sessions/{id}/analytics?as_of_line=<n>
 ```
 
-Returns computed analytics for a session. Uses the same canonical access model as Get Session Detail.
+Returns computed analytics for a session. Uses the same canonical access model as `GET /api/v1/sessions/{id}` (see [Canonical Session Access](#canonical-session-access-optional-auth)).
 
 **Query Parameters:**
 | Parameter | Type | Required | Description |
@@ -1069,10 +1125,11 @@ Example with partial failure:
 
 ## OAuth Endpoints (No prefix)
 
-These endpoints handle OAuth authentication flow:
+These endpoints handle browser and CLI login. Provider login/callback routes are registered only when that provider is configured.
 
 | Endpoint | Description |
 |----------|-------------|
+| `POST /auth/password/login` | Password login (form fields `email`, `password`). Sets the session cookie and redirects. Registered only when password auth is enabled. |
 | `GET /auth/github/login` | Initiate GitHub OAuth |
 | `GET /auth/github/callback` | GitHub OAuth callback |
 | `GET /auth/google/login` | Initiate Google OAuth |
@@ -1080,6 +1137,7 @@ These endpoints handle OAuth authentication flow:
 | `GET /auth/oidc/login` | Initiate generic OIDC OAuth (Okta, Auth0, Azure AD, Keycloak, etc.) |
 | `GET /auth/oidc/callback` | Generic OIDC OAuth callback |
 | `GET /auth/logout` | Logout (clears session) |
+| `GET /auth/cli/authorize` | CLI login. Requires a web session (otherwise redirects to `/login`), then creates or replaces an API key named by `name` and redirects to the localhost `callback` URL with `?key=`. Non-localhost callbacks get `400`. |
 
 All three login endpoints use **OAuth 2.0 PKCE (S256)**: the login handler generates a `code_verifier` (32 random bytes, base64url) stored in an HttpOnly `oauth_verifier` cookie (alongside `oauth_state`, `MaxAge` 300), and sends `code_challenge=base64url(SHA256(verifier))` + `code_challenge_method=S256` on the authorize URL. The callback reads + clears the single-use verifier cookie (rejecting with `400` if absent, same shape as an invalid `state`) and includes `code_verifier` in the token-exchange POST. No client action required.
 
@@ -1670,6 +1728,8 @@ Returns the effective per-million-token model price table. No authentication req
 |----------|-------------|
 | `GET /health` | Health check. Response: `{"status": "ok"}` |
 | `GET /help/delete-account` | Account deletion help page |
+| `GET /install` | `301` redirect to the CLI install script (`https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.sh`) |
+| `GET /` | API info: `{"service": "confab-backend", "version": "v1"}`. Registered only when `STATIC_FILES_DIR` is unset; otherwise the frontend is served. |
 
 ---
 
@@ -1703,6 +1763,7 @@ Common HTTP status codes:
 | Upload endpoints | 2.78 req/sec (10k/hour) | 2000 |
 | Validation | 0.5 req/sec | 10 |
 | External API | 30 req/sec | 60 |
+| Client error reports | 0.5 req/sec | 5 |
 
 Upload rate limiting is per-user (not per-IP) to support backfill scenarios.
 External API rate limiting is per-user (keyed by authenticated user ID).
@@ -1721,7 +1782,7 @@ When `ALLOWED_EMAIL_DOMAINS` is set (comma-separated list of domains), only user
 | Session-authenticated requests | `403 Forbidden` with body `"Email domain not permitted"` |
 | Device code verification | `403 Forbidden` with HTML error `"Your email domain is not permitted"` |
 | Device code token exchange | `403 Forbidden` with JSON `{"error": "access_denied"}` |
-| Optional auth endpoints (session detail, analytics, sync file) | `401 Unauthorized` with `"Authentication required"` (anonymous access blocked) |
+| Optional auth endpoints (session detail, analytics, sync file, GitHub links list) | `401 Unauthorized` with `"Authentication required"` (anonymous access blocked) |
 | Admin user creation | Redirect with error `"Email domain not permitted"` |
 
 **Behavior:**
