@@ -60,11 +60,23 @@ cd backend && go list -m -u all | grep '\['
 ### Test Coverage
 
 ```bash
-# IMPORTANT: Run FULL test suite for accurate coverage
-# The -short flag skips integration tests which provide most of the coverage
-# Example: internal/db goes from 0% (-short) to 69.5% (full)
-cd backend && DOCKER_HOST=unix:///Users/jackie/.orbstack/run/docker.sock go test -cover ./...
+# Full suite, one package at a time, with -coverpkg=./internal/... (Docker
+# required; DOCKER_HOST passes through, e.g. unix://$HOME/.orbstack/run/docker.sock).
+# Writes coverage.out and ends with a per-package coverage table.
+cd backend && make coverage
+
+# Drill into uncovered functions / browse line coverage
+cd backend && go tool cover -func=coverage.out | grep internal/<pkg>/
+cd backend && go tool cover -html=coverage.out
+
+# Quick targeted measure for one package family. Tests that live in other
+# packages (e.g. internal/api/<sub>) still count toward internal/<pkg>.
+cd backend && go test -p 1 -covermode=atomic -coverpkg=./internal/<pkg>/... \
+  -coverprofile=/tmp/pkg.cov ./internal/<pkg>/... ./internal/api/...
+cd backend && COVERAGE_SUMMARY_ONLY=/tmp/pkg.cov ./scripts/coverage.sh
 ```
+
+**Never report numbers from plain `go test -cover ./...`.** Without `-coverpkg`, a package is credited only with its own tests, so code exercised from other packages looks untested (e.g. `internal/api` read ~28% that way vs ~68% with `-coverpkg`, because its HTTP integration tests live in subpackages). Don't use `-short` either — it skips the integration tests that provide most of the coverage. If `go tool cover` complains that a source file is missing, `coverage.out` is stale; re-run `make coverage` (the per-package table doesn't need sources).
 
 ## Phase 2: Manual Code Review
 
@@ -156,17 +168,16 @@ Actively search for opportunities to reduce duplication and simplify logic:
 
 ### DRY Violations - Known Hotspots
 
-**Reviewed and marked as acceptable (see code comments):**
+**Reviewed and marked as acceptable or fixed:**
 
-1. **OAuth Callbacks** (`internal/auth/oauth.go`) - ACCEPTABLE
-   - `HandleGitHubCallback` and `HandleGoogleCallback` share similar logic
+1. **OAuth Callbacks** (`internal/auth/oauth_github.go`, `oauth_google.go`, `oauth_oidc.go`) - ACCEPTABLE
+   - `HandleGitHubCallback`, `HandleGoogleCallback`, and `HandleOIDCCallback` share similar logic
    - Kept separate for clarity, easier debugging, and provider-specific customization
-   - See NOTE comments on each function
 
-2. **Inline HTML Templates** (`internal/auth/oauth.go`, `internal/admin/handlers.go`) - ACCEPTABLE
-   - Simple, self-contained pages that rarely change
+2. **Inline HTML Templates** (`internal/auth/oauth_device.go`) - ACCEPTABLE
+   - Simple, self-contained device-auth pages that rarely change
    - Avoids external template file dependencies
-   - See NOTE comments on `generateDevicePageHTML`, `HandleLoginSelector`, `HandleListUsers`
+   - See the NOTE comment on `generateDevicePageHTML`
 
 3. **Cookie Operations** (`internal/auth/oauth.go`) - FIXED
    - Now uses `clearCookie(w, name)` helper function
@@ -175,39 +186,28 @@ Actively search for opportunities to reduce duplication and simplify logic:
    - `internal/ratelimit`: Token bucket for API rate limiting (allows bursts)
    - `internal/email`: Sliding window for strict email quotas (no bursts)
    - Different algorithms for different requirements
-   - See NOTE comment on `EmailRateLimiter` type
+   - See NOTE comment on the `EmailRateLimiter` type (`internal/email/email.go`)
 
-5. **Session List Queries** (`internal/db/sessions.go`) - ACCEPTABLE
-   - Complex SQL with repeated CTEs for owned/shared/system views
+5. **Session List Queries** (`internal/db/session/session.go`) - ACCEPTABLE
+   - `ListUserSessions` / `ListUserSessionsPaginated`: complex SQL with repeated CTEs for owned/shared/system views
    - Keeping in Go code provides better tooling than database views
-   - See NOTE comment on `ListUserSessions` function
 
-**Remaining items to consider (lower priority):**
-
-6. **Analytics Store Operations** (`internal/analytics/store.go`)
-   - Repetitive get/upsert patterns for each card type (7 card types)
-   - Each has nearly identical structure
-   - **Consider**: Generics or code generation (if adding many more card types)
+6. **Analytics Card Store** (`internal/analytics/store_cards.go`) - FIXED
+   - Per-card get/upsert methods collapsed into a generic `getCard`/`upsertCard` core plus a per-card table registry
+   - Covers the card tables in `analytics.AllCardTableNames` (10 today); add new cards to the registry rather than hand-writing methods
 
 ### Files to Prioritize for Review
 
-**By size/complexity (lines of production code):**
+Start with the largest production files — they most often hide extractable logic. Compute the list at run time (a hardcoded table goes stale):
 
-| File | Lines | Notes |
-|------|-------|-------|
-| `internal/auth/oauth.go` | ~1910 | OAuth flows, device auth, login selector |
-| `internal/api/sync.go` | ~1150 | Sync init/chunk/read handlers |
-| `internal/analytics/store.go` | ~995 | Card storage operations |
-| `internal/admin/handlers.go` | ~711 | Admin user management UI |
-| `internal/db/sessions.go` | ~693 | Session CRUD operations |
-| `internal/api/server.go` | ~715 | Routing, middleware setup |
-| `internal/api/shares.go` | ~650 | Share creation/management |
-| `internal/storage/s3.go` | ~363 | S3/MinIO operations |
+```bash
+cd backend && find internal -name '*.go' ! -name '*_test.go' -exec wc -l {} + | grep -v ' total$' | sort -rn | head -15
+```
 
 ### Simplification Opportunities
 
-1. ~~**Extract shared OAuth logic**~~ - Marked acceptable (see code comments)
-2. ~~**Template files for HTML**~~ - Marked acceptable (see code comments)
+1. ~~**Extract shared OAuth logic**~~ - Marked acceptable (see DRY hotspots above)
+2. ~~**Template files for HTML**~~ - Marked acceptable (see DRY hotspots above)
 3. ~~**Cookie helper functions**~~ - DONE (`clearCookie` helper added)
 4. **Consolidate error response helpers** - Medium value, low risk (optional)
 
@@ -283,8 +283,8 @@ Create a summary with:
 
 **Areas reviewed and marked acceptable:**
 
-- OAuth callbacks: Duplication is intentional for clarity (see code comments)
-- Inline HTML: Kept inline to avoid template dependencies (see code comments)
+- OAuth callbacks: per-provider duplication is intentional for clarity (see DRY hotspots above)
+- Inline HTML: device-auth pages kept inline to avoid template dependencies (NOTE on `generateDevicePageHTML`)
 - Cookie operations: Now use `clearCookie` helper
 
 **Minor items to watch:**
@@ -293,7 +293,14 @@ Create a summary with:
 
 ## Tracking Tech Debt
 
-Create Linear tickets with label `tech-debt`:
+File findings in kata, the project's issue tracker (see the root `CLAUDE.md`). Search first and prefer updating an existing issue over filing a duplicate:
+
+```bash
+kata search "<keywords>" --agent
+kata create "<title>" --body-file <file> --label backend --label tech-debt --agent
+```
+
+Each issue body covers:
 - What the problem is
 - Why it matters
 - Effort estimate (S/M/L)
