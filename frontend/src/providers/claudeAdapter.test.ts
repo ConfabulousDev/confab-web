@@ -15,6 +15,7 @@ import { computeSessionMeta } from '@/utils/sessionMeta';
 import type { TokenUsage } from '@/utils/tokenStats';
 import type { TranscriptLine, UserMessage, AssistantMessage } from '@/types';
 import { claudeAdapter } from './claudeAdapter';
+import { agentToolUse, asyncAgentResult, syncAgentResult } from '@/test-fixtures/claudeSubagent';
 
 vi.mock('@/services/claudeTranscriptService', () => ({
   fetchParsedClaudeTranscript: vi.fn(),
@@ -140,13 +141,11 @@ describe('claudeAdapter', () => {
     vi.mocked(fetchParsedClaudeTranscript).mockResolvedValue({
       sessionId: 's',
       messages,
-      agents: [],
       validationErrors: [],
       totalLines: 1,
       metadata: {
         version: '1.0',
         messageCount: 1,
-        agentCount: 0,
         parseErrorCount: 0,
       },
     });
@@ -326,6 +325,64 @@ describe('claudeAdapter.extendCostTooltip', () => {
     const out = claudeAdapter.extendCostTooltip!(baseLines, usage, msg);
     expect(out.every((l) => !l.includes('Cached (hit)'))).toBe(true);
     expect(out.every((l) => !l.includes('Reasoning'))).toBe(true);
+  });
+});
+
+// et0r: optional `threads` capability — subagent transcripts as subtabs.
+describe('claudeAdapter.threads', () => {
+  it('discovers subagent threads in launch order with file name, parent and launch row', () => {
+    const items: TranscriptLine[] = [
+      agentToolUse({ uuid: 'u1', toolUseId: 't1', description: 'Explore' }),
+      asyncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1', description: 'Explore' }),
+      agentToolUse({ uuid: 'u2', toolUseId: 't2', description: 'Write tests' }),
+      asyncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2', description: 'Write tests' }),
+    ];
+    expect(claudeAdapter.threads?.discover(items, null)).toEqual([
+      { id: 'a1', fileName: 'agent-a1.jsonl', label: 'Explore', parentThreadId: null, launchTargetId: 'r1' },
+      { id: 'a2', fileName: 'agent-a2.jsonl', label: 'Write tests', parentThreadId: null, launchTargetId: 'r2' },
+    ]);
+  });
+
+  it('records the parent thread id for agents discovered inside a subagent stream', () => {
+    const items: TranscriptLine[] = [
+      agentToolUse({ uuid: 's1', toolUseId: 'tn', description: 'Nested', agentId: 'a1' }),
+      asyncAgentResult({ uuid: 's2', toolUseId: 'tn', agentId: 'child', description: 'Nested' }),
+    ];
+    expect(claudeAdapter.threads?.discover(items, 'a1')[0]?.parentThreadId).toBe('a1');
+  });
+
+  it('labels fall back from description to subagent_type to agent id', () => {
+    const items: TranscriptLine[] = [
+      agentToolUse({ uuid: 'u1', toolUseId: 't1', subagentType: 'Explore' }),
+      syncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1' }),
+      agentToolUse({ uuid: 'u2', toolUseId: 't2' }),
+      syncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2' }),
+    ];
+    expect(claudeAdapter.threads?.discover(items, null).map((t) => t.label)).toEqual(['Explore', 'a2']);
+  });
+
+  it('dedups duplicate labels with a (2), (3) suffix', () => {
+    const items: TranscriptLine[] = [
+      agentToolUse({ uuid: 'u1', toolUseId: 't1', description: 'Review' }),
+      asyncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1', description: 'Review' }),
+      agentToolUse({ uuid: 'u2', toolUseId: 't2', description: 'Review' }),
+      asyncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2', description: 'Review' }),
+      agentToolUse({ uuid: 'u3', toolUseId: 't3', description: 'Review' }),
+      asyncAgentResult({ uuid: 'r3', toolUseId: 't3', agentId: 'a3', description: 'Review' }),
+    ];
+    expect(claudeAdapter.threads?.discover(items, null).map((t) => t.label)).toEqual([
+      'Review',
+      'Review (2)',
+      'Review (3)',
+    ]);
+  });
+
+  it('returns no threads for a stream without Agent calls', () => {
+    expect(claudeAdapter.threads?.discover([userMessage('u1', '2026-05-13T01:00:00Z')], null)).toEqual([]);
+  });
+
+  it('builds the thread file name for an arbitrary (deep-linked) thread id', () => {
+    expect(claudeAdapter.threads?.fileNameFor('zz')).toBe('agent-zz.jsonl');
   });
 });
 

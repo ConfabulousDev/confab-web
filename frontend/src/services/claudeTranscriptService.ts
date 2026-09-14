@@ -66,7 +66,6 @@ export function _resetReportedClaudeSessions(): void {
 interface ParsedTranscript {
   sessionId: string;
   messages: TranscriptLine[];
-  agents: AgentNode[];
   /** Validation errors encountered while parsing (empty if all lines valid) */
   validationErrors: TranscriptValidationError[];
   /** Total number of non-empty lines in the file (for line_offset tracking) */
@@ -74,28 +73,10 @@ interface ParsedTranscript {
   metadata: {
     version: string;
     messageCount: number;
-    agentCount: number;
     firstTimestamp?: string;
     lastTimestamp?: string;
     /** Number of lines that failed validation */
     parseErrorCount: number;
-  };
-}
-
-/**
- * Agent node for hierarchical transcript display
- */
-interface AgentNode {
-  agentId: string;
-  transcript: TranscriptLine[];
-  parentToolUseId: string;
-  parentMessageId: string;
-  children: AgentNode[];
-  metadata: {
-    totalDurationMs?: number;
-    totalTokens?: number;
-    totalToolUseCount?: number;
-    status?: string; // 'completed' | 'interrupted' | 'error' - use string for forward compat
   };
 }
 
@@ -258,13 +239,11 @@ export async function fetchParsedClaudeTranscript(
   return {
     sessionId,
     messages,
-    agents: [], // Will be populated by agent tree builder
     validationErrors: errors,
     totalLines,
     metadata: {
       version: getFirstVersion(messages),
       messageCount: messages.length,
-      agentCount: 0, // Will be updated by agent tree builder
       firstTimestamp: timestamps[0],
       lastTimestamp: timestamps[timestamps.length - 1],
       parseErrorCount: errors.length,

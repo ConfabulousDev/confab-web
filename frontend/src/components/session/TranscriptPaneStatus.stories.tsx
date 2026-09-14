@@ -18,6 +18,11 @@ export const ErrorState: Story = {
   args: { loading: false, error: 'Failed to load transcript: 404 Not Found' },
 };
 
+// et0r D7: a subagent file not uploaded yet — retrying, not an error.
+export const NotSynced: Story = {
+  args: { loading: false, error: 'File not found', notSynced: true },
+};
+
 // Renders nothing — included so the story file documents the fall-through case.
 export const Idle: Story = {
   args: { loading: false, error: null },

@@ -7,6 +7,9 @@ import ToolDelta from './ToolDelta';
 import AwaySummary from './AwaySummary';
 import InformationalBanner from './InformationalBanner';
 import type { SystemMessage } from '@/types';
+import { buildClaudeAgentIndex } from '../claudeAgentIndex';
+import { ClaudeThreadContext } from '../claudeThreadContext';
+import { agentToolUse, asyncAgentResult, taskNotificationXml } from '@/test-fixtures/claudeSubagent';
 
 describe('HookSuccessOutput', () => {
   it('renders stdout and stderr when non-empty', () => {
@@ -138,6 +141,30 @@ describe('QueuedCommand', () => {
     const pre = container.querySelector('pre');
     expect(pre).toBeInTheDocument();
     expect(pre?.textContent).toBe(xml);
+  });
+
+  // et0r D5: a task-notification for a known subagent renders the finished card.
+  it('renders a subagent finished card when the task id matches an indexed agent', () => {
+    const lines = [
+      agentToolUse({ uuid: 'u1', toolUseId: 't1', description: 'Simplify changes' }),
+      asyncAgentResult({ uuid: 'r1', toolUseId: 't1', agentId: 'a1', description: 'Simplify changes' }),
+    ];
+    render(
+      <ClaudeThreadContext.Provider
+        value={{ agentIndex: buildClaudeAgentIndex(lines), onOpenThread: () => {}, activeThreadId: null }}
+      >
+        <QueuedCommand
+          attachment={{
+            type: 'queued_command',
+            prompt: taskNotificationXml({ taskId: 'a1', summary: 'Agent "Simplify changes" finished' }),
+            commandMode: 'task-notification',
+          }}
+        />
+      </ClaudeThreadContext.Provider>
+    );
+    expect(screen.getByText('Subagent finished')).toBeInTheDocument();
+    expect(screen.getByText('Agent "Simplify changes" finished')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open transcript →' })).toBeInTheDocument();
   });
 });
 

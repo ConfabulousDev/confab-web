@@ -8,13 +8,14 @@ Per-provider transcript adapters (CF-417). `SessionViewer` and
 
 | File | Purpose |
 | --- | --- |
-| `types.ts` | `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>` interface, `FilterAPI`, `TranscriptPaneProps` (incl. optional `firstSeen`/`lastSyncAt` session bounds, read only by the Cursor pane for estimated row timestamps — ce79), `SessionMetaFallback` / `SessionMetaResult`. Two views of the same adapter: `ClaudeAdapter` / `CodexAdapter` (concrete-typed for implementers) and `OpaqueAdapter` (`unknown`-typed for consumers). |
-| `claudeAdapter.tsx` | Wraps `claudeTranscriptService`, `useClaudeTranscriptFilters`, `ClaudeFilterDropdown`, `ClaudeTranscriptPane`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. |
+| `types.ts` | `ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts>` interface, `FilterAPI`, `TranscriptPaneProps` (incl. optional `firstSeen`/`lastSyncAt` session bounds, read only by the Cursor pane for estimated row timestamps — ce79; and et0r's optional `activeThreadId` / `onOpenThread` / `notSynced`, read only by threads-capable panes), `TranscriptThreadRef` (et0r — one subagent thread: `id`, `fileName`, `label`, `parentThreadId` (`null` = Main, `undefined` = unknown/deep link), `launchTargetId`), `SessionMetaFallback` / `SessionMetaResult`. Two views of the same adapter: `ClaudeAdapter` / `CodexAdapter` (concrete-typed for implementers) and `OpaqueAdapter` (`unknown`-typed for consumers). |
+| `claudeAdapter.tsx` | Wraps `claudeTranscriptService`, `useClaudeTranscriptFilters`, `ClaudeFilterDropdown`, `ClaudeTranscriptPane`. Claude has no separate "raw" stream — `TranscriptLine[]` doubles as both `TRaw` and `TItem`, with `normalize` as the identity function. Implements the optional `threads` capability (et0r): `discover` maps `buildClaudeAgentIndex` (`components/transcript/claude/claudeAgentIndex.ts`) to thread refs in launch order, labeled description → subagent_type → agentId with duplicate labels suffixed ` (2)`, ` (3)`; `fileNameFor` is `agentFileName` (`agent-<id>.jsonl`). Its `TranscriptPane` forwards `activeThreadId` / `onOpenThread` / `notSynced` to `ClaudeTranscriptPane`. |
 | `codexAdapter.tsx` | Wraps `codexTranscriptService`, `useCodexTranscriptFilters`, `CodexFilterDropdown`, `CodexTranscriptPane`. `computeMeta` walks rawLines for min/max `timestamp`. |
 | `opencodeAdapter.tsx` | Wraps `opencodeTranscriptService`, `useOpenCodeTranscriptFilters`, `OpenCodeFilterDropdown`, `OpenCodeTranscriptPane`. `computeMeta` walks render-items' epoch-ms `timeCreated`; `calculateMessageCost` prefers the reported `info.cost`, else the pricing fallback. |
 | `cursorAdapter.tsx` | Wraps `cursorTranscriptService`, `useCursorTranscriptFilters`, `CursorFilterDropdown`, `CursorTranscriptPane`. Cursor JSONL carries no model/token/cost/timestamp, so `extractModel` is always `undefined`, `computeMeta` always falls back to `firstSeen`/`lastSyncAt`, `tokensMeasurable: false` (st5f — Summary/Trends show "Not available" instead of $0), and `calculateMessageCost` returns 0. With no per-message timestamps it also sets `conversationTimingUnavailableNote` (zsk4), which the Conversation card renders as a muted footer explaining the absent timing/utilization rows. The pane has a turn-based `TimelineBar` minimap (zztp, sized from the estimated row times — self-hides when bounds are unknown) but no cost rail; it derives its own segment greying from `items` vs `filteredItems`, so the adapter's `TranscriptPane` wrapper accepts but ignores the contract's `visibleIndices` / `isCostMode`, and forwards `firstSeen`/`lastSyncAt` so the pane can estimate per-row timestamps (ce79) that also size the minimap. |
 | `registry.ts` | `getAdapter(provider: string): OpaqueAdapter` and `isTokensMeasurable(providerId)` (st5f). Normalizes `provider` (lowercase, whitespace → `-`), then looks up in a record keyed by `PROVIDER_VALUES`. **Throws on unknown providers** — backend already normalizes on read, so this only fires on a backend-first rollout. `isTokensMeasurable` returns `false` only for adapters with `tokensMeasurable: false` (Cursor today); unknown ids default to `true`. |
-| `useTranscriptData.ts` | Shared hook: initial fetch + visibility-gated polling. Single hook, both providers. Skipped when a Storybook `seed` is supplied. |
+| `useTranscriptData.ts` | Shared hook: initial fetch + visibility-gated polling for one file, every provider. `SessionViewer` calls it for the main transcript and (et0r) once more for the active subagent thread (`fileName` undefined = no fetch). Skipped when a Storybook `seed` is supplied (the seed's lines are returned as-is, following seed changes). Changing `sessionId`/`fileName` drops the previous file's lines in the same render; in-flight initial loads and polls for the old file are discarded. Options: `preferCache` (reuse the adapter's in-memory cache for the initial load — revisited subagent tabs). Returns `notFound: true` when the initial load 404s (`APIError.status === 404`); while set, the poll retries the initial load (not incremental) and clears `notFound`/`error` on success. Non-404 errors keep the plain `error` state. |
+| `useTranscriptData.test.ts` | et0r: skip-vs-prefer cache, no fetch without a file name, 404 → `notFound` → poll recovery, non-404 errors, same-render reset on file change, stale-poll discard, seed changes. |
 | `registry.test.ts` | Drift guard: every `PROVIDER_VALUES` entry must resolve to a distinct adapter; unknown providers must throw. |
 | `claudeAdapter.test.ts` / `codexAdapter.test.ts` / `opencodeAdapter.test.ts` / `cursorAdapter.test.ts` | Per-adapter delegation + pure-method tests. Services are mocked with `vi.mock`. |
 
@@ -43,10 +44,27 @@ interface ProviderAdapter<TRaw, TItem, TFilterState, TToggles, TCounts> {
   readonly tokensFastTooltip?: string;
   readonly tokenSpeedUnavailableTooltip?: string;          // st5f — Conversation "Token speed" tooltip when unmeasured
   readonly conversationTimingUnavailableNote?: string;     // zsk4 — Conversation card footer when no per-turn timing
+  // et0r: optional multi-thread transcripts (subagents as subtabs). Claude only today.
+  readonly threads?: {
+    discover(items: TItem[], parentThreadId: string | null): TranscriptThreadRef[];
+    fileNameFor(threadId: string): string;
+  };
   FilterDropdown: FC<{ counts; filters }>;
   TranscriptPane: FC<TranscriptPaneProps>;
 }
 ```
+
+### Why `threads` is an optional capability
+
+Subagent subtabs (et0r) are Claude-only today, but `SessionViewer` must stay
+free of provider branching. An adapter that implements `threads` gets the
+subtab strip for free: `SessionViewer` calls `discover(mainItems, null)` for
+the strip, `discover(threadItems, threadId)` for nested agents opened from
+inside a subagent tab, and `fileNameFor(id)` for deep links to a thread it
+hasn't discovered. It then runs a second `useTranscriptData` for the active
+thread's file and routes counts, filters, deep-link reset, and the pane
+through it. Adapters without `threads` render no strip and never receive
+`onOpenThread`.
 
 ### Why two views (`ClaudeAdapter` / `CodexAdapter` vs `OpaqueAdapter`)
 

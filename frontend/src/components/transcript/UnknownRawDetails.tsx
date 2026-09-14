@@ -5,7 +5,8 @@
 // and OpenCode unknown rows so the click-to-expand + search-highlight behavior
 // and the selection/deep-link/search rings live in exactly one place.
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { useOpenOnRisingEdge } from '@/hooks/useOpenOnRisingEdge';
 import { escapeHtml, getHighlightClass, highlightTextInHtml } from '@/utils/highlightSearch';
 import { cx } from '@/utils/utils';
 import styles from './UnknownRawDetails.module.css';
@@ -45,14 +46,8 @@ export default function UnknownRawDetails({
 
   // Controlled `open` so the user can still toggle. Auto-open on the rising edge
   // of a search match so the highlighted <mark> is visible without an extra
-  // click (mirrors the prior Codex behavior; React "adjust state on prop change"
-  // pattern).
-  const [open, setOpen] = useState(false);
-  const [prevQueryMatches, setPrevQueryMatches] = useState(false);
-  if (queryMatches !== prevQueryMatches) {
-    setPrevQueryMatches(queryMatches);
-    if (queryMatches) setOpen(true);
-  }
+  // click (mirrors the prior Codex behavior).
+  const [open, setOpen] = useOpenOnRisingEdge(queryMatches);
 
   const rawHtml = useMemo(() => {
     let html = escapeHtml(rawText);

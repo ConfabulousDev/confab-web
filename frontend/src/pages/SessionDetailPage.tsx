@@ -15,10 +15,15 @@ function isValidViewTab(value: string | null): value is ViewTab {
 
 /**
  * Derive the active tab from URL search params.
- * When a msg param is present, always force transcript tab.
+ * When a msg or agent (et0r subagent thread) param is present, always force
+ * the transcript tab.
  */
-function resolveActiveTab(tabParam: string | null, msgParam: string | null): ViewTab {
-  if (msgParam) return 'transcript';
+function resolveActiveTab(
+  tabParam: string | null,
+  msgParam: string | null,
+  agentParam: string | null,
+): ViewTab {
+  if (msgParam || agentParam) return 'transcript';
   if (isValidViewTab(tabParam)) return tabParam;
   return 'summary';
 }
@@ -37,7 +42,8 @@ function SessionDetailPage() {
 
   const tabParam = searchParams.get('tab');
   const msgParam = searchParams.get('msg');
-  const activeTab = resolveActiveTab(tabParam, msgParam);
+  const agentParam = searchParams.get('agent');
+  const activeTab = resolveActiveTab(tabParam, msgParam, agentParam);
 
   const handleTabChange = useCallback((tab: ViewTab) => {
     setSearchParams(prev => {
@@ -47,8 +53,29 @@ function SessionDetailPage() {
       } else {
         next.set('tab', tab);
       }
-      // Clear msg param when switching away from transcript
+      // Clear transcript-only params when switching away from transcript
       if (tab !== 'transcript') {
+        next.delete('msg');
+        next.delete('agent');
+      }
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
+  // et0r: switch subagent thread (null = Main), optionally landing on a row.
+  // Pushes history so browser back returns to the previous thread.
+  const handleThreadChange = useCallback((threadId: string | null, targetId?: string) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'transcript');
+      if (threadId) {
+        next.set('agent', threadId);
+      } else {
+        next.delete('agent');
+      }
+      if (targetId) {
+        next.set('msg', targetId);
+      } else {
         next.delete('msg');
       }
       return next;
@@ -214,6 +241,8 @@ function SessionDetailPage() {
         isShared={!isOwner}
         activeTab={activeTab}
         onTabChange={handleTabChange}
+        activeThreadId={agentParam}
+        onThreadChange={handleThreadChange}
         targetId={msgParam ?? undefined}
       />
 

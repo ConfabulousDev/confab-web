@@ -10,7 +10,7 @@ The **Sessions** page lists every session you own or have access to, with filter
 Clicking a session opens a three-pane view:
 
 - **Summary** — analytics cards (cost, tokens, tools, conversation shape).
-- **Transcript** — the full conversation, rendered with collapsible tool calls.
+- **Transcript** — the full conversation, rendered with collapsible tool calls. For Claude Code sessions, subagents get their own tabs under the transcript; see [Subagents](/providers/claude-code/#subagents).
 - **Smart Recap** — AI-generated summary of what the session accomplished.
 
 ## Filters
