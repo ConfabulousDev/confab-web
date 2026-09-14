@@ -69,6 +69,13 @@
   border-color: var(--color-error-border);
 }
 
+/* we3k: killed agents read as stopped — neutral, not an error. */
+.statusStopped {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+}
+
 .summary {
   font-size: var(--font-sm);
   color: var(--color-text-secondary);

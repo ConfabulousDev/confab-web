@@ -70,6 +70,41 @@ describe('SubagentCard', () => {
     expect(screen.getByText('completed')).toBeInTheDocument();
   });
 
+  // we3k D3: statuses are normalized, so failed/killed no longer render unstyled.
+  it('shows an errored launch as failed with error styling', () => {
+    render(<SubagentCard variant="launch" agent={agent({ status: 'error' })} rawLabel="Raw result">raw</SubagentCard>);
+    expect(screen.getByText('failed').className).toMatch(/statusError/);
+  });
+
+  it('shows a failed notification as failed with error styling', () => {
+    render(
+      <SubagentCard variant="finished" agent={agent({ status: 'completed' })} status="failed" rawLabel="Raw notification">
+        raw
+      </SubagentCard>,
+    );
+    expect(screen.getByText('failed').className).toMatch(/statusError/);
+  });
+
+  it('shows a killed agent as stopped with muted styling', () => {
+    render(
+      <SubagentCard variant="finished" agent={agent({ status: 'completed' })} status="killed" rawLabel="Raw notification">
+        raw
+      </SubagentCard>,
+    );
+    const pill = screen.getByText('stopped');
+    expect(pill.className).toMatch(/statusStopped/);
+    expect(pill.className).not.toMatch(/statusError/);
+  });
+
+  it('styles running and completed statuses', () => {
+    const { rerender } = render(
+      <SubagentCard variant="launch" agent={agent({ status: 'running' })} rawLabel="Raw result">raw</SubagentCard>,
+    );
+    expect(screen.getByText('running').className).toMatch(/statusRunning/);
+    rerender(<SubagentCard variant="launch" agent={agent({ status: 'completed' })} rawLabel="Raw result">raw</SubagentCard>);
+    expect(screen.getByText('completed').className).toMatch(/statusCompleted/);
+  });
+
   it('calls onOpenThread with the agent id', async () => {
     const user = userEvent.setup();
     const onOpenThread = vi.fn();

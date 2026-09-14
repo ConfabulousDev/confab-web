@@ -1,0 +1,41 @@
+.glyph {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+.glyph svg {
+  display: block;
+}
+
+.running {
+  color: var(--color-info);
+}
+
+.completed {
+  color: var(--color-success);
+}
+
+.failed {
+  color: var(--color-error);
+}
+
+.stopped,
+.unknown {
+  color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: thread-status-spin 1.2s linear infinite;
+  }
+}
+
+@keyframes thread-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

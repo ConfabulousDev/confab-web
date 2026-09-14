@@ -5,9 +5,10 @@
 import type { ReactNode } from 'react';
 import { useOpenOnRisingEdge } from '@/hooks/useOpenOnRisingEdge';
 import { formatDuration } from '@/components/transcript/timelineFormat';
+import type { TranscriptThreadStatus } from '@/providers/types';
 import { formatTokenCount } from '@/utils/tokenStats';
 import { cx } from '@/utils/utils';
-import { agentDisplayName, type ClaudeAgentInfo } from './claudeAgentIndex';
+import { agentDisplayName, normalizeAgentStatus, type ClaudeAgentInfo } from './claudeAgentIndex';
 import styles from './SubagentCard.module.css';
 
 interface SubagentCardProps {
@@ -25,20 +26,14 @@ interface SubagentCardProps {
   isCurrentSearchMatch?: boolean;
 }
 
-function statusClass(status: string): string | undefined {
-  switch (status) {
-    case 'running':
-      return styles.statusRunning;
-    case 'completed':
-      return styles.statusCompleted;
-    case 'error':
-    case 'failed':
-    case 'killed':
-      return styles.statusError;
-    default:
-      return undefined;
-  }
-}
+// we3k D3: the pill shows the normalized status word, styled per status.
+const STATUS_CLASS: Record<TranscriptThreadStatus, string | undefined> = {
+  running: styles.statusRunning,
+  completed: styles.statusCompleted,
+  failed: styles.statusError,
+  stopped: styles.statusStopped,
+  unknown: undefined,
+};
 
 function plural(count: number, singular: string, pluralForm: string): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
@@ -66,7 +61,7 @@ export default function SubagentCard({
 }: SubagentCardProps) {
   const [rawOpen, setRawOpen] = useOpenOnRisingEdge(!!isCurrentSearchMatch);
   const isFinished = variant === 'finished';
-  const shownStatus = isFinished ? (status ?? agent.status) : agent.status;
+  const shownStatus = normalizeAgentStatus(isFinished ? (status ?? agent.status) : agent.status);
   // The type chip only adds information when a description took the title.
   const title = agentDisplayName(agent);
   const showTypeChip = !!agent.description && !!agent.subagentType;
@@ -79,7 +74,7 @@ export default function SubagentCard({
         <span className={styles.title}>{title}</span>
         {showTypeChip && <span className={styles.chip}>{agent.subagentType}</span>}
         {agent.model && <span className={styles.chip}>{agent.model}</span>}
-        <span className={cx(styles.status, statusClass(shownStatus))}>{shownStatus}</span>
+        <span className={cx(styles.status, STATUS_CLASS[shownStatus])}>{shownStatus}</span>
       </div>
       {isFinished && summary && <div className={styles.summary}>{summary}</div>}
       {stats.length > 0 && (

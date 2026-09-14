@@ -29,12 +29,15 @@ import {
   agentDisplayName,
   agentFileName,
   buildClaudeAgentIndex,
+  normalizeAgentStatus,
 } from '@/components/transcript/claude/claudeAgentIndex';
 import type { ClaudeAdapter, TranscriptThreadRef } from './types';
 
 /**
  * et0r: subagents launched from one thread's stream, as subtab refs. Labels
  * fall back description → subagent_type → agentId; duplicates get " (n)".
+ * we3k: display fields come from the same index, so status follows task
+ * notifications as the stream polls.
  */
 function discoverClaudeThreads(
   items: TranscriptLine[],
@@ -51,6 +54,10 @@ function discoverClaudeThreads(
       label: count === 1 ? base : `${base} (${count})`,
       parentThreadId,
       launchTargetId: agent.resultMessageUuid,
+      status: normalizeAgentStatus(agent.status),
+      subtitle: agent.subagentType,
+      model: agent.model,
+      durationMs: agent.totalDurationMs,
     };
   });
 }

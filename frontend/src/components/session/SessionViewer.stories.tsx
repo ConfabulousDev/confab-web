@@ -347,8 +347,48 @@ const subagentMainMessages: TranscriptLine[] = [
   asyncAgentResult({ uuid: 'sa-r1', toolUseId: 'toolu_sa1', agentId: 'a1b2c3d4e5f60718', description: 'Explore the auth middleware', timestamp: '2025-01-15T10:00:11Z' }),
   agentToolUse({ uuid: 'sa-u2', toolUseId: 'toolu_sa2', description: 'Find every caller of resolveRepo', subagentType: 'general-purpose', timestamp: '2025-01-15T10:00:12Z' }),
   syncAgentResult({ uuid: 'sa-r2', toolUseId: 'toolu_sa2', agentId: 'b2c3d4e5f6071829', timestamp: '2025-01-15T10:01:30Z' }),
+  agentToolUse({ uuid: 'sa-u3', toolUseId: 'toolu_sa3', description: 'Simplify the recap prompt', timestamp: '2025-01-15T10:01:40Z' }),
+  syncAgentResult({ uuid: 'sa-r3', toolUseId: 'toolu_sa3', agentId: 'd4e5f60718293041', isError: true, text: 'Agent failed: tool budget exhausted.', timestamp: '2025-01-15T10:02:10Z' }),
+  agentToolUse({ uuid: 'sa-u4', toolUseId: 'toolu_sa4', description: 'Run the flaky shard again', timestamp: '2025-01-15T10:02:20Z' }),
+  asyncAgentResult({ uuid: 'sa-r4', toolUseId: 'toolu_sa4', agentId: 'e5f6071829304152', description: 'Run the flaky shard again', timestamp: '2025-01-15T10:02:21Z' }),
   taskNotificationMessage('sa-n1', { taskId: 'a1b2c3d4e5f60718', toolUseId: 'toolu_sa1', summary: 'Agent "Explore the auth middleware" finished' }, '2025-01-15T10:03:00Z'),
+  taskNotificationMessage('sa-n2', { taskId: 'e5f6071829304152', toolUseId: 'toolu_sa4', status: 'killed', summary: 'Agent "Run the flaky shard again" was stopped' }, '2025-01-15T10:03:30Z'),
+  agentToolUse({ uuid: 'sa-u5', toolUseId: 'toolu_sa5', description: 'Write integration tests for sharing', subagentType: 'general-purpose', timestamp: '2025-01-15T10:04:00Z' }),
+  asyncAgentResult({ uuid: 'sa-r5', toolUseId: 'toolu_sa5', agentId: 'f607182930415263', description: 'Write integration tests for sharing', timestamp: '2025-01-15T10:04:01Z' }),
 ];
+
+/**
+ * we3k: 12 subagents with mixed statuses, so the strip overflows (edge fades +
+ * step buttons) and All subagents is useful.
+ */
+const MANY_SUBAGENT_LABELS = [
+  'Review the migration ordering',
+  'Find every caller of resolveRepo',
+  'Write integration tests for sharing',
+  'Explore the auth middleware',
+  'Simplify the recap prompt',
+  'Audit dead exports with knip',
+  'Check pricing table drift',
+  'Draft the release notes',
+  'Trace the polling backoff',
+  'Reproduce the Codex title bug',
+  'Port the docs sidebar',
+  'Verify dark theme tokens',
+];
+const NOTIFIED_STATUSES = ['completed', undefined, 'failed', 'completed', 'killed', undefined];
+const manySubagentMessages: TranscriptLine[] = MANY_SUBAGENT_LABELS.flatMap((description, i) => {
+  const agentId = `9a${String(i).padStart(2, '0')}c3d4e5f60718`;
+  const toolUseId = `toolu_many_${i}`;
+  const status = NOTIFIED_STATUSES[i % NOTIFIED_STATUSES.length];
+  const minute = String(10 + i).padStart(2, '0');
+  return [
+    agentToolUse({ uuid: `many-u${i}`, toolUseId, description, subagentType: 'claude', timestamp: `2025-01-15T10:${minute}:00Z` }),
+    asyncAgentResult({ uuid: `many-r${i}`, toolUseId, agentId, description, timestamp: `2025-01-15T10:${minute}:01Z` }),
+    ...(status
+      ? [taskNotificationMessage(`many-n${i}`, { taskId: agentId, toolUseId, status, summary: `Agent "${description}" ${status}` }, `2025-01-15T10:${minute}:30Z`)]
+      : []),
+  ];
+});
 
 export const WithSubagents: Story = {
   args: {
@@ -371,6 +411,19 @@ export const WithSubagents: Story = {
         subagentAssistantText('sa-c1', 'c3d4e5f607182930', 'The session store lives in internal/db/dbauth.', '2025-01-15T10:00:40Z'),
       ],
     },
+    initialAnalytics: mockAnalytics,
+    initialGithubLinks: mockGithubLinks,
+  },
+};
+
+export const WithManySubagents: Story = {
+  args: {
+    session: mockSession,
+    isOwner: true,
+    isShared: false,
+    activeTab: 'transcript',
+    onTabChange: () => {},
+    initialMessages: [mockUserMessage, ...manySubagentMessages],
     initialAnalytics: mockAnalytics,
     initialGithubLinks: mockGithubLinks,
   },

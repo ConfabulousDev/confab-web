@@ -81,6 +81,9 @@ interface TranscriptPaneProps<TItem> {
   notSynced?: boolean;
 }
 
+/** we3k: normalized thread status shown on thread-strip chips and dropdown rows. */
+export type TranscriptThreadStatus = 'running' | 'completed' | 'failed' | 'stopped' | 'unknown';
+
 /**
  * et0r: one transcript thread (a subagent) rendered as a subtab under
  * Transcript. Produced by an adapter's optional `threads` capability.
@@ -94,8 +97,14 @@ export interface TranscriptThreadRef {
   label: string;
   /** null = launched from Main; undefined = unknown (e.g. a deep link). */
   parentThreadId: string | null | undefined;
-  /** Id of the launching row in the parent thread (for the back link). */
+  /** Id of the launching row in the parent thread ("Go to parent" lands here). */
   launchTargetId?: string;
+  /** we3k display fields, all optional. Missing status renders as `unknown`. */
+  status?: TranscriptThreadStatus;
+  /** Secondary label (Claude: subagent type). */
+  subtitle?: string;
+  model?: string;
+  durationMs?: number;
 }
 
 interface TranscriptThreadsCapability<TItem> {

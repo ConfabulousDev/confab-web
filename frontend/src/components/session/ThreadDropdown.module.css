@@ -1,0 +1,218 @@
+/* we3k: thread-strip popovers — the active chip's menu and the All subagents list. */
+
+.container {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.allButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 28px;
+  padding-inline: var(--spacing-sm);
+  font-family: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.allButton:hover,
+.allButtonOpen {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.allButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.allCompact {
+  display: none;
+  align-items: center;
+  gap: 3px;
+}
+
+.caret {
+  display: inline-flex;
+  color: var(--color-text-muted);
+}
+
+.caret svg {
+  width: 10px;
+  height: 10px;
+  transform: rotate(90deg);
+}
+
+@media (max-width: 480px) {
+  .allLabel {
+    display: none;
+  }
+
+  .allCompact {
+    display: inline-flex;
+  }
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--spacing-xs));
+  z-index: var(--z-dropdown);
+  padding: var(--spacing-xs);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Active chip menu: `left` is set inline from the chip's position. */
+.menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-width: calc(100vw - 32px);
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 6px var(--spacing-sm);
+  overflow: hidden;
+  font-family: inherit;
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+  outline: none;
+}
+
+/* All subagents list, pinned to the bar's right edge. */
+.listPopover {
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: min(360px, calc(100vw - 32px));
+}
+
+.filter {
+  width: 100%;
+  height: 30px;
+  padding-inline: var(--spacing-sm);
+  font-family: inherit;
+  font-size: var(--font-sm);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.filter::placeholder {
+  color: var(--color-text-muted);
+}
+
+.filter:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.list {
+  max-height: 60vh;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  outline: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: 6px var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.rowNested {
+  padding-left: calc(var(--spacing-sm) + var(--spacing-md));
+}
+
+.rowHighlighted {
+  background: var(--color-bg-hover);
+}
+
+.rowSelected {
+  background: var(--color-bg-active);
+}
+
+.rowGlyph {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 18px;
+}
+
+.rowBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: var(--font-sm);
+  line-height: 18px;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--spacing-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.rowMetaEnd {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-left: auto;
+}
+
+.rowCheck {
+  display: flex;
+  align-items: center;
+  height: 18px;
+  color: var(--color-accent);
+}
+
+.empty {
+  padding: var(--spacing-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+}
