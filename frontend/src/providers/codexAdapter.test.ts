@@ -202,7 +202,7 @@ describe('codexAdapter.calculateMessageCost', () => {
       .toBeCloseTo(0.025, 6);
   });
 
-  it('does NOT charge for cache writes (table rate is 0 for Codex models)', () => {
+  it('does NOT charge for cache writes on older Codex families (gpt-5 table rate is 0)', () => {
     const it = item('gpt-5', usage({ cacheWrite: 999_999_999, cacheWrite1h: 0 }));
     expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
   });

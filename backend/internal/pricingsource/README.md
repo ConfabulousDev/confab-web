@@ -54,14 +54,25 @@ Read these before adding or repricing a row.
   the model name, so nothing in the compute path could pick a tier per request.
   The ≤200k / short-context rate is stored, which understates requests above the
   threshold — sharpest on `gpt-6-astra`, whose 1.05M context makes >272k requests
-  routine and where the long-context tier is 2x input / 1.5x output (and is the
-  only OpenAI tier that bills cache writes, at $25/MTok). Fixing the class needs
+  routine and where the long-context tier is 2x input / 1.5x output, with a
+  $25/MTok cache write against the short-context $12.50. Fixing the class needs
   per-turn token accounting; tracked separately.
-- **Cache reads are 0.1x base input — except Fable 5.1 and Mythos 5.1.** Those
-  two bill cache hits at 0.025x ($0.25/MTok against $10 input). The 5.0
-  generation (`fable-5`, `mythos-5`) stays at 0.1x ($1.00). Cache reads dominate
-  token volume in agentic sessions, so "normalizing" the 5.1 rows to $1.00 is a
-  silent 4x overcharge. Pinned by a test in `internal/analytics/pricing_test.go`.
+- **Cache reads are 0.1x base input — except Fable 5.1, Mythos 5.1 and Opus
+  5.5.** Fable 5.1 and Mythos 5.1 bill cache hits at 0.025x ($0.25/MTok against
+  $10 input); Claude Opus 5.5 bills them at 0.05x ($0.20/MTok against $4 input).
+  The 5.0 generation (`fable-5`, `mythos-5`) stays at 0.1x ($1.00). Cache reads
+  dominate token volume in agentic sessions, so "normalizing" either exception is
+  a silent overcharge: 4x for the 5.1 rows at $1.00, 2x for Opus 5.5 at $0.40.
+  Pinned by tests in `internal/analytics/pricing_test.go`.
+- **OpenAI cache writes are 1.25x short-context input on the 5.6 and 6
+  families** (`gpt-6-astra` $12.50, `gpt-6-sol` $2.50, `gpt-6-luna` $0.125,
+  `gpt-5.6-sol` $5.00, `gpt-5.6-terra` $2.50, `gpt-5.6-luna` $0.25,
+  `gpt-5.6-cyber` $15.625). Older OpenAI families publish no cache-write price
+  and stay at 0 pending verification; the `-pro` models offer no caching at all,
+  so both cache columns are 0 for them. `cacheWrite1h` is 0 on every OpenAI row
+  — there is no 1-hour tier, and consumers fall back to `cacheWrite`. These
+  rates bill nothing today: the Codex rollout wire carries no cache-write token
+  count, so the analyzer has no tokens to apply them to (tracked in `md0z`).
 - **DeepSeek V4 is stored at off-peak rates.** DeepSeek bills peak during
   01:00–04:00 and 06:00–10:00 UTC Mon–Fri and half that otherwise — 35 of 168
   hours, so off-peak covers ~79% of wall-clock time and is the better
