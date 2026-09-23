@@ -47,7 +47,8 @@ type TokensAnalyzer struct {
 
 // v2ModelAgg accumulates one model family's tokens + cost for the tokens_v2 tree.
 // reasoning stays 0 for Claude (its usage carries none) and is populated by Codex;
-// cacheCreation stays 0 for Codex (OpenAI doesn't bill cache writes).
+// cacheCreation stays 0 for Codex (the rollout wire carries no cache-write count,
+// not because the rate is zero — md0z).
 type v2ModelAgg struct {
 	input, output, cacheCreation, cacheRead, reasoning int64
 	cost                                               decimal.Decimal

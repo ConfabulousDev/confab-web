@@ -262,7 +262,9 @@ function attachTokenCountToAssistant(
     //   - `reasoning_output_tokens` is a SUBSET of `output_tokens`; pass the
     //     wire value through unchanged. Reasoning bills at the output rate
     //     implicitly and is preserved on the item for the tooltip sub-line.
-    //   - OpenAI does not charge for cache writes.
+    //   - `cacheWrite` stays 0: the rollout wire carries no cache-write count,
+    //     even though OpenAI's 5.6 and 6 families do have a cache-write rate
+    //     in the price table (md0z).
     const cached = delta.cached_input_tokens ?? 0;
     const reasoning = delta.reasoning_output_tokens ?? 0;
     const usage: TokenUsage = {

@@ -124,7 +124,7 @@ toggle.
 3. Add a `.test.ts` file with test cases
 
 ### Updating model pricing
-Edit the single source — `backend/internal/pricingsource/pricing.json` — and bump its `updated_at`. The frontend has no bundled table to update; it fetches the effective table from the backend at runtime. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries set `cacheWrite: 0` and `cacheWrite1h: 0` (writes are free) and put the documented cached-input rate in `cacheRead`. For Claude entries set `cacheWrite1h` to 2x input (the 1-hour cache-write rate).
+Edit the single source — `backend/internal/pricingsource/pricing.json` — and bump its `updated_at`. The frontend has no bundled table to update; it fetches the effective table from the backend at runtime. Look up current prices on the Anthropic pricing page or OpenAI's developer pricing page. For OpenAI entries put the documented cached-input rate in `cacheRead` and leave `cacheWrite1h` at `0` (there is no 1-hour tier); `cacheWrite` takes the documented cache-write rate — 1.25x short-context input on the 5.6 and 6 families, `0` on older families that publish none. For Claude entries set `cacheWrite1h` to 2x input (the 1-hour cache-write rate).
 
 ## Invariants / Conventions
 

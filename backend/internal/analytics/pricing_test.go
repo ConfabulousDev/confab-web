@@ -59,6 +59,8 @@ func TestGetModelFamily(t *testing.T) {
 	}{
 		{"claude-fable-5", "fable-5"},
 		{"claude-fable-5-20260601", "fable-5"},
+		{"claude-opus-5-5", "opus-5-5"},
+		{"claude-opus-5-5-20260922", "opus-5-5"},
 		{"claude-opus-4-8-20260515", "opus-4-8"},
 		{"claude-opus-4-6-20260201", "opus-4-6"},
 		{"claude-opus-4-5-20251101", "opus-4-5"},
@@ -102,6 +104,7 @@ func TestLookupPricing(t *testing.T) {
 		{"claude-opus-4-6-20260201", true, 5},
 		{"claude-opus-4-5-20251101", true, 5},
 		{"claude-opus-5", true, 5},
+		{"claude-opus-5-5", true, 4},
 		{"claude-mythos-5", true, 10},
 		{"claude-mythos-5-1", true, 10},
 		{"claude-fable-5-1", true, 10},
@@ -124,6 +127,10 @@ func TestLookupPricing(t *testing.T) {
 		{"gpt-5.6-terra", true, 2.00},
 		{"gpt-5.6-luna", true, 0.20},
 		{"gpt-6-astra", true, 10.00},
+		{"gpt-6-sol", true, 2.00},
+		{"gpt-6-luna", true, 0.10},
+		{"gpt-5-pro", true, 15.00},
+		{"gpt-5.2-pro", true, 21.00},
 		{"gpt-4o", true, 2.50},
 		{"gpt-4o-mini", true, 0.15},
 		{"o1", true, 15.00},
@@ -303,7 +310,7 @@ func TestEmbeddedHasCacheWrite1h(t *testing.T) {
 		t.Fatal("gpt-5 not found in embedded pricing")
 	}
 	if !gpt5.CacheWrite1h.IsZero() {
-		t.Errorf("gpt-5 CacheWrite1h = %s, want 0 (codex has no cache writes)", gpt5.CacheWrite1h)
+		t.Errorf("gpt-5 CacheWrite1h = %s, want 0 (OpenAI has no 1-hour cache tier)", gpt5.CacheWrite1h)
 	}
 }
 
@@ -550,24 +557,38 @@ func assertRate(t *testing.T, got ModelPricing, want rateSpec) {
 // vendor changes a price, this test and pricing.json move together.
 func TestEmbeddedRates(t *testing.T) {
 	tests := []rateSpec{
-		// claude-code — corrections and additions. The 5.1 generation bills cache
-		// hits at 0.025x base input ($0.25/MTok), not the usual 0.1x the 5.0 rows
-		// below keep ($1.00) — a deliberate exception, so both generations are
-		// pinned here. "Normalizing" the 5.1 rows would be a silent 4x overcharge
-		// on the dominant token category in agentic sessions.
+		// claude-code — corrections and additions. Cache reads are normally 0.1x
+		// base input; two deliberate exceptions are pinned here alongside the rows
+		// that keep the norm. The 5.1 generation bills cache hits at 0.025x
+		// ($0.25/MTok against $10 input, against the $1.00 the 5.0 rows below
+		// keep), and Opus 5.5 at 0.05x ($0.20 against $4). "Normalizing" either
+		// would be a silent overcharge — 4x and 2x respectively — on the dominant
+		// token category in agentic sessions.
+		{"opus-5-5", 4, 20, 5, 8, 0.20},
 		{"sonnet-5", 2, 10, 2.5, 4, 0.2},
 		{"fable-5-1", 10, 50, 12.5, 20, 0.25},
 		{"mythos-5-1", 10, 50, 12.5, 20, 0.25},
 		{"fable-5", 10, 50, 12.5, 20, 1.0},
 		{"mythos-5", 10, 50, 12.5, 20, 1.0},
 
-		// codex — corrections and additions.
+		// codex — corrections and additions. The 5.6 and 6 families bill cache
+		// writes at 1.25x short-context input; older OpenAI families publish no
+		// cache-write price and stay 0. `cacheWrite1h` is 0 on every OpenAI row
+		// (no 1-hour tier exists; consumers fall back to cacheWrite).
 		{"gpt-5.1", 1.25, 10.0, 0, 0, 0.125},
 		{"gpt-5.2", 1.75, 14.0, 0, 0, 0.175},
 		{"gpt-5.5-cyber", 12.5, 75.0, 0, 0, 1.25},
-		{"gpt-5.6-sol", 4.0, 20.0, 0, 0, 0.4},
-		{"gpt-5.6-cyber", 12.5, 75.0, 0, 0, 1.25},
-		{"gpt-6-astra", 10.0, 50.0, 0, 0, 1.0},
+		{"gpt-5.6-sol", 4.0, 20.0, 5.0, 0, 0.4},
+		{"gpt-5.6-terra", 2.0, 12.0, 2.5, 0, 0.2},
+		{"gpt-5.6-luna", 0.2, 1.2, 0.25, 0, 0.02},
+		{"gpt-5.6-cyber", 12.5, 75.0, 15.625, 0, 1.25},
+		{"gpt-6-astra", 10.0, 50.0, 12.5, 0, 1.0},
+		{"gpt-6-sol", 2.0, 10.0, 2.5, 0, 0.20},
+		{"gpt-6-luna", 0.10, 0.50, 0.125, 0, 0.01},
+		// The pro models offer no caching at all (both columns are dashes on the
+		// vendor page), so cacheWrite and cacheRead are both 0.
+		{"gpt-5-pro", 15.0, 120.0, 0, 0, 0},
+		{"gpt-5.2-pro", 21.0, 168.0, 0, 0, 0},
 		{"chat-latest", 5.0, 30.0, 0, 0, 0.5},
 
 		// opencode — Gemini corrections and additions.
@@ -616,6 +637,24 @@ func TestEmbeddedRates(t *testing.T) {
 			}
 			assertRate(t, got, tt)
 		})
+	}
+}
+
+// TestOpus55CacheReadException pins Claude Opus 5.5's cache-read rate at 0.05x
+// base input ($0.20 against $4 input) — a documented per-model exception
+// alongside the 5.1 generation's 0.025x, mirroring how those rows are pinned.
+// The reflexive 0.1x would be $0.40: a silent 2x overcharge on cache reads, the
+// dominant token category in agentic sessions.
+func TestOpus55CacheReadException(t *testing.T) {
+	pricing, ok := LookupPricing("claude-opus-5-5")
+	if !ok {
+		t.Fatal("opus-5-5 not found in embedded pricing")
+	}
+	if want := decimal.NewFromFloat(4); !pricing.Input.Equal(want) {
+		t.Errorf("opus-5-5 Input = %s, want %s (the 0.05x cache-read claim is relative to this)", pricing.Input, want)
+	}
+	if want := decimal.NewFromFloat(0.20); !pricing.CacheRead.Equal(want) {
+		t.Errorf("opus-5-5 CacheRead = %s, want %s (0.05x base input, NOT the usual 0.1x = 0.40)", pricing.CacheRead, want)
 	}
 }
 
