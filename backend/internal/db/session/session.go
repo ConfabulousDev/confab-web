@@ -343,17 +343,13 @@ const dedupedVisibleCTE = `
 			SELECT DISTINCT ON (vs.id)
 				vs.id, vs.owner_email, vs.access_type, vs.shared_by_email
 			FROM visible_sessions vs
-			ORDER BY vs.id, ` + accessTypePriority + `
-		)`
-
-// accessTypePriority ranks visible_sessions rows so the first one per session
-// is owner > private_share > system_share.
-const accessTypePriority = `CASE vs.access_type
+			ORDER BY vs.id, CASE vs.access_type
 				WHEN 'owner' THEN 1
 				WHEN 'private_share' THEN 2
 				WHEN 'system_share' THEN 3
 				ELSE 4
-			END`
+			END
+		)`
 
 // visibleSessionsLateral is the share-all counterpart to deduped_visible: it
 // resolves each session's highest-priority access with a per-session probe of
@@ -366,7 +362,12 @@ const visibleSessionsLateral = `
 				SELECT vs.owner_email, vs.access_type, vs.shared_by_email
 				FROM visible_sessions vs
 				WHERE vs.id = s.id
-				ORDER BY ` + accessTypePriority + `
+				ORDER BY CASE vs.access_type
+					WHEN 'owner' THEN 1
+					WHEN 'private_share' THEN 2
+					WHEN 'system_share' THEN 3
+					ELSE 4
+				END
 				LIMIT 1
 			) d`
 
