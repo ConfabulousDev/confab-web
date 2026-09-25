@@ -160,12 +160,18 @@ func (s *Store) ListUserSessionsPaginated(ctx context.Context, userID int64, par
 // ShareAllSessions, the share-all variant returns every session — no separate
 // global path or lookup tables). The wrapper SELECT DISTINCT collapses the
 // UNION-ALL duplicates emitted by the helper (e.g. a recipient who also has a
-// system share to the same session).
+// system share to the same session). The listable set is materialized once so
+// the per-session listability probe runs once rather than per dropdown.
 func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
 	query := `
 		WITH ` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,
 		visible AS (
 			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
+		),
+		listable AS MATERIALIZED (
+			SELECT s.git_info, v.owner_email
+			FROM visible v JOIN sessions s ON v.id = s.id
+			WHERE ` + db.ListableSessionPredicate("s") + `
 		)
 		SELECT
 			COALESCE(r.repos, ARRAY[]::text[]) as repos,
@@ -173,16 +179,13 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.Sessio
 			COALESCE(o.owners, ARRAY[]::text[]) as owners
 		FROM
 			(SELECT array_agg(DISTINCT ` + db.RepoRootExpr("s") + ` ORDER BY ` + db.RepoRootExpr("s") + `) as repos
-			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE s.git_info->>'repo_url' IS NOT NULL
-			   AND ` + db.ListableSessionPredicate("s") + `) r,
+			 FROM listable s
+			 WHERE s.git_info->>'repo_url' IS NOT NULL) r,
 			(SELECT array_agg(DISTINCT s.git_info->>'branch' ORDER BY s.git_info->>'branch') as branches
-			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE s.git_info->>'branch' IS NOT NULL
-			   AND ` + db.ListableSessionPredicate("s") + `) b,
-			(SELECT array_agg(DISTINCT LOWER(v.owner_email) ORDER BY LOWER(v.owner_email)) as owners
-			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE ` + db.ListableSessionPredicate("s") + `) o
+			 FROM listable s
+			 WHERE s.git_info->>'branch' IS NOT NULL) b,
+			(SELECT array_agg(DISTINCT LOWER(s.owner_email) ORDER BY LOWER(s.owner_email)) as owners
+			 FROM listable s) o
 	`
 
 	var repos, branches, owners []string
