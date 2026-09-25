@@ -355,14 +355,11 @@ const accessTypePriority = `CASE vs.access_type
 				ELSE 4
 			END`
 
-// visibleSessionsLateral is the share-all counterpart to deduped_visible: the
-// outer query walks sessions in list order and resolves each row's
-// highest-priority access through a per-session probe of visible_sessions.
-// Same visibility predicate and priority, but the plan can follow
-// idx_sessions_list_order and stop at LIMIT instead of deduplicating every
-// session in the org first. Only worth it when nearly every session is
-// visible; with per-user visibility the visible set is small and
-// deduped_visible is the cheaper starting side.
+// visibleSessionsLateral is the share-all counterpart to deduped_visible: it
+// resolves each session's highest-priority access with a per-session probe of
+// visible_sessions, so LIMIT applies before any per-row work instead of after
+// deduplicating every session in the org. With per-user visibility the visible
+// set is small and deduped_visible stays the cheaper starting side.
 const visibleSessionsLateral = `
 			FROM sessions s
 			CROSS JOIN LATERAL (
