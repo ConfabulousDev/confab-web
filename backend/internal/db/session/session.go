@@ -117,8 +117,7 @@ func scanSessionListItems(rows *sql.Rows) ([]db.SessionListItem, error) {
 // the visibility predicate has a single source of truth.
 func (s *Store) buildSharedWithMeQuery() string {
 	return `
-		WITH` + githubRefCTEs + `,
-		` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE + `
+		WITH ` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE + `
 		SELECT` + sessionSelectCols + `,
 				(d.access_type = 'owner') as is_owner,
 				d.access_type,
@@ -161,12 +160,18 @@ func (s *Store) ListUserSessionsPaginated(ctx context.Context, userID int64, par
 // ShareAllSessions, the share-all variant returns every session — no separate
 // global path or lookup tables). The wrapper SELECT DISTINCT collapses the
 // UNION-ALL duplicates emitted by the helper (e.g. a recipient who also has a
-// system share to the same session).
+// system share to the same session). The listable set is materialized once so
+// the per-session listability probe runs once rather than per dropdown.
 func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
 	query := `
 		WITH ` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,
 		visible AS (
 			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
+		),
+		listable AS MATERIALIZED (
+			SELECT s.git_info, v.owner_email
+			FROM visible v JOIN sessions s ON v.id = s.id
+			WHERE ` + db.ListableSessionPredicate("s") + `
 		)
 		SELECT
 			COALESCE(r.repos, ARRAY[]::text[]) as repos,
@@ -174,16 +179,13 @@ func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.Sessio
 			COALESCE(o.owners, ARRAY[]::text[]) as owners
 		FROM
 			(SELECT array_agg(DISTINCT ` + db.RepoRootExpr("s") + ` ORDER BY ` + db.RepoRootExpr("s") + `) as repos
-			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE s.git_info->>'repo_url' IS NOT NULL
-			   AND ` + db.ListableSessionPredicate("s") + `) r,
+			 FROM listable s
+			 WHERE s.git_info->>'repo_url' IS NOT NULL) r,
 			(SELECT array_agg(DISTINCT s.git_info->>'branch' ORDER BY s.git_info->>'branch') as branches
-			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE s.git_info->>'branch' IS NOT NULL
-			   AND ` + db.ListableSessionPredicate("s") + `) b,
-			(SELECT array_agg(DISTINCT LOWER(v.owner_email) ORDER BY LOWER(v.owner_email)) as owners
-			 FROM visible v JOIN sessions s ON v.id = s.id
-			 WHERE ` + db.ListableSessionPredicate("s") + `) o
+			 FROM listable s
+			 WHERE s.git_info->>'branch' IS NOT NULL) b,
+			(SELECT array_agg(DISTINCT LOWER(s.owner_email) ORDER BY LOWER(s.owner_email)) as owners
+			 FROM listable s) o
 	`
 
 	var repos, branches, owners []string
@@ -315,24 +317,25 @@ var sessionSelectCols = `
 				COALESCE(gcr.commits, ARRAY[]::text[]) as github_commits,
 				` + db.V2TotalCostExpr("v")
 
+// sessionStatsJoins attaches per-session file stats and GitHub refs as LATERAL
+// subqueries keyed on s.id, so each costs one index probe per returned row
+// rather than aggregating all of sync_files / session_github_links up front.
 var sessionStatsJoins = `
-			LEFT JOIN (
-				SELECT session_id, COUNT(*) as file_count, SUM(last_synced_line) as total_lines
-				FROM sync_files GROUP BY session_id
-			) sf_stats ON s.id = sf_stats.session_id
-			LEFT JOIN github_pr_refs gpr ON s.id = gpr.session_id
-			LEFT JOIN github_commit_refs gcr ON s.id = gcr.session_id
+			LEFT JOIN LATERAL (
+				SELECT COUNT(*) as file_count, SUM(sf.last_synced_line) as total_lines
+				FROM sync_files sf WHERE sf.session_id = s.id
+			) sf_stats ON true
+			LEFT JOIN LATERAL (
+				SELECT array_agg(sgl.url ORDER BY sgl.created_at) as prs
+				FROM session_github_links sgl
+				WHERE sgl.session_id = s.id AND sgl.link_type = 'pull_request'
+			) gpr ON true
+			LEFT JOIN LATERAL (
+				SELECT array_agg(sgl.ref ORDER BY sgl.created_at DESC) as commits
+				FROM session_github_links sgl
+				WHERE sgl.session_id = s.id AND sgl.link_type = 'commit'
+			) gcr ON true
 			LEFT JOIN session_card_tokens_v2 v ON s.id = v.session_id`
-
-const githubRefCTEs = `
-		github_pr_refs AS (
-			SELECT session_id, array_agg(url ORDER BY created_at) as prs
-			FROM session_github_links WHERE link_type = 'pull_request' GROUP BY session_id
-		),
-		github_commit_refs AS (
-			SELECT session_id, array_agg(ref ORDER BY created_at DESC) as commits
-			FROM session_github_links WHERE link_type = 'commit' GROUP BY session_id
-		)`
 
 // dedupedVisibleCTE wraps db.VisibleSessionsCTE with a DISTINCT ON (id) pass
 // that picks the highest-priority access_type per session: owner > private_share > system_share.
@@ -351,26 +354,52 @@ const dedupedVisibleCTE = `
 			END
 		)`
 
-// CF-495: single SQL shape for paginated session listing — routes visibility
-// through db.VisibleSessionsCTE so both default and share-all modes share the
-// same column projection. Owner filter applied uniformly on the deduped
-// visible CTE (d.owner_email). access_type / shared_by_email come from the
-// helper rather than per-branch CASE expressions.
+// visibleSessionsLateral is the share-all counterpart to deduped_visible: it
+// resolves each session's highest-priority access with a per-session probe of
+// visible_sessions, so LIMIT applies before any per-row work instead of after
+// deduplicating every session in the org. With per-user visibility the visible
+// set is small and deduped_visible stays the cheaper starting side.
+const visibleSessionsLateral = `
+			FROM sessions s
+			CROSS JOIN LATERAL (
+				SELECT vs.owner_email, vs.access_type, vs.shared_by_email
+				FROM visible_sessions vs
+				WHERE vs.id = s.id
+				ORDER BY CASE vs.access_type
+					WHEN 'owner' THEN 1
+					WHEN 'private_share' THEN 2
+					WHEN 'system_share' THEN 3
+					ELSE 4
+				END
+				LIMIT 1
+			) d`
+
+// CF-495: paginated session listing routes visibility through
+// db.VisibleSessionsCTE, so both default and share-all modes share one
+// predicate and column projection; only the join that resolves each session's
+// access differs (deduped_visible vs visibleSessionsLateral). Owner filter
+// applies to d.owner_email in both.
 func (s *Store) buildFilteredSessionsQuery(userID int64, params db.SessionListParams) (string, []any) {
 	pb := newParamBuilder(userID)
 	commonFilters, ownerFilter, searchJoin := buildPushdownFilters(pb, params)
 	limitP := pb.add(params.PageSize + 1)
 
+	visibleCTEs := db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE
+	from := `
+			FROM deduped_visible d
+			JOIN sessions s ON d.id = s.id`
+	if s.DB.ShareAllSessions {
+		visibleCTEs = db.VisibleSessionsCTE(true)
+		from = visibleSessionsLateral
+	}
+
 	query := `
-		WITH` + githubRefCTEs + `,
-		` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE + `
+		WITH ` + visibleCTEs + `
 		SELECT` + sessionSelectCols + `,
 				(d.access_type = 'owner') as is_owner,
 				d.access_type,
 				d.shared_by_email,
-				d.owner_email
-			FROM deduped_visible d
-			JOIN sessions s ON d.id = s.id` + sessionStatsJoins + searchJoin + `
+				d.owner_email` + from + sessionStatsJoins + searchJoin + `
 			WHERE 1=1` + commonFilters + ownerFilter
 
 	if params.Cursor != "" {

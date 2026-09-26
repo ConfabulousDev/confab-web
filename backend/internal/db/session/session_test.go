@@ -1136,6 +1136,48 @@ func TestListUserSessions_ShareAllSessions_PrivateShareTakesPrecedence(t *testin
 	}
 }
 
+// TestListUserSessionsPaginated_ShareAllSessions_AccessPriority covers the
+// share-all lateral visibility path: each session appears once, labelled with
+// its highest-priority access (owner > private_share > system_share).
+func TestListUserSessionsPaginated_ShareAllSessions_AccessPriority(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	env.CleanDB(t)
+	store := &dbsession.Store{DB: env.DB}
+
+	env.DB.ShareAllSessions = true
+	defer func() { env.DB.ShareAllSessions = false }()
+
+	owner := testutil.CreateTestUser(t, env, "owner@test.com", "Owner")
+	viewer := testutil.CreateTestUser(t, env, "viewer@test.com", "Viewer")
+
+	privateID := testutil.CreateTestSessionFull(t, env, owner.ID, "private-shared", testutil.TestSessionFullOpts{Summary: "private"})
+	testutil.CreateTestShare(t, env, privateID, false, nil, []string{"viewer@test.com"})
+	systemID := testutil.CreateTestSessionFull(t, env, owner.ID, "system-visible", testutil.TestSessionFullOpts{Summary: "system"})
+	ownID := testutil.CreateTestSessionFull(t, env, viewer.ID, "viewer-own", testutil.TestSessionFullOpts{Summary: "own"})
+
+	result, err := store.ListUserSessionsPaginated(context.Background(), viewer.ID, db.SessionListParams{PageSize: 50})
+	if err != nil {
+		t.Fatalf("ListUserSessionsPaginated failed: %v", err)
+	}
+
+	want := map[string]string{privateID: "private_share", systemID: "system_share", ownID: "owner"}
+	if len(result.Sessions) != len(want) {
+		t.Fatalf("expected %d sessions (one row per session), got %d", len(want), len(result.Sessions))
+	}
+	for _, sess := range result.Sessions {
+		if got := sess.AccessType; got != want[sess.ID] {
+			t.Errorf("session %s: expected access_type %s, got %s", sess.ID, want[sess.ID], got)
+		}
+		if sess.IsOwner != (sess.ID == ownID) {
+			t.Errorf("session %s: unexpected is_owner=%v", sess.ID, sess.IsOwner)
+		}
+	}
+}
+
 // =============================================================================
 // ListUserSessionsPaginated Tests
 // =============================================================================
