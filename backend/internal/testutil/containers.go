@@ -8,6 +8,7 @@ import (
 
 	minioclient "github.com/minio/minio-go/v7"
 	miniocreds "github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/moby/moby/api/types/container"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -78,13 +79,25 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Start MinIO container
+	// Start MinIO container. quay.io/minio/minio now requires authentication
+	// for anonymous pulls (MinIO locked it down the same way they locked down
+	// the Docker Hub image in 2025), so this uses the Bitnami Legacy mirror on
+	// Docker Hub instead. That image runs as a non-root user by default and
+	// can't write to /data under the module's default "server /data" command,
+	// so it must run as root (uid 0).
 	t.Log("Starting MinIO container...")
 	minioContainer, err := minio.Run(ctx,
-		"quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z",
+		"bitnamilegacy/minio:2025.7.23-debian-12-r5",
 		minio.WithUsername("minioadmin"),
 		minio.WithPassword("minioadmin"),
 		testcontainers.WithWaitStrategy(MinioWaitStrategy()),
+		testcontainers.CustomizeRequest(testcontainers.GenericContainerRequest{
+			ContainerRequest: testcontainers.ContainerRequest{
+				ConfigModifier: func(c *container.Config) {
+					c.User = "0"
+				},
+			},
+		}),
 	)
 	if err != nil {
 		t.Fatalf("Failed to start minio container: %v", err)
