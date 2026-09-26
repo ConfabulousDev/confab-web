@@ -46,8 +46,13 @@ services:
       retries: 5
 
   minio:
-    # MinIO community images are frozen (upstream stopped publishing); pinned to the last multi-arch release. See kata z6ts.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO community images are frozen (upstream stopped publishing), and
+    # quay.io/minio/minio now requires auth even for the frozen tag (locked
+    # down 2026-09-24, see kata z6ts + #411). Using the Bitnami Legacy mirror
+    # on Docker Hub instead, which still pulls anonymously. That image drops
+    # root by default and can't write to /data, so it runs as root (uid 0).
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    user: "0"
     restart: unless-stopped
     logging: *default-logging
     command: server /data --console-address ":9001"
@@ -63,15 +68,15 @@ services:
       retries: 5
 
   minio-setup:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     logging: *default-logging
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-      /usr/bin/mc mb minio/${BUCKET_NAME:-confab} --ignore-existing;
+      mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb minio/${BUCKET_NAME:-confab} --ignore-existing;
       exit 0;
       "
 
