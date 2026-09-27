@@ -1087,7 +1087,7 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | `cards.smart_recap.recap` | string | Short recap of the session |
 | `cards.smart_recap.went_well` / `went_bad` / `human_suggestions` / `environment_suggestions` / `default_context_suggestions` | array | Items of `{text, message_id?}`; `message_id` is a transcript message UUID when present |
 | `cards.smart_recap.computed_at` | string | RFC 3339 timestamp of generation |
-| `cards.smart_recap.model_used` | string | Model id that generated the recap — an Anthropic (e.g. `claude-haiku-4-5-20251001`) or OpenAI (e.g. `gpt-5.6-luna`) model id |
+| `cards.smart_recap.model_used` | string | Model id that generated the recap — an Anthropic (e.g. `claude-haiku-4-5-20251001`) or OpenAI (e.g. `gpt-6-luna`) model id |
 | `cards.smart_recap.llm_provider` | string | LLM provider that generated the recap: `"anthropic"` or `"openai"`. Always present; recaps generated before this field existed report `"anthropic"` |
 | `card_errors` | object\|null | Map of card key to error message for failed computations (graceful degradation) |
 | `smart_recap_quota` | object\|null | Per-user quota info (present when quota is capped and viewer is owner; omitted when unlimited or non-owner) |

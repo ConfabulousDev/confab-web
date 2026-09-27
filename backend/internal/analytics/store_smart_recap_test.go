@@ -268,7 +268,7 @@ func TestSmartRecapCard_LLMProviderRoundTripAndLegacyNull(t *testing.T) {
 		return card.LLMProvider
 	}
 
-	if err := store.UpsertSmartRecapCard(ctx, cardFor(analytics.LLMProviderOpenAI, "gpt-5.6-luna")); err != nil {
+	if err := store.UpsertSmartRecapCard(ctx, cardFor(analytics.LLMProviderOpenAI, "gpt-6-luna")); err != nil {
 		t.Fatalf("upsert openai: %v", err)
 	}
 	if got := getProvider(); got != analytics.LLMProviderOpenAI {

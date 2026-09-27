@@ -36,7 +36,7 @@ describe('SmartRecapCard', () => {
   it('shows the OpenAI vendor icon and model name for openai recaps', () => {
     render(
       <SmartRecapCard
-        data={{ ...mockData, llm_provider: 'openai', model_used: 'gpt-5.6-luna' }}
+        data={{ ...mockData, llm_provider: 'openai', model_used: 'gpt-6-luna' }}
         loading={false}
         quota={mockQuota}
       />
@@ -45,7 +45,7 @@ describe('SmartRecapCard', () => {
     const vendor = screen.getByRole('img', { name: 'OpenAI' });
     expect(vendor).toHaveAttribute('title', 'OpenAI');
     expect(screen.queryByRole('img', { name: 'Anthropic' })).not.toBeInTheDocument();
-    expect(screen.getByText(/gpt-5\.6-luna/)).toBeInTheDocument();
+    expect(screen.getByText(/gpt-6-luna/)).toBeInTheDocument();
     expect(screen.getByText(/3\/10 this month/)).toBeInTheDocument();
   });
 

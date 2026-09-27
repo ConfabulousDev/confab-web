@@ -170,7 +170,7 @@ describe('SessionSummaryPanel', () => {
       environment_suggestions: [],
       default_context_suggestions: [],
       computed_at: '2024-01-15T10:30:00Z',
-      model_used: 'gpt-5.6-luna',
+      model_used: 'gpt-6-luna',
     };
     const withVendor = (vendor?: string): unknown => {
       const fixture = buildCursorAnalyticsFixture();
