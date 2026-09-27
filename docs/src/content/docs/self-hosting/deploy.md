@@ -244,7 +244,7 @@ To use OpenAI instead:
 SMART_RECAP_ENABLED=true
 SMART_RECAP_LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-xxxxxxxxxxxx
-SMART_RECAP_MODEL=gpt-5.6-luna
+SMART_RECAP_MODEL=gpt-6-luna
 ```
 
 The bundled `worker` service precomputes recaps in the background. See [Configuration](/self-hosting/configuration/) for advanced worker tuning options.

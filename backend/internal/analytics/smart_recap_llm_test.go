@@ -34,13 +34,13 @@ func TestResolveSmartRecapLLMConfig(t *testing.T) {
 		},
 		{
 			name:       "openai uses OPENAI_API_KEY, not ANTHROPIC_API_KEY",
-			env:        map[string]string{"SMART_RECAP_LLM_PROVIDER": "openai", "ANTHROPIC_API_KEY": "ak", "OPENAI_API_KEY": "ok", "SMART_RECAP_MODEL": "gpt-5.6-luna"},
+			env:        map[string]string{"SMART_RECAP_LLM_PROVIDER": "openai", "ANTHROPIC_API_KEY": "ak", "OPENAI_API_KEY": "ok", "SMART_RECAP_MODEL": "gpt-6-luna"},
 			wantVendor: LLMProviderOpenAI,
 			wantKey:    "ok",
 		},
 		{
 			name:       "surrounding whitespace is trimmed",
-			env:        map[string]string{"SMART_RECAP_LLM_PROVIDER": "  openai \n", "OPENAI_API_KEY": "ok", "SMART_RECAP_MODEL": "gpt-5.6-luna"},
+			env:        map[string]string{"SMART_RECAP_LLM_PROVIDER": "  openai \n", "OPENAI_API_KEY": "ok", "SMART_RECAP_MODEL": "gpt-6-luna"},
 			wantVendor: LLMProviderOpenAI,
 			wantKey:    "ok",
 		},
@@ -52,7 +52,7 @@ func TestResolveSmartRecapLLMConfig(t *testing.T) {
 		},
 		{
 			name:        "openai with only ANTHROPIC_API_KEY reports OPENAI_API_KEY missing",
-			env:         map[string]string{"SMART_RECAP_LLM_PROVIDER": "openai", "ANTHROPIC_API_KEY": "ak", "SMART_RECAP_MODEL": "gpt-5.6-luna"},
+			env:         map[string]string{"SMART_RECAP_LLM_PROVIDER": "openai", "ANTHROPIC_API_KEY": "ak", "SMART_RECAP_MODEL": "gpt-6-luna"},
 			wantVendor:  LLMProviderOpenAI,
 			wantMissing: "OPENAI_API_KEY",
 		},
@@ -287,7 +287,7 @@ func TestOpenAIRecapLLM_SendsStrictSchemaRequestWithoutTemperature(t *testing.T)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if body["model"] != "gpt-5.6-luna" || body["instructions"] != "SYSTEM" || body["input"] != "USER" {
+		if body["model"] != "gpt-6-luna" || body["instructions"] != "SYSTEM" || body["input"] != "USER" {
 			t.Errorf("model/instructions/input = %v/%v/%v", body["model"], body["instructions"], body["input"])
 		}
 		if body["max_output_tokens"] != float64(1000) {
@@ -324,7 +324,7 @@ func TestOpenAIRecapLLM_SendsStrictSchemaRequestWithoutTemperature(t *testing.T)
 		t.Fatalf("newRecapLLM: %v", err)
 	}
 	resp, err := llm.Generate(context.Background(), recapLLMRequest{
-		Model: "gpt-5.6-luna", System: "SYSTEM", User: "USER", MaxOutputTokens: 1000,
+		Model: "gpt-6-luna", System: "SYSTEM", User: "USER", MaxOutputTokens: 1000,
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
@@ -580,7 +580,7 @@ func TestSmartRecapAnalyzer_AnalyzeParsesAnyVendorOutput(t *testing.T) {
 		InputTokens:  300,
 		OutputTokens: 40,
 	}}
-	analyzer := NewSmartRecapAnalyzer(fake, "gpt-5.6-luna", SmartRecapAnalyzerConfig{SystemPrompt: "SYS"})
+	analyzer := NewSmartRecapAnalyzer(fake, "gpt-6-luna", SmartRecapAnalyzerConfig{SystemPrompt: "SYS"})
 
 	result, err := analyzer.Analyze(context.Background(), GenerateInput{
 		Transcript: "<transcript>hello</transcript>",
@@ -589,7 +589,7 @@ func TestSmartRecapAnalyzer_AnalyzeParsesAnyVendorOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
-	if fake.got.Model != "gpt-5.6-luna" || fake.got.System != "SYS" || fake.got.MaxOutputTokens != DefaultMaxOutputTokens {
+	if fake.got.Model != "gpt-6-luna" || fake.got.System != "SYS" || fake.got.MaxOutputTokens != DefaultMaxOutputTokens {
 		t.Errorf("request = %+v", fake.got)
 	}
 	if !strings.Contains(fake.got.User, "<transcript>hello</transcript>") {

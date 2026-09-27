@@ -40,7 +40,7 @@ func TestLoadSmartRecapConfig_SelectsOpenAI(t *testing.T) {
 		"SMART_RECAP_LLM_PROVIDER":  "openai",
 		"ANTHROPIC_API_KEY":         "ak",
 		"OPENAI_API_KEY":            "ok",
-		"SMART_RECAP_MODEL":         "gpt-5.6-luna",
+		"SMART_RECAP_MODEL":         "gpt-6-luna",
 		"TEST_SMART_RECAP_BASE_URL": "http://mock",
 	})
 
@@ -54,7 +54,7 @@ func TestLoadSmartRecapConfig_SelectsOpenAI(t *testing.T) {
 	}
 
 	gen := cfg.generatorConfig()
-	if gen.Provider != analytics.LLMProviderOpenAI || gen.APIKey != "ok" || gen.Model != "gpt-5.6-luna" || gen.BaseURL != "http://mock" {
+	if gen.Provider != analytics.LLMProviderOpenAI || gen.APIKey != "ok" || gen.Model != "gpt-6-luna" || gen.BaseURL != "http://mock" {
 		t.Errorf("generatorConfig = %+v", gen)
 	}
 }
@@ -64,7 +64,7 @@ func TestLoadSmartRecapConfig_DisablesWhenActiveVendorKeyMissing(t *testing.T) {
 		"SMART_RECAP_ENABLED":      "true",
 		"SMART_RECAP_LLM_PROVIDER": "openai",
 		"ANTHROPIC_API_KEY":        "ak", // wrong vendor's key does not count
-		"SMART_RECAP_MODEL":        "gpt-5.6-luna",
+		"SMART_RECAP_MODEL":        "gpt-6-luna",
 	})
 
 	if loadSmartRecapConfig().Enabled {

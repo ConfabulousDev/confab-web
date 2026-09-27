@@ -55,7 +55,7 @@ export const OpenAIGenerated: Story = {
     ...Default.args,
     data: {
       ...Default.args!.data!,
-      model_used: 'gpt-5.6-luna',
+      model_used: 'gpt-6-luna',
       llm_provider: 'openai',
     },
   },

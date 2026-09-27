@@ -394,7 +394,7 @@ func TestLoadPrecomputeConfig_SelectsOpenAI(t *testing.T) {
 	t.Setenv("SMART_RECAP_LLM_PROVIDER", "openai")
 	t.Setenv("ANTHROPIC_API_KEY", "anthropic-key")
 	t.Setenv("OPENAI_API_KEY", "openai-key")
-	t.Setenv("SMART_RECAP_MODEL", "gpt-5.6-luna")
+	t.Setenv("SMART_RECAP_MODEL", "gpt-6-luna")
 
 	cfg := loadPrecomputeConfig()
 
@@ -414,7 +414,7 @@ func TestLoadPrecomputeConfig_DisablesWhenOpenAIKeyMissing(t *testing.T) {
 	t.Setenv("SMART_RECAP_ENABLED", "true")
 	t.Setenv("SMART_RECAP_LLM_PROVIDER", "openai")
 	t.Setenv("ANTHROPIC_API_KEY", "anthropic-key") // wrong vendor's key does not count
-	t.Setenv("SMART_RECAP_MODEL", "gpt-5.6-luna")
+	t.Setenv("SMART_RECAP_MODEL", "gpt-6-luna")
 
 	cfg := loadPrecomputeConfig()
 

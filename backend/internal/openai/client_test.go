@@ -13,7 +13,7 @@ import (
 
 func strictRequest() *ResponsesRequest {
 	return &ResponsesRequest{
-		Model:           "gpt-5.6-luna",
+		Model:           "gpt-6-luna",
 		Instructions:    "You are a summarizer.",
 		Input:           "Summarize this transcript",
 		MaxOutputTokens: 1000,
@@ -47,7 +47,7 @@ func TestCreateResponse_SendsResponsesAPIRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
-		if body["model"] != "gpt-5.6-luna" {
+		if body["model"] != "gpt-6-luna" {
 			t.Errorf("model = %v", body["model"])
 		}
 		if body["instructions"] != "You are a summarizer." {

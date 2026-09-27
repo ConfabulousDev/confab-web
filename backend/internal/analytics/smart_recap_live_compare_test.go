@@ -15,7 +15,7 @@ import (
 // CI sets none of these. It is also the live check that the OpenAI model accepts
 // reasoning effort "none" and the strict schema.
 //
-// Models default to claude-haiku-4-5-20251001 and gpt-5.6-luna; override with
+// Models default to claude-haiku-4-5-20251001 and gpt-6-luna; override with
 // SMART_RECAP_COMPARE_ANTHROPIC_MODEL / SMART_RECAP_COMPARE_OPENAI_MODEL.
 func TestSmartRecapLiveCompare(t *testing.T) {
 	if testing.Short() {
@@ -44,7 +44,7 @@ func TestSmartRecapLiveCompare(t *testing.T) {
 		provider, keyVar, modelVar, defaultModel string
 	}{
 		{LLMProviderAnthropic, "ANTHROPIC_API_KEY", "SMART_RECAP_COMPARE_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"},
-		{LLMProviderOpenAI, "OPENAI_API_KEY", "SMART_RECAP_COMPARE_OPENAI_MODEL", "gpt-5.6-luna"},
+		{LLMProviderOpenAI, "OPENAI_API_KEY", "SMART_RECAP_COMPARE_OPENAI_MODEL", "gpt-6-luna"},
 	}
 	for _, v := range vendors {
 		t.Run(v.provider, func(t *testing.T) {
