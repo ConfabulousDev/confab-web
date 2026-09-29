@@ -61,6 +61,8 @@ func TestGetModelFamily(t *testing.T) {
 		{"claude-fable-5-20260601", "fable-5"},
 		{"claude-opus-5-5", "opus-5-5"},
 		{"claude-opus-5-5-20260922", "opus-5-5"},
+		{"claude-sonnet-5-5", "sonnet-5-5"},
+		{"claude-sonnet-5-5-20260928", "sonnet-5-5"},
 		{"claude-opus-4-8-20260515", "opus-4-8"},
 		{"claude-opus-4-6-20260201", "opus-4-6"},
 		{"claude-opus-4-5-20251101", "opus-4-5"},
@@ -109,6 +111,7 @@ func TestLookupPricing(t *testing.T) {
 		{"claude-mythos-5-1", true, 10},
 		{"claude-fable-5-1", true, 10},
 		{"claude-sonnet-5", true, 2},
+		{"claude-sonnet-5-5", true, 2},
 		{"claude-sonnet-4-20241022", true, 3},
 		{"claude-haiku-3-5-20241022", true, 0.80},
 		{"unknown-model", false, 0}, // unknown non-empty model: not found, zero pricing
@@ -565,6 +568,7 @@ func TestEmbeddedRates(t *testing.T) {
 		// would be a silent overcharge — 4x and 2x respectively — on the dominant
 		// token category in agentic sessions.
 		{"opus-5-5", 4, 20, 5, 8, 0.20},
+		{"sonnet-5-5", 2, 10, 2.5, 4, 0.2}, // standard 0.1x cache read: no exception
 		{"sonnet-5", 2, 10, 2.5, 4, 0.2},
 		{"fable-5-1", 10, 50, 12.5, 20, 0.25},
 		{"mythos-5-1", 10, 50, 12.5, 20, 0.25},
