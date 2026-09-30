@@ -130,6 +130,7 @@ func TestLookupPricing(t *testing.T) {
 		{"gpt-5.6-terra", true, 2.00},
 		{"gpt-5.6-luna", true, 0.20},
 		{"gpt-6-astra", true, 10.00},
+		{"gpt-6.1-sol", true, 2.00},
 		{"gpt-6-sol", true, 2.00},
 		{"gpt-6-luna", true, 0.10},
 		{"gpt-5-pro", true, 15.00},
@@ -587,6 +588,7 @@ func TestEmbeddedRates(t *testing.T) {
 		{"gpt-5.6-luna", 0.2, 1.2, 0.25, 0, 0.02},
 		{"gpt-5.6-cyber", 12.5, 75.0, 15.625, 0, 1.25},
 		{"gpt-6-astra", 10.0, 50.0, 12.5, 0, 1.0},
+		{"gpt-6.1-sol", 2.0, 10.0, 2.5, 0, 0.10}, // 0.05x cache read: documented exception
 		{"gpt-6-sol", 2.0, 10.0, 2.5, 0, 0.20},
 		{"gpt-6-luna", 0.10, 0.50, 0.125, 0, 0.01},
 		// The pro models offer no caching at all (both columns are dashes on the
@@ -659,6 +661,23 @@ func TestOpus55CacheReadException(t *testing.T) {
 	}
 	if want := decimal.NewFromFloat(0.20); !pricing.CacheRead.Equal(want) {
 		t.Errorf("opus-5-5 CacheRead = %s, want %s (0.05x base input, NOT the usual 0.1x = 0.40)", pricing.CacheRead, want)
+	}
+}
+
+// TestGPT61SolCacheReadException pins GPT-6.1 Sol's cache-read rate at 0.05x
+// input ($0.10 against $2 input). OpenAI prices it deliberately at half of
+// GPT-6 Sol's cached input; normalizing to the usual 0.1x (which is also
+// gpt-6-sol's $0.20) would silently double cache-read cost.
+func TestGPT61SolCacheReadException(t *testing.T) {
+	pricing, ok := LookupPricing("gpt-6.1-sol")
+	if !ok {
+		t.Fatal("gpt-6.1-sol not found in embedded pricing")
+	}
+	if want := decimal.NewFromFloat(2); !pricing.Input.Equal(want) {
+		t.Errorf("gpt-6.1-sol Input = %s, want %s (the 0.05x cache-read claim is relative to this)", pricing.Input, want)
+	}
+	if want := decimal.NewFromFloat(0.10); !pricing.CacheRead.Equal(want) {
+		t.Errorf("gpt-6.1-sol CacheRead = %s, want %s (0.05x input, NOT the usual 0.1x = gpt-6-sol's 0.20)", pricing.CacheRead, want)
 	}
 }
 
