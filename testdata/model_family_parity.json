@@ -19,6 +19,8 @@
     },
     { "provider": "codex", "id": "gpt-5-2026-05-01", "backend": "gpt-5",   "frontend": "gpt-5" },
     { "provider": "codex", "id": "gpt-5.4",          "backend": "gpt-5.4", "frontend": "gpt-5.4" },
+    { "provider": "codex", "id": "gpt-6.1-sol",      "backend": "gpt-6.1-sol", "frontend": "gpt-6.1-sol" },
+    { "provider": "codex", "id": "gpt-6.1-sol-2026-09-29", "backend": "gpt-6.1-sol", "frontend": "gpt-6.1-sol" },
     { "provider": "codex", "id": "gpt-6-sol",        "backend": "gpt-6-sol",  "frontend": "gpt-6-sol" },
     { "provider": "codex", "id": "gpt-6-luna",       "backend": "gpt-6-luna", "frontend": "gpt-6-luna" }
   ]

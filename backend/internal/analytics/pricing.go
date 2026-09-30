@@ -235,7 +235,7 @@ func CalculateTotalCost(pricing ModelPricing, usage *TokenUsage) decimal.Decimal
 	)
 	cost = cost.Add(decimal.NewFromInt(cache1h).Mul(effectiveCacheWrite1h(pricing)).Div(oneMillion))
 
-	// Fast mode: 6x all token costs
+	// Fast mode: 2x all token costs
 	if usage.Speed == SpeedFast {
 		cost = cost.Mul(fastModeMultiplier)
 	}
