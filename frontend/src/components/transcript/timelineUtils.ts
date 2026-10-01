@@ -1,10 +1,13 @@
 // Helpers shared between all 4 transcript providers (Claude, Codex, Cursor,
-// OpenCode). Kept narrow: only decision/format/scroll-retry logic with
-// identical semantics everywhere. Each provider's own `*VirtualItems.ts`
-// builder owns the loop that calls these (6h7m) — this file stays a pure
-// function library, not a generic injection builder (see that ticket's
+// OpenCode). Kept narrow: only decision/format/scroll logic with identical
+// semantics everywhere. Each provider's own `*VirtualItems.ts` builder owns the
+// loop that calls the divider helpers (6h7m), and each pane keeps its own index
+// translation and selection state around the scroll helpers (cca0) — this file
+// stays a function library, not a generic injection builder (see 6h7m's
 // Decision 5: forcing Codex's isNewSpeaker tracking or Claude's
 // allIndex/filteredIndex tagging through one shared shape wasn't worth it).
+
+import type { Virtualizer } from '@tanstack/react-virtual';
 
 /**
  * Right-offset (px) for `ScrollNavButtons` when the CostBar is visible. Both
@@ -137,4 +140,106 @@ export function retryOnAnimationFrame(
     }
   }
   attempt(0);
+}
+
+/** The slice of a TanStack virtualizer the scroll helpers below drive. */
+type ScrollVirtualizer = Pick<
+  Virtualizer<HTMLDivElement, Element>,
+  'scrollToIndex' | 'getVirtualItems'
+>;
+
+/** Frames to let `scrollToIndex` retries settle before locating the `<mark>`. */
+const SEARCH_SCROLL_SETTLE_FRAMES = 6;
+/** Frames to keep looking for the matched row's first `<mark>`. */
+const SEARCH_MARK_MAX_ATTEMPTS = 10;
+
+/**
+ * cca0: scroll the current search match's row (`virtualIndex`) to center, then
+ * bring the row's first `<mark>` into view. Shared by all 4 transcript panes'
+ * search effects; each pane translates its match into a virtual index first.
+ *
+ * The mark scroll waits `SEARCH_SCROLL_SETTLE_FRAMES` before starting:
+ * `scrollToIndex` keeps retrying across frames as row measurements settle, and
+ * a retry landing after `scrollIntoView` would override it. It then retries
+ * across frames in case the virtualizer hasn't mounted (or finished rendering)
+ * a tall row yet. This is what surfaces matches in rows that weren't mounted.
+ *
+ * Returns a cancel function; search effects return it as their cleanup so a
+ * superseded match never steals the scroll.
+ */
+export function scrollToSearchMatch(
+  virtualizer: Pick<ScrollVirtualizer, 'scrollToIndex'>,
+  getScrollEl: () => HTMLElement | null,
+  virtualIndex: number,
+): () => void {
+  retryOnAnimationFrame(
+    () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
+    () => false,
+  );
+
+  let cancelled = false;
+  function scrollToMark(attempt: number): void {
+    if (cancelled || attempt >= SEARCH_MARK_MAX_ATTEMPTS) return;
+    const scrollEl = getScrollEl();
+    if (!scrollEl) return;
+    const mark = scrollEl.querySelector(`[data-index="${virtualIndex}"]`)?.querySelector('mark');
+    if (mark) {
+      mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      requestAnimationFrame(() => scrollToMark(attempt + 1));
+    }
+  }
+  function delayThenScroll(framesLeft: number): void {
+    if (cancelled) return;
+    if (framesLeft <= 0) {
+      scrollToMark(0);
+      return;
+    }
+    requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
+  }
+  delayThenScroll(SEARCH_SCROLL_SETTLE_FRAMES);
+
+  return () => {
+    cancelled = true;
+  };
+}
+
+/** cca0: scroll to the first row, retrying until the virtualizer shows index 0. */
+export function scrollVirtualizerToStart(virtualizer: ScrollVirtualizer): void {
+  retryOnAnimationFrame(
+    () => virtualizer.scrollToIndex(0, { align: 'start' }),
+    () => virtualizer.getVirtualItems()[0]?.index === 0,
+  );
+}
+
+/** cca0: scroll to `lastIndex`, retrying until the virtualizer shows it. */
+export function scrollVirtualizerToEnd(virtualizer: ScrollVirtualizer, lastIndex: number): void {
+  retryOnAnimationFrame(
+    () => virtualizer.scrollToIndex(lastIndex, { align: 'end' }),
+    () => {
+      const visible = virtualizer.getVirtualItems();
+      const last = visible[visible.length - 1];
+      return !!last && last.index >= lastIndex;
+    },
+  );
+}
+
+/**
+ * cca0: the first defined `lookup(items[i])` for `i >= start`, skipping holes
+ * and items `lookup` doesn't map; `undefined` when none map. Used by the
+ * TimelineBar seek handlers to turn an unfiltered segment start into the first
+ * row at or after it that survives the active filter.
+ */
+export function firstIndexAtOrAfter<T>(
+  items: readonly T[],
+  start: number,
+  lookup: (item: T) => number | undefined,
+): number | undefined {
+  for (let i = start; i < items.length; i++) {
+    const item = items[i];
+    if (item === undefined) continue;
+    const mapped = lookup(item);
+    if (mapped !== undefined) return mapped;
+  }
+  return undefined;
 }

@@ -16,10 +16,14 @@ import { CostBar } from '@/components/transcript/CostBar';
 import {
   addCmdFListener,
   retryOnAnimationFrame,
+  scrollToSearchMatch,
+  scrollVirtualizerToEnd,
+  scrollVirtualizerToStart,
   SCROLL_NAV_COST_MODE_RIGHT,
 } from '@/components/transcript/timelineUtils';
 import { TimeSeparator } from '@/components/transcript/TimeSeparator';
 import { useSegmentLayout } from '@/components/transcript/timelineSegments';
+import { useFirstVisibleIndex } from '@/components/transcript/useFirstVisibleIndex';
 import { buildVirtualItems, type VirtualItem } from './claudeVirtualItems';
 import { buildClaudeAgentIndex } from './claudeAgentIndex';
 import { ClaudeThreadContext, type ClaudeThreadContextValue } from './claudeThreadContext';
@@ -93,7 +97,6 @@ function CostBarSlot({ messages, messageCosts, totalCost, selectedIndex, onSeek 
 
 function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessionId, isCostMode, activeThreadId, onOpenThread }: ClaudeMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const hasScrolledToTarget = useRef(false);
 
@@ -297,74 +300,14 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
     const virtualIndex = messageIndexToVirtualIndex.get(allIndex);
     if (virtualIndex === undefined) return;
 
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
-      () => false,
-    );
+    const cancel = scrollToSearchMatch(virtualizer, () => parentRef.current, virtualIndex);
     setSelectedIndex(allIndex);
-
-    // After the message scrolls into view, scroll the first <mark> into view.
-    // Wait for scrollToIndex retries to settle (6 frames) before starting,
-    // otherwise scrollToIndex will override our scrollIntoView.
-    // Then retry across frames in case the virtualizer hasn't finished
-    // rendering tall messages yet.
-    let cancelled = false;
-    const scrollToIndexFrames = 6;
-    const maxMarkRetries = 10;
-    function scrollToMark(attempt: number) {
-      if (cancelled || attempt >= maxMarkRetries) return;
-      const scrollEl = parentRef.current;
-      if (!scrollEl) return;
-      const messageEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
-      if (!messageEl) {
-        requestAnimationFrame(() => scrollToMark(attempt + 1));
-        return;
-      }
-      const mark = messageEl.querySelector('mark');
-      if (mark) {
-        mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } else {
-        requestAnimationFrame(() => scrollToMark(attempt + 1));
-      }
-    }
-    // Delay start so scrollToIndex retries don't override the mark scroll
-    function delayThenScroll(framesLeft: number) {
-      if (cancelled) return;
-      if (framesLeft <= 0) { scrollToMark(0); return; }
-      requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
-    }
-    delayThenScroll(scrollToIndexFrames);
-
-    return () => { cancelled = true; };
+    return cancel;
   }, [search.currentMatchFilteredIndex, messages, messageToAllIndex, messageIndexToVirtualIndex, virtualizer]);
 
-  // Track first visible message for TimelineBar position indicator
-  const updateFirstVisible = useCallback(() => {
-    const visibleItems = virtualizer.getVirtualItems();
-    if (visibleItems.length === 0) return;
-
-    // Find first visible message (skip separators)
-    for (const vItem of visibleItems) {
-      const item = virtualItems[vItem.index];
-      if (item && item.type === 'message') {
-        setFirstVisibleIndex(item.index);
-        return;
-      }
-    }
-  }, [virtualizer, virtualItems]);
-
-  // Attach scroll listener
-  useEffect(() => {
-    const scrollElement = parentRef.current;
-    if (!scrollElement) return;
-
-    scrollElement.addEventListener('scroll', updateFirstVisible, { passive: true });
-    updateFirstVisible(); // Initial position
-
-    return () => {
-      scrollElement.removeEventListener('scroll', updateFirstVisible);
-    };
-  }, [updateFirstVisible]);
+  // Track first visible message (skipping separators) for the TimelineBar
+  // position indicator
+  const firstVisibleIndex = useFirstVisibleIndex(parentRef, virtualizer, virtualItems, 'message');
 
   // Scroll to a message in the given range (used by TimelineBar)
   // Tries each index from startIndex to endIndex until finding one in view
@@ -405,26 +348,11 @@ function ClaudeMessageTimeline({ messages, allMessages, targetMessageUuid, sessi
   const effectiveSelectedIndex = selectedIndex ?? firstVisibleIndex;
 
   const scrollToTop = useCallback(() => {
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(0, { align: 'start' }),
-      () => {
-        const items = virtualizer.getVirtualItems();
-        const first = items[0];
-        return !!first && first.index === 0;
-      },
-    );
+    scrollVirtualizerToStart(virtualizer);
   }, [virtualizer]);
 
   const scrollToBottom = useCallback(() => {
-    const lastIndex = virtualItems.length - 1;
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(lastIndex, { align: 'end' }),
-      () => {
-        const items = virtualizer.getVirtualItems();
-        const last = items[items.length - 1];
-        return !!last && last.index >= lastIndex;
-      },
-    );
+    scrollVirtualizerToEnd(virtualizer, virtualItems.length - 1);
   }, [virtualizer, virtualItems.length]);
 
   if (messages.length === 0) {

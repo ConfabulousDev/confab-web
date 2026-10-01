@@ -21,9 +21,14 @@ import { codexAdapter } from '@/providers/codexAdapter';
 import { cx } from '@/utils/utils';
 import {
   addCmdFListener,
+  firstIndexAtOrAfter,
   retryOnAnimationFrame,
+  scrollToSearchMatch,
+  scrollVirtualizerToEnd,
+  scrollVirtualizerToStart,
   SCROLL_NAV_COST_MODE_RIGHT,
 } from '../timelineUtils';
+import { useFirstVisibleIndex } from '../useFirstVisibleIndex';
 import { CostBar } from '../CostBar';
 import { TimeSeparator } from '../TimeSeparator';
 import CodexUserMessage from './CodexUserMessage';
@@ -88,7 +93,6 @@ export default function CodexMessageTimeline({
   isCostMode,
 }: CodexMessageTimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const hasScrolledToTarget = useRef(false);
 
@@ -147,6 +151,11 @@ export default function CodexMessageTimeline({
     },
     overscan: 8,
   });
+
+  // Track first visible item index (skipping separator rows) so the bar
+  // indicator has something to point at when the user hasn't explicitly
+  // hovered a row.
+  const firstVisibleIndex = useFirstVisibleIndex(parentRef, virtualizer, virtualItems, 'item');
 
   // Map real item index → virtual list index for click-to-seek.
   const itemIndexToVirtualIndex = useMemo(() => {
@@ -226,28 +235,6 @@ export default function CodexMessageTimeline({
     });
   }, [isCostMode, segmentLayout.segments, items]);
 
-  // Track first visible item index (skipping separator rows) so the bar
-  // indicator has something to point at when the user hasn't explicitly
-  // hovered a row.
-  const updateFirstVisible = useCallback(() => {
-    const visible = virtualizer.getVirtualItems();
-    for (const v of visible) {
-      const vi = virtualItems[v.index];
-      if (vi && vi.type === 'item') {
-        setFirstVisibleIndex(vi.index);
-        return;
-      }
-    }
-  }, [virtualizer, virtualItems]);
-
-  useEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', updateFirstVisible, { passive: true });
-    updateFirstVisible();
-    return () => el.removeEventListener('scroll', updateFirstVisible);
-  }, [updateFirstVisible]);
-
   const scrollToItem = useCallback(
     (itemIndex: number) => {
       const virtualIndex = itemIndexToVirtualIndex.get(itemIndex);
@@ -286,72 +273,24 @@ export default function CodexMessageTimeline({
   }, [targetItemIndex, itemIndexToVirtualIndex, virtualizer]);
 
   // CF-359: scroll to current search match, then scroll first <mark> into
-  // view within the row. Structurally mirrors `MessageTimeline.tsx`'s
-  // post-scroll mark-into-view dance — `scrollToIndex` retries across
-  // frames as virtualizer measurements settle, so we wait a few frames
-  // before locating the <mark> to avoid the bring-mark-into-view being
-  // immediately overridden by a retry.
+  // view within the row (the shared settle-then-locate sequence).
   useEffect(() => {
     if (search.currentMatchFilteredIndex === null) return;
     const itemIndex = search.currentMatchFilteredIndex;
     const virtualIndex = itemIndexToVirtualIndex.get(itemIndex);
     if (virtualIndex === undefined) return;
 
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
-      () => false,
-    );
+    const cancel = scrollToSearchMatch(virtualizer, () => parentRef.current, virtualIndex);
     setSelectedIndex(itemIndex);
-
-    let cancelled = false;
-    const scrollToIndexFrames = 6;
-    const maxMarkRetries = 10;
-    function scrollToMark(attempt: number) {
-      if (cancelled || attempt >= maxMarkRetries) return;
-      const scrollEl = parentRef.current;
-      if (!scrollEl) return;
-      const rowEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
-      if (!rowEl) {
-        requestAnimationFrame(() => scrollToMark(attempt + 1));
-        return;
-      }
-      const mark = rowEl.querySelector('mark');
-      if (mark) {
-        mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } else {
-        requestAnimationFrame(() => scrollToMark(attempt + 1));
-      }
-    }
-    function delayThenScroll(framesLeft: number) {
-      if (cancelled) return;
-      if (framesLeft <= 0) { scrollToMark(0); return; }
-      requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
-    }
-    delayThenScroll(scrollToIndexFrames);
-
-    return () => { cancelled = true; };
+    return cancel;
   }, [search.currentMatchFilteredIndex, itemIndexToVirtualIndex, virtualizer]);
 
   const scrollToTop = useCallback(() => {
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(0, { align: 'start' }),
-      () => {
-        const first = virtualizer.getVirtualItems()[0];
-        return !!first && first.index === 0;
-      },
-    );
+    scrollVirtualizerToStart(virtualizer);
   }, [virtualizer]);
 
   const scrollToBottom = useCallback(() => {
-    const lastIndex = virtualItems.length - 1;
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(lastIndex, { align: 'end' }),
-      () => {
-        const visible = virtualizer.getVirtualItems();
-        const last = visible[visible.length - 1];
-        return !!last && last.index >= lastIndex;
-      },
-    );
+    scrollVirtualizerToEnd(virtualizer, virtualItems.length - 1);
   }, [virtualizer, virtualItems.length]);
 
   if (items.length === 0) {
@@ -379,15 +318,10 @@ export default function CodexMessageTimeline({
   // CF-362: CostBar.onSeek passes (start, end) but we only care about start —
   // the second arg drops via TS parameter contravariance.
   const onSeekFromBar = (unfilteredStart: number): void => {
-    for (let i = unfilteredStart; i < items.length; i++) {
-      const candidate = items[i];
-      if (!candidate) continue;
-      const filteredIdx = lineIdToItemIndex.get(candidate.lineId);
-      if (filteredIdx !== undefined) {
-        scrollToItem(filteredIdx);
-        return;
-      }
-    }
+    const filteredIdx = firstIndexAtOrAfter(items, unfilteredStart, (it) =>
+      lineIdToItemIndex.get(it.lineId),
+    );
+    if (filteredIdx !== undefined) scrollToItem(filteredIdx);
   };
 
   return (
