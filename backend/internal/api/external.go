@@ -330,11 +330,20 @@ func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Download and merge all chunks for this file
+	// Download and validate all chunks before writing headers, so storage and
+	// merge-limit errors are still reported as a 500. The merge itself is
+	// streamed into the response below.
 	storageCtx, storageCancel := context.WithTimeout(r.Context(), StorageTimeout)
 	defer storageCancel()
 
-	content, err := s.storage.DownloadAndMergeChunks(storageCtx, sessionUserID, sessionProvider, externalID, fileName)
+	chunkKeys, err := s.storage.ListChunks(storageCtx, sessionUserID, sessionProvider, externalID, fileName)
+	var chunks []storage.ChunkInfo
+	if err == nil {
+		chunks, err = s.storage.DownloadChunks(storageCtx, chunkKeys)
+	}
+	if err == nil {
+		err = storage.ValidateMerge(chunks)
+	}
 	if err != nil {
 		log.Error("Failed to download file", "error", err, "session_id", sessionID, "file_name", fileName)
 		respondError(w, http.StatusInternalServerError, "Failed to download file")
@@ -348,7 +357,9 @@ func (s *Server) serveSessionFileDownload(w http.ResponseWriter, r *http.Request
 	// browser when fetched directly.
 	w.Header().Set("Content-Disposition", `attachment; filename="`+sanitizeContentDispositionFilename(fileName)+`"`)
 	w.WriteHeader(http.StatusOK)
-	w.Write(content)
+	if _, err := storage.WriteMergedLines(newFlushWriter(w), chunks, 0); err != nil {
+		log.Warn("Failed to write file download response", "error", err, "session_id", sessionID, "file_name", fileName)
+	}
 }
 
 // sanitizeContentDispositionFilename strips characters that could break the

@@ -873,7 +873,7 @@ Unless noted, a caller without access gets `401` ("Sign in to view this session"
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/api/v1/sessions/{id}` | Optional | Session detail: metadata, git info, and `files` (sync files with `last_synced_line`). `hostname`, `username`, `cwd`, and `transcript_path` are owner-only; public-share viewers don't receive `owner_email`. |
-| `GET` | `/api/v1/sessions/{id}/sync/file` | Optional | Raw JSONL of one sync file as `text/plain`. Query: `file_name` (required), `line_offset` (return only lines after it). No access returns `404`. |
+| `GET` | `/api/v1/sessions/{id}/sync/file` | Optional | Raw JSONL of one sync file as `text/plain`. Query: `file_name` (required), `line_offset` (return only lines whose absolute line number is greater than it; every returned line ends in `\n`). No access returns `404`. |
 | `GET` | `/api/v1/sessions/{id}/analytics` | Optional | Computed session analytics. See [Get Session Analytics](#get-session-analytics). |
 | `GET` | `/api/v1/sessions/{id}/github-links` | Optional | `{"links": [...]}` for anyone with session access; `404` otherwise. |
 

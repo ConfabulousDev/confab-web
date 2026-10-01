@@ -709,48 +709,6 @@ func (s *Server) handleSyncChunk(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// filterLinesAfterOffset removes lines at or before the given offset.
-// The firstLineNum parameter indicates what transcript line the content starts at.
-// For example, if content is lines 4,5,6 of the transcript (firstLineNum=4) and
-// offset=3, all lines are kept (4,5,6 are all > 3). If offset=5, only line 6 is kept.
-func filterLinesAfterOffset(content []byte, offset int, firstLineNum int) []byte {
-	if offset <= 0 {
-		return content
-	}
-
-	// If all content is after offset, return everything
-	if offset < firstLineNum {
-		return content
-	}
-
-	lines := bytes.Split(content, []byte("\n"))
-
-	// Calculate how many lines to skip from the beginning
-	// Line at index i corresponds to transcript line (firstLineNum + i)
-	// We want lines where (firstLineNum + i) > offset
-	// So: i > offset - firstLineNum
-	// So: i >= offset - firstLineNum + 1
-	startIndex := offset - firstLineNum + 1
-
-	if startIndex >= len(lines) {
-		return nil
-	}
-
-	// Skip lines before startIndex
-	remaining := lines[startIndex:]
-
-	// Filter out empty trailing lines that result from split
-	for len(remaining) > 0 && len(remaining[len(remaining)-1]) == 0 {
-		remaining = remaining[:len(remaining)-1]
-	}
-
-	if len(remaining) == 0 {
-		return nil
-	}
-
-	return bytes.Join(remaining, []byte("\n"))
-}
-
 // handleSyncEvent records a session lifecycle event
 // POST /api/v1/sync/event
 func (s *Server) handleSyncEvent(w http.ResponseWriter, r *http.Request) {
@@ -1019,25 +977,12 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Find the first line number among downloaded chunks (for correct filtering)
-	minFirstLine := chunks[0].FirstLine
-	for _, c := range chunks[1:] {
-		if c.FirstLine < minFirstLine {
-			minFirstLine = c.FirstLine
-		}
-	}
-
-	// Merge chunks, handling any overlaps from partial upload failures
-	merged, err := storage.MergeChunks(chunks)
-	if err != nil {
+	// Reject an oversized merge while a 500 can still be sent: after the
+	// headers below, the body is streamed and only write errors remain.
+	if err := storage.ValidateMerge(chunks); err != nil {
 		log.Error("Failed to merge chunks", "error", err, "session_id", sessionID)
 		respondError(w, http.StatusInternalServerError, "Failed to process session data")
 		return
-	}
-
-	// If line_offset is specified, filter output to only lines after offset
-	if lineOffset > 0 {
-		merged = filterLinesAfterOffset(merged, lineOffset, minFirstLine)
 	}
 
 	log.Info("Canonical sync file read",
@@ -1048,12 +993,13 @@ func (s *Server) handleCanonicalSyncFileRead(w http.ResponseWriter, r *http.Requ
 		"access_type", result.AccessInfo.AccessType,
 		"viewer_user_id", result.ViewerUserID)
 
-	// Write response
+	// Stream the merged lines after lineOffset (overlaps resolved, last write
+	// wins) instead of materializing the merged transcript (x4ry).
 	// Use text/plain for JSONL files (multiple JSON objects, one per line)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	if merged != nil {
-		w.Write(merged)
+	if _, err := storage.WriteMergedLines(newFlushWriter(w), chunks, lineOffset); err != nil {
+		log.Warn("Failed to write sync file response", "error", err, "session_id", sessionID, "file_name", fileName)
 	}
 }
 
