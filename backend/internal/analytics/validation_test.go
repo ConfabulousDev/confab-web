@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -1118,10 +1119,10 @@ func TestFormatValidationErrors(t *testing.T) {
 	if output == "" {
 		t.Error("expected non-empty output")
 	}
-	if !contains(output, "Line 1") {
+	if !strings.Contains(output, "Line 1") {
 		t.Error("expected output to contain 'Line 1'")
 	}
-	if !contains(output, "Line 5") {
+	if !strings.Contains(output, "Line 5") {
 		t.Error("expected output to contain 'Line 5'")
 	}
 }
@@ -1138,20 +1139,7 @@ func TestFormatValidationErrors_Truncation(t *testing.T) {
 	}
 
 	output := FormatValidationErrors(errors, 5)
-	if !contains(output, "and 10 more errors") {
+	if !strings.Contains(output, "and 10 more errors") {
 		t.Errorf("expected truncation message, got: %s", output)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

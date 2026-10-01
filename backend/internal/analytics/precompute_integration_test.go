@@ -2,6 +2,7 @@ package analytics_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -315,7 +316,7 @@ func TestPrecomputeRegularCards_UnsupportedProvider_LoudError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported provider, got nil")
 	}
-	if !contains(err.Error(), "unsupported provider") {
+	if !strings.Contains(err.Error(), "unsupported provider") {
 		t.Errorf("expected error to mention 'unsupported provider', got %q", err)
 	}
 }
@@ -346,7 +347,7 @@ func TestBuildSearchIndexOnly_UnsupportedProvider_LoudError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported provider, got nil")
 	}
-	if !contains(err.Error(), "unsupported provider") {
+	if !strings.Contains(err.Error(), "unsupported provider") {
 		t.Errorf("expected error to mention 'unsupported provider', got %q", err)
 	}
 }
@@ -377,19 +378,9 @@ func TestPrecomputeSmartRecapOnly_UnsupportedProvider_LoudError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported provider, got nil")
 	}
-	if !contains(err.Error(), "unsupported provider") {
+	if !strings.Contains(err.Error(), "unsupported provider") {
 		t.Errorf("expected error to mention 'unsupported provider', got %q", err)
 	}
-}
-
-// contains is a tiny helper for substring assertion (avoids importing strings).
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 func TestFindStaleSessions_RespectsLimit(t *testing.T) {
@@ -3187,7 +3178,7 @@ func TestBuildSearchIndex_CodexSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read search index: %v", err)
 	}
-	if !contains(content, "find the auth bug") {
+	if !strings.Contains(content, "find the auth bug") {
 		t.Errorf("search index content missing user message text: %q", content)
 	}
 }
