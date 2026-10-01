@@ -44,15 +44,13 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
 		testcontainers.CustomizeRequest(testcontainers.GenericContainerRequest{
-			ContainerRequest: testcontainers.ContainerRequest{
-				Tmpfs: map[string]string{
-					"/var/lib/postgresql/data": "rw",
-				},
-				Cmd: []string{
-					"-c", "fsync=off",
-					"-c", "full_page_writes=off",
-					"-c", "synchronous_commit=off",
-				},
+			Tmpfs: map[string]string{
+				"/var/lib/postgresql/data": "rw",
+			},
+			Cmd: []string{
+				"-c", "fsync=off",
+				"-c", "full_page_writes=off",
+				"-c", "synchronous_commit=off",
 			},
 		}),
 		testcontainers.WithWaitStrategy(PostgresWaitStrategy()),
@@ -92,10 +90,8 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		minio.WithPassword("minioadmin"),
 		testcontainers.WithWaitStrategy(MinioWaitStrategy()),
 		testcontainers.CustomizeRequest(testcontainers.GenericContainerRequest{
-			ContainerRequest: testcontainers.ContainerRequest{
-				ConfigModifier: func(c *container.Config) {
-					c.User = "0"
-				},
+			ConfigModifier: func(c *container.Config) {
+				c.User = "0"
 			},
 		}),
 	)

@@ -54,6 +54,10 @@ func TestDeviceCode_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
+		// RFC 8628 §3.2 / RFC 6749 §5.1: device_code is a credential, never cacheable.
+		if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("Cache-Control = %q, want no-store", cc)
+		}
 
 		var result auth.DeviceCodeResponse
 		testutil.ParseJSON(t, resp, &result)
@@ -230,6 +234,10 @@ func TestDeviceToken_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 
 		testutil.RequireStatus(t, resp, http.StatusOK)
+		// RFC 6749 §5.1: a response carrying an access token must not be cached.
+		if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("Cache-Control = %q, want no-store", cc)
+		}
 
 		var result auth.DeviceTokenResponse
 		testutil.ParseJSON(t, resp, &result)

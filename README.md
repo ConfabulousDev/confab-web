@@ -101,7 +101,7 @@ Two production reference deployments:
 
 One path: infra in Docker, backend and frontend native for hot reload. Everything runs through the root `Makefile` — `make help` lists every target.
 
-**Prerequisites:** Docker & Docker Compose, Go 1.26+, Node.js 24+.
+**Prerequisites:** Docker & Docker Compose, Go 1.27+, Node.js 24+.
 
 ```bash
 make setup    # first run only: creates backend/.env, installs frontend deps

@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	htmltemplate "html/template"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
+	"github.com/ConfabulousDev/confab-web/internal/httputil"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
@@ -207,9 +207,7 @@ func EnforceReadOnly(database *db.DB) func(http.Handler) http.Handler {
 				"path", r.URL.Path,
 				"client_ip", clientip.FromRequest(r).Primary,
 			)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(ReadOnlyUserError{
+			httputil.RespondJSON(w, http.StatusForbidden, ReadOnlyUserError{
 				Error:   "read_only_user",
 				Message: "This identity is read-only.",
 			})

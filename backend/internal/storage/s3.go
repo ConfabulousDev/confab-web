@@ -112,8 +112,7 @@ func classifyStorageError(err error, operation string) error {
 	}
 
 	// Check for MinIO error response
-	var minioErr minio.ErrorResponse
-	if errors.As(err, &minioErr) {
+	if minioErr, ok := errors.AsType[minio.ErrorResponse](err); ok {
 		switch minioErr.Code {
 		case "NoSuchKey", "NoSuchBucket":
 			return fmt.Errorf("%s: %w", operation, ErrObjectNotFound)

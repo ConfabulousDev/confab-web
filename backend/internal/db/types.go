@@ -29,9 +29,8 @@ type SessionListItem struct {
 	// Legacy 'Claude Code' DB values are normalized to "claude-code" at Scan
 	// time via models.NormalizeProvider so the public API never exposes the
 	// historical display form.
-	Provider   string `json:"provider"`
-	TotalLines int64  `json:"total_lines"` // Sum of last_synced_line across all files
-	// TODO: Remove git_repo field and only return git_repo_url, let frontend parse the org/repo
+	Provider         string   `json:"provider"`
+	TotalLines       int64    `json:"total_lines"`                  // Sum of last_synced_line across all files
 	GitRepo          *string  `json:"git_repo,omitempty"`           // Git repository (e.g., "org/repo") - extracted from git_info JSONB
 	GitRepoURL       *string  `json:"git_repo_url,omitempty"`       // Full git repository URL (e.g., "https://github.com/org/repo")
 	GitBranch        *string  `json:"git_branch,omitempty"`         // Git branch - extracted from git_info JSONB

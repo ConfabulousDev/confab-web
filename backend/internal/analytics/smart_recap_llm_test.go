@@ -499,7 +499,7 @@ func TestSmartRecapJSONSchema_MatchesResultStructs(t *testing.T) {
 
 			itemTags := jsonTagNames(reflect.TypeFor[AnnotatedItem]())
 			for f := range reflect.TypeFor[SmartRecapResult]().Fields() {
-				name := strings.Split(f.Tag.Get("json"), ",")[0]
+				name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 				if name == "" {
 					continue
 				}

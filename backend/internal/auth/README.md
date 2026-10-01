@@ -108,6 +108,7 @@ If the new mode is neither API key nor session cookie, add a new `Try*Auth` func
 - **CLI redirect cookies are restricted to `/auth/cli/` paths** to prevent open redirect attacks.
 - **Post-login redirects only allow relative paths** (must start with `/`, must not start with `//`) to prevent open redirect attacks.
 - **Device codes expire after 5 minutes** and are single-use (deleted after successful token exchange).
+- **Device code and token responses are never cacheable.** `HandleDeviceCode` and `HandleDeviceToken` (success and every error) write through `httputil.RespondJSON`, which sets `Cache-Control: no-store`, as RFC 6749 §5.1 requires for responses carrying credentials.
 - **User codes exclude ambiguous characters** (0, O, I, L, 1) and use `XXXX-XXXX` format for readability.
 - **User cap (`MAX_USERS` env var)** is enforced at login time, not registration. Existing users always pass. Checked in all OAuth callbacks and device flow.
 - **`ReplaceAPIKey`** is used instead of `CreateAPIKey` for CLI/device flows to prevent unbounded key growth when re-authenticating from the same machine.
