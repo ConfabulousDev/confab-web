@@ -15,6 +15,7 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
+	"github.com/ConfabulousDev/confab-web/internal/httputil"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
@@ -145,16 +146,13 @@ func HandleDeviceCode(database *db.DB, backendURL string) http.HandlerFunc {
 			Interval:        int(DeviceCodePollInterval.Seconds()),
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		httputil.RespondJSON(w, http.StatusOK, resp)
 	}
 }
 
 // writeDeviceTokenError writes a JSON error response for the device token endpoint.
 func writeDeviceTokenError(w http.ResponseWriter, statusCode int, errorCode string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(DeviceTokenResponse{Error: errorCode})
+	httputil.RespondJSON(w, statusCode, DeviceTokenResponse{Error: errorCode})
 }
 
 // HandleDeviceToken exchanges a device code for an API key
@@ -250,8 +248,7 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 		authStore.DeleteDeviceCode(ctx, req.DeviceCode)
 
 		// Return the API key
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(DeviceTokenResponse{
+		httputil.RespondJSON(w, http.StatusOK, DeviceTokenResponse{
 			AccessToken: apiKey,
 			TokenType:   "Bearer",
 		})

@@ -1171,6 +1171,8 @@ When `email` is provided:
 | `GET /auth/device` | User verification page |
 | `POST /auth/device/verify` | Submit user code |
 
+`/auth/device/code` and `/auth/device/token` responses (including errors) carry `Cache-Control: no-store`.
+
 ---
 
 ## Admin Endpoints (Super Admin Only)
