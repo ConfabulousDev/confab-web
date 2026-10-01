@@ -955,10 +955,10 @@ func TestWorkerRunOnce_FindSearchIndexErrorSkipsProcessing(t *testing.T) {
 // ---------- Worker.Run ----------
 
 func TestWorkerRun_RunsOnceImmediatelyThenExitsOnContextCancel(t *testing.T) {
-	var cycles int32
+	var cycles atomic.Int32
 	fp := &fakePrecomputer{
 		findStaleFn: func(context.Context, int) ([]analytics.StaleSession, error) {
-			atomic.AddInt32(&cycles, 1)
+			cycles.Add(1)
 			return nil, nil
 		},
 	}
@@ -973,7 +973,7 @@ func TestWorkerRun_RunsOnceImmediatelyThenExitsOnContextCancel(t *testing.T) {
 
 	// Wait for the immediate-on-startup run to register.
 	deadline := time.After(2 * time.Second)
-	for atomic.LoadInt32(&cycles) < 1 {
+	for cycles.Load() < 1 {
 		select {
 		case <-deadline:
 			t.Fatal("worker did not run immediately on startup")
@@ -988,16 +988,16 @@ func TestWorkerRun_RunsOnceImmediatelyThenExitsOnContextCancel(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("worker did not exit within 2s after context cancel")
 	}
-	if got := atomic.LoadInt32(&cycles); got != 1 {
+	if got := cycles.Load(); got != 1 {
 		t.Errorf("cycles: want exactly 1 (immediate, no ticker fired), got %d", got)
 	}
 }
 
 func TestWorkerRun_TickerFiresSubsequentCycles(t *testing.T) {
-	var cycles int32
+	var cycles atomic.Int32
 	fp := &fakePrecomputer{
 		findStaleFn: func(context.Context, int) ([]analytics.StaleSession, error) {
-			atomic.AddInt32(&cycles, 1)
+			cycles.Add(1)
 			return nil, nil
 		},
 	}
@@ -1010,7 +1010,7 @@ func TestWorkerRun_TickerFiresSubsequentCycles(t *testing.T) {
 	defer cancel()
 	w.Run(ctx)
 
-	if got := atomic.LoadInt32(&cycles); got < 2 {
+	if got := cycles.Load(); got < 2 {
 		t.Errorf("cycles: want >= 2 with 10ms ticker over 80ms, got %d", got)
 	}
 }

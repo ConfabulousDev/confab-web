@@ -190,8 +190,7 @@ func TestCreateResponse_NonJSONErrorBodyReturnsPlainError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 502")
 	}
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*APIError](err); ok {
 		t.Fatalf("non-JSON body must not produce *APIError, got %v", apiErr)
 	}
 	if !strings.Contains(err.Error(), "502") || !strings.Contains(err.Error(), "bad gateway") {

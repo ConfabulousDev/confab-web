@@ -40,9 +40,9 @@ func TestCodexRollout_SubagentsCachedAcrossComputeAndPrepareTranscript(t *testin
 
 	agentBytes := minimalCodexJSONL("t-agent")
 	const agentCount = 2
-	var downloadCount int64
+	var downloadCount atomic.Int64
 	downloader := func(_ context.Context, fileName string) ([]byte, error) {
-		atomic.AddInt64(&downloadCount, 1)
+		downloadCount.Add(1)
 		return agentBytes, nil
 	}
 
@@ -63,7 +63,7 @@ func TestCodexRollout_SubagentsCachedAcrossComputeAndPrepareTranscript(t *testin
 	_ = sp.ComputeCards(ctx, rollout)
 	_, _, _ = sp.PrepareTranscript(ctx, rollout)
 
-	if got := atomic.LoadInt64(&downloadCount); got != agentCount {
+	if got := downloadCount.Load(); got != agentCount {
 		t.Errorf("subagent downloader invocations = %d, want %d (subagents should be downloaded once and cached for later methods)", got, agentCount)
 	}
 }

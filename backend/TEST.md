@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker / Orbstack (integration tests run Postgres + MinIO in containers)
-- Go 1.26+
+- Go 1.27+
 
 ## Running Tests
 

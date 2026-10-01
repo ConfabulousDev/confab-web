@@ -72,11 +72,9 @@ func TestSessionTitleRecompute_HiddenCodexSessionReappearsInList(t *testing.T) {
 	ctx := context.Background()
 	store := &dbadmincardinvalidations.Store{DB: env.DB}
 	if _, err := store.Execute(ctx, dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: time.Now().UTC().Add(-time.Hour),
-			CardTypes: []string{analytics.SessionTitleInvalidationTarget},
-			Providers: models.ExpandWithAliases([]string{models.ProviderCodex}),
-		},
+		StartDate:   time.Now().UTC().Add(-time.Hour),
+		CardTypes:   []string{analytics.SessionTitleInvalidationTarget},
+		Providers:   models.ExpandWithAliases([]string{models.ProviderCodex}),
 		AdminUserID: adminUser.ID,
 		Reason:      "codex 0.149.1 title regression",
 	}); err != nil {

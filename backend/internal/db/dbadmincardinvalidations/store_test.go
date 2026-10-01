@@ -204,11 +204,9 @@ func TestExecute_DeletesCardsAndWritesAudit(t *testing.T) {
 	end := time.Now().UTC()
 
 	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: start,
-			EndDate:   &end,
-			CardTypes: []string{"session_card_tokens"},
-		},
+		StartDate:   start,
+		EndDate:     &end,
+		CardTypes:   []string{"session_card_tokens"},
 		AdminUserID: admin.ID,
 		Reason:      "pricing fix",
 	})
@@ -308,11 +306,9 @@ func TestExecute_Chunked(t *testing.T) {
 	end := time.Now().UTC()
 
 	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: start,
-			EndDate:   &end,
-			CardTypes: []string{"session_card_tokens"},
-		},
+		StartDate:   start,
+		EndDate:     &end,
+		CardTypes:   []string{"session_card_tokens"},
 		AdminUserID: admin.ID,
 		Reason:      "chunked test",
 	})
@@ -346,11 +342,9 @@ func TestListRecent_OrdersByInvalidatedAtDesc(t *testing.T) {
 
 	// First execute
 	_, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: start,
-			EndDate:   &end,
-			CardTypes: []string{"session_card_tokens"},
-		},
+		StartDate:   start,
+		EndDate:     &end,
+		CardTypes:   []string{"session_card_tokens"},
 		AdminUserID: admin.ID,
 		Reason:      "first",
 	})
@@ -362,11 +356,9 @@ func TestListRecent_OrdersByInvalidatedAtDesc(t *testing.T) {
 	// To have something meaningful, seed more sessions first.
 	_ = seedSessionsAndCards(t, env, user.ID, 1, inWindow, true, false)
 	second, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: start,
-			EndDate:   &end,
-			CardTypes: []string{"session_card_tokens"},
-		},
+		StartDate:   start,
+		EndDate:     &end,
+		CardTypes:   []string{"session_card_tokens"},
 		AdminUserID: admin.ID,
 		Reason:      "second",
 	})
@@ -486,11 +478,9 @@ func TestExecute_ProviderFilterScopesCardDeletes(t *testing.T) {
 
 	store := &dbadmincardinvalidations.Store{DB: env.DB}
 	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: time.Now().UTC().Add(-4 * time.Hour),
-			CardTypes: []string{"session_card_tokens"},
-			Providers: models.ExpandWithAliases([]string{models.ProviderCodex}),
-		},
+		StartDate:   time.Now().UTC().Add(-4 * time.Hour),
+		CardTypes:   []string{"session_card_tokens"},
+		Providers:   models.ExpandWithAliases([]string{models.ProviderCodex}),
 		AdminUserID: admin.ID,
 		Reason:      "codex only",
 	})
@@ -620,10 +610,8 @@ func TestExecute_SessionTitleMarksOnlyCandidatesAndAudits(t *testing.T) {
 	// Batch size 1 exercises the per-batch mark UPDATE across several commits.
 	store := &dbadmincardinvalidations.Store{DB: env.DB, BatchSize: 1}
 	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: time.Now().UTC().Add(-4 * time.Hour),
-			CardTypes: []string{"session_card_tokens", analytics.SessionTitleInvalidationTarget},
-		},
+		StartDate:   time.Now().UTC().Add(-4 * time.Hour),
+		CardTypes:   []string{"session_card_tokens", analytics.SessionTitleInvalidationTarget},
 		AdminUserID: admin.ID,
 		Reason:      "codex title repair",
 	})
@@ -692,11 +680,9 @@ func TestListByCorrelationID_FiltersToOneRun(t *testing.T) {
 	end := time.Now().UTC()
 
 	res, err := store.Execute(context.Background(), dbadmincardinvalidations.ExecuteRequest{
-		CountRequest: dbadmincardinvalidations.CountRequest{
-			StartDate: start,
-			EndDate:   &end,
-			CardTypes: []string{"session_card_tokens"},
-		},
+		StartDate:   start,
+		EndDate:     &end,
+		CardTypes:   []string{"session_card_tokens"},
 		AdminUserID: admin.ID,
 		Reason:      "filter test",
 	})
