@@ -14,6 +14,11 @@ type TranscriptFile struct {
 	ValidationErrors []LineValidationError
 	TotalLines       int // Total lines processed (including invalid ones)
 
+	// RedactionCounts holds [REDACTED:TYPE] marker counts (type -> count)
+	// across this file's valid lines, computed at parse time so parsed lines
+	// need not retain a generic copy of their JSON. Nil when the file has none.
+	RedactionCounts map[string]int
+
 	// Cached result of AssistantMessageGroups (computed on first call)
 	cachedGroups   []AssistantMessageGroup
 	groupsComputed bool
@@ -114,6 +119,7 @@ func (fc *FileCollection) ValidationErrorCount() int {
 func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error) {
 	var lines []*TranscriptLine
 	var validationErrors []LineValidationError
+	var redactionCounts map[string]int
 	lineNumber := 0
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))
@@ -173,6 +179,9 @@ func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error
 		}
 
 		lines = append(lines, line)
+		// Count redaction markers from the validation map while it is still
+		// live, so no generic copy of the line outlives this iteration.
+		countRedactionsInValue(rawMap, &redactionCounts)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -184,6 +193,7 @@ func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error
 		AgentID:          agentID,
 		ValidationErrors: validationErrors,
 		TotalLines:       lineNumber,
+		RedactionCounts:  redactionCounts,
 	}, nil
 }
 

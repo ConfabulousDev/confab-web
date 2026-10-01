@@ -510,3 +510,40 @@ func (c *Cards) AllValid(currentLineCount int64) bool {
 		c.Redactions.IsValid(currentLineCount) &&
 		c.Workflows.IsValid(currentLineCount)
 }
+
+// ServableStale reports whether the cards may be served while a newer
+// compute is pending: every card exists at its current schema version, and
+// only UpToLine may lag the session's line count. A missing card or a version
+// bump is never servable. When servable, it also returns the oldest card's
+// ComputedAt (the age that gates a background refresh).
+func (c *Cards) ServableStale() (oldestComputedAt time.Time, ok bool) {
+	if c == nil || c.TokensV2 == nil || c.Session == nil || c.Tools == nil ||
+		c.CodeActivity == nil || c.Conversation == nil || c.AgentsAndSkills == nil ||
+		c.Redactions == nil || c.Workflows == nil {
+		return time.Time{}, false
+	}
+	// IsValid(own UpToLine) == "present at the current version".
+	stamps := []struct {
+		currentVersion bool
+		computedAt     time.Time
+	}{
+		{c.TokensV2.IsValid(c.TokensV2.UpToLine), c.TokensV2.ComputedAt},
+		{c.Session.IsValid(c.Session.UpToLine), c.Session.ComputedAt},
+		{c.Tools.IsValid(c.Tools.UpToLine), c.Tools.ComputedAt},
+		{c.CodeActivity.IsValid(c.CodeActivity.UpToLine), c.CodeActivity.ComputedAt},
+		{c.Conversation.IsValid(c.Conversation.UpToLine), c.Conversation.ComputedAt},
+		{c.AgentsAndSkills.IsValid(c.AgentsAndSkills.UpToLine), c.AgentsAndSkills.ComputedAt},
+		{c.Redactions.IsValid(c.Redactions.UpToLine), c.Redactions.ComputedAt},
+		{c.Workflows.IsValid(c.Workflows.UpToLine), c.Workflows.ComputedAt},
+	}
+	oldestComputedAt = stamps[0].computedAt
+	for _, s := range stamps {
+		if !s.currentVersion {
+			return time.Time{}, false
+		}
+		if s.computedAt.Before(oldestComputedAt) {
+			oldestComputedAt = s.computedAt
+		}
+	}
+	return oldestComputedAt, true
+}

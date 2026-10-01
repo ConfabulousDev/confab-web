@@ -3,10 +3,13 @@ package api
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
@@ -16,12 +19,52 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/recapquota"
 	"github.com/ConfabulousDev/confab-web/internal/storage"
 	"github.com/go-chi/chi/v5"
+	"golang.org/x/sync/singleflight"
 )
 
 // Smart recap configuration constants
 const (
 	defaultSmartRecapLockTimeoutSecs = 60
 )
+
+// Analytics cache-miss compute policy (5m68).
+const (
+	// analyticsComputeTimeout bounds one detached cards compute (download +
+	// parse + compute + persist). Matches the sync/file download cap.
+	analyticsComputeTimeout = 5 * time.Minute
+	// defaultAnalyticsRefreshCooldown is the minimum age of cached cards
+	// before a request for a grown session starts a background refresh.
+	defaultAnalyticsRefreshCooldown = 2 * time.Minute
+)
+
+var (
+	// analyticsComputeGroup dedupes concurrent cards computes per session ID,
+	// so N pollers / tabs / viewers of one session cost one compute.
+	analyticsComputeGroup singleflight.Group
+
+	analyticsRefreshCooldown atomic.Int64 // time.Duration; see defaultAnalyticsRefreshCooldown
+	analyticsComputeHook     atomic.Pointer[func()]
+)
+
+func init() {
+	analyticsRefreshCooldown.Store(int64(defaultAnalyticsRefreshCooldown))
+}
+
+// SetAnalyticsComputeHookForTest installs a hook that runs inside every
+// analytics cards compute, after the cards are computed and before they are
+// persisted. Integration tests use it to count, delay or block computes.
+// Returns a function that restores the previous hook.
+func SetAnalyticsComputeHookForTest(hook func()) (restore func()) {
+	prev := analyticsComputeHook.Swap(&hook)
+	return func() { analyticsComputeHook.Store(prev) }
+}
+
+// SetAnalyticsRefreshCooldownForTest overrides the stale-cards refresh
+// cooldown. Returns a function that restores the previous value.
+func SetAnalyticsRefreshCooldownForTest(d time.Duration) (restore func()) {
+	prev := analyticsRefreshCooldown.Swap(int64(d))
+	return func() { analyticsRefreshCooldown.Store(prev) }
+}
 
 // SmartRecapConfig holds configuration for the smart recap feature.
 type SmartRecapConfig struct {
@@ -177,14 +220,21 @@ func providerClearMessageIDs(provider string) bool {
 // - System share: any authenticated user
 // - Recipient share: authenticated user who is a share recipient
 //
-// Analytics are cached in the database and recomputed when stale. CF-403
-// unified the dispatch: all provider-specific behavior is reached through
-// analytics.ProviderFor + the SessionProvider interface.
+// Analytics are cached in the database (5m68):
+//   - cards valid at the current line count are served as-is;
+//   - current-version cards that only lag the line count are served stale,
+//     with a background refresh at most once per analyticsRefreshCooldown;
+//   - otherwise the request waits on a detached, per-session deduped compute
+//     that persists its cards even if the client leaves.
+//
+// CF-403 unified the dispatch: all provider-specific behavior is reached
+// through analytics.ProviderFor + the SessionProvider interface.
 func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.HandlerFunc {
 	analyticsStore := analytics.NewStore(database.Conn())
 	sessionStore := &dbsession.Store{DB: database}
 	smartRecapConfig := loadSmartRecapConfig()
 	smartRecapGenerator := analytics.NewSmartRecapGenerator(analyticsStore, database, smartRecapConfig.generatorConfig())
+	computer := &analyticsComputer{database: database, store: store, analyticsStore: analyticsStore, sessionStore: sessionStore}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
@@ -230,124 +280,166 @@ func HandleGetSessionAnalytics(database *db.DB, store *storage.S3Storage) http.H
 			}
 		}
 
-		// Check if we have valid cached cards
 		cached, err := analyticsStore.GetCards(dbCtx, sessionID)
 		if err != nil {
 			log.Error("Failed to get cached cards", "error", err, "session_id", sessionID)
 			// Continue to compute fresh analytics
 		}
 
+		var response *analytics.AnalyticsResponse
 		if cached.AllValid(totalLineCount) {
-			// Cache hit - return cached data
-			response := cached.ToResponse()
-
-			// Handle smart recap (if enabled) even for cached responses
-			if smartRecapConfig.Enabled {
-				sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
-				if err == nil {
-					attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
-						database:        database,
-						analyticsStore:  analyticsStore,
-						store:           store,
-						config:          smartRecapConfig,
-						generator:       smartRecapGenerator,
-						sessionID:       sessionID,
-						sessionUserID:   sessionUserID,
-						sessionProvider: sessionProvider,
-						externalID:      externalID,
-						lineCount:       totalLineCount,
-						cardStats:       response.Cards,
-						response:        response,
-						log:             log,
-						isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
-						clearMessageIDs: providerClearMessageIDs(sessionProvider),
-					})
+			response = cached.ToResponse()
+		} else if oldest, ok := cached.ServableStale(); ok {
+			// Current-version cards that only lag the line count: serve them now
+			// (computed_lines stays at their UpToLine, so the client keeps
+			// polling) and refresh in the background at most once per cooldown.
+			response = cached.ToResponse()
+			if time.Since(oldest) > time.Duration(analyticsRefreshCooldown.Load()) {
+				computer.start(r.Context(), sessionID, totalLineCount)
+			}
+		} else {
+			// No servable cards (first view, card version bump, missing card):
+			// wait on the deduped compute. A departing client stops waiting, but
+			// the detached compute still finishes and persists the cards.
+			select {
+			case res := <-computer.start(r.Context(), sessionID, totalLineCount):
+				computed, _ := res.Val.(*computedCards)
+				if res.Err != nil || computed == nil {
+					respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
+					return
 				}
+				response = computed.cards.ToResponse()
+				response.ValidationErrorCount = computed.validationErrorCount
+			case <-r.Context().Done():
+				return
 			}
-
-			attachSuggestedTitle(database, sessionID, response)
-			respondJSON(w, http.StatusOK, response)
-			return
 		}
 
-		// Cache miss or stale — recompute via the provider registry.
-		sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(dbCtx, sessionID)
-		if err != nil {
-			log.Error("Failed to get session info", "error", err, "session_id", sessionID)
-			respondError(w, http.StatusInternalServerError, "Failed to get session info")
-			return
-		}
-
-		sp, err := analytics.ProviderFor(sessionProvider)
-		if err != nil {
-			log.Error("provider lookup failed for analytics", "error", err, "session_id", sessionID, "provider", sessionProvider)
-			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
-			return
-		}
-
-		rollout, err := sp.Parse(r.Context(), providerParseInput(database, store, sessionID, sessionUserID, sessionProvider, externalID))
-		if err != nil {
-			log.Error("Failed to parse session for analytics", "error", err, "session_id", sessionID)
-			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
-			return
-		}
-		if rollout == nil {
-			respondJSON(w, http.StatusOK, &analytics.AnalyticsResponse{})
-			return
-		}
-
-		// Enrich the ctx logger so any unknown-model pricing warning emitted deep
-		// in the compute path is traceable to this session.
-		computeCtx := logger.WithLogger(r.Context(), log.With("session_id", sessionID, "provider", sessionProvider))
-		computed := sp.ComputeCards(computeCtx, rollout)
-		if computed.ValidationErrorCount > 0 {
-			log.Warn("Transcript validation errors detected",
-				"session_id", sessionID,
-				"validation_error_count", computed.ValidationErrorCount,
-			)
-		}
-
-		// Convert to Cards and cache
-		cards := computed.ToCards(sessionID, totalLineCount)
-		if err := analyticsStore.UpsertCards(dbCtx, cards); err != nil {
-			log.Error("Failed to cache cards", "error", err, "session_id", sessionID)
-		}
-
-		response := cards.ToResponse()
-		response.ValidationErrorCount = computed.ValidationErrorCount
-
-		// Smart recap. The rollout is reused for PrepareTranscript so
-		// providers with lazy-materialize caches (Claude, Codex) don't
-		// re-download agent / subagent files.
+		// Smart recap (if enabled). The recap transcript is built lazily inside
+		// attachOrGenerateSmartRecap, only when a first-time generation runs.
 		if smartRecapConfig.Enabled {
-			transcript, idMap, terr := sp.PrepareTranscript(r.Context(), rollout)
-			if terr != nil {
-				log.Error("Failed to prepare transcript for smart recap", "error", terr, "session_id", sessionID)
+			ownerCtx, ownerCancel := context.WithTimeout(r.Context(), DatabaseTimeout)
+			sessionUserID, externalID, sessionProvider, err := sessionStore.GetSessionOwnerExternalIDAndProvider(ownerCtx, sessionID)
+			ownerCancel()
+			if err != nil {
+				log.Error("Failed to get session info for smart recap", "error", err, "session_id", sessionID)
+			} else {
+				attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
+					database:        database,
+					analyticsStore:  analyticsStore,
+					store:           store,
+					config:          smartRecapConfig,
+					generator:       smartRecapGenerator,
+					sessionID:       sessionID,
+					sessionUserID:   sessionUserID,
+					sessionProvider: sessionProvider,
+					externalID:      externalID,
+					lineCount:       totalLineCount,
+					cardStats:       response.Cards,
+					response:        response,
+					log:             log,
+					isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
+					clearMessageIDs: providerClearMessageIDs(sessionProvider),
+				})
 			}
-			attachOrGenerateSmartRecap(r.Context(), &smartRecapContext{
-				database:        database,
-				analyticsStore:  analyticsStore,
-				store:           store,
-				config:          smartRecapConfig,
-				generator:       smartRecapGenerator,
-				sessionID:       sessionID,
-				sessionUserID:   sessionUserID,
-				sessionProvider: sessionProvider,
-				externalID:      externalID,
-				lineCount:       totalLineCount,
-				transcript:      transcript,
-				idMap:           idMap,
-				cardStats:       response.Cards,
-				response:        response,
-				log:             log,
-				isOwner:         result.AccessInfo.AccessType == db.SessionAccessOwner,
-				clearMessageIDs: sp.ClearMessageIDs(),
-			})
 		}
 
 		attachSuggestedTitle(database, sessionID, response)
 		respondJSON(w, http.StatusOK, response)
 	}
+}
+
+// computedCards is the shared result of one analytics cards compute.
+type computedCards struct {
+	cards                *analytics.Cards
+	validationErrorCount int
+}
+
+// analyticsComputer runs the analytics cache-miss path: owner lookup, provider
+// Parse, ComputeCards, persist. Computes are detached from the request,
+// bounded by analyticsComputeTimeout, and deduped per session ID through
+// analyticsComputeGroup.
+type analyticsComputer struct {
+	database       *db.DB
+	store          *storage.S3Storage
+	analyticsStore *analytics.Store
+	sessionStore   *dbsession.Store
+}
+
+// start joins (or starts) the in-flight compute for sessionID and returns its
+// result channel. The channel is buffered, so callers that don't wait (the
+// background refresh) leak nothing. parent supplies the logger; its
+// cancellation is ignored.
+func (c *analyticsComputer) start(parent context.Context, sessionID string, lineCount int64) <-chan singleflight.Result {
+	return analyticsComputeGroup.DoChan(sessionID, func() (val any, err error) {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), analyticsComputeTimeout)
+		defer cancel()
+		log := logger.Ctx(ctx).With("session_id", sessionID)
+		// DoChan re-panics in a fresh goroutine, which would crash the
+		// process; turn a compute panic into an error instead.
+		defer func() {
+			if p := recover(); p != nil {
+				log.Error("Analytics compute panicked", "panic", p, "stack", string(debug.Stack()))
+				val, err = nil, fmt.Errorf("analytics compute panicked: %v", p)
+			}
+		}()
+		return c.compute(logger.WithLogger(ctx, log), sessionID, lineCount)
+	})
+}
+
+// compute parses the session, computes its cards and persists them. It logs
+// its own failures. A nil result with nil error means there is nothing to
+// compute (unknown provider, no transcript).
+func (c *analyticsComputer) compute(ctx context.Context, sessionID string, lineCount int64) (*computedCards, error) {
+	log := logger.Ctx(ctx)
+
+	ownerCtx, ownerCancel := context.WithTimeout(ctx, DatabaseTimeout)
+	sessionUserID, externalID, sessionProvider, err := c.sessionStore.GetSessionOwnerExternalIDAndProvider(ownerCtx, sessionID)
+	ownerCancel()
+	if err != nil {
+		log.Error("Failed to get session info", "error", err)
+		return nil, err
+	}
+
+	sp, err := analytics.ProviderFor(sessionProvider)
+	if err != nil {
+		log.Error("provider lookup failed for analytics", "error", err, "provider", sessionProvider)
+		return nil, nil
+	}
+
+	rollout, err := sp.Parse(ctx, providerParseInput(c.database, c.store, sessionID, sessionUserID, sessionProvider, externalID))
+	if err != nil {
+		log.Error("Failed to parse session for analytics", "error", err)
+		return nil, err
+	}
+	if rollout == nil {
+		return nil, nil
+	}
+
+	// Enrich the ctx logger so any unknown-model pricing warning emitted deep
+	// in the compute path is traceable to this session.
+	computed := sp.ComputeCards(logger.WithLogger(ctx, log.With("provider", sessionProvider)), rollout)
+	if computed.ValidationErrorCount > 0 {
+		log.Warn("Transcript validation errors detected", "validation_error_count", computed.ValidationErrorCount)
+	}
+	if hook := analyticsComputeHook.Load(); hook != nil && *hook != nil {
+		(*hook)()
+	}
+	// Agent downloads that fail are skipped, so a compute that ran out of time
+	// may be partial: never cache it as valid for lineCount.
+	if err := ctx.Err(); err != nil {
+		log.Error("Analytics compute did not finish in time; not caching cards", "error", err, "timeout", analyticsComputeTimeout)
+		return nil, err
+	}
+
+	cards := computed.ToCards(sessionID, lineCount)
+	// Fresh DB deadline, created after the (possibly long) compute.
+	upsertCtx, upsertCancel := context.WithTimeout(context.WithoutCancel(ctx), DatabaseTimeout)
+	defer upsertCancel()
+	if err := c.analyticsStore.UpsertCards(upsertCtx, cards); err != nil {
+		log.Error("Failed to cache cards", "error", err)
+	}
+	return &computedCards{cards: cards, validationErrorCount: computed.ValidationErrorCount}, nil
 }
 
 // smartRecapContext groups the parameters needed for smart recap attachment/generation.

@@ -34,10 +34,6 @@ type TranscriptLine struct {
 	Subtype           string           `json:"subtype,omitempty"`           // e.g., "compact_boundary"
 	CompactMetadata   *CompactMetadata `json:"compactMetadata,omitempty"`   // Compaction info
 	LogicalParentUUID string           `json:"logicalParentUuid,omitempty"` // Parent message UUID
-
-	// RawData holds the full parsed JSON for analyzers that need to walk the entire structure
-	// (e.g., redaction counting). Not serialized.
-	RawData any `json:"-"`
 }
 
 // MessageContent contains message details for user/assistant messages.
@@ -126,13 +122,6 @@ func ParseLine(data []byte) (*TranscriptLine, error) {
 	if err := json.Unmarshal(data, &line); err != nil {
 		return nil, err
 	}
-
-	// Also parse into raw interface{} for analyzers that need to walk the full structure
-	var rawData any
-	if err := json.Unmarshal(data, &rawData); err == nil {
-		line.RawData = rawData
-	}
-
 	return &line, nil
 }
 

@@ -307,3 +307,69 @@ func TestSessionCardRecordIsValid(t *testing.T) {
 		}
 	})
 }
+
+// TestCardsServableStale pins 5m68 D9: cards may be served stale only when
+// every card exists at its current version; UpToLine may lag. Exhaustive over
+// Cards' *CardRecord fields, like TestCardsAllValid_Exhaustive.
+func TestCardsServableStale(t *testing.T) {
+	base := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	oldest := base.Add(-10 * time.Minute)
+	makeCards := func() *Cards {
+		return &Cards{
+			TokensV2:        &TokensV2CardRecord{Version: TokensV2CardVersion, ComputedAt: base, UpToLine: 90},
+			Session:         &SessionCardRecord{Version: SessionCardVersion, ComputedAt: base, UpToLine: 90},
+			Tools:           &ToolsCardRecord{Version: ToolsCardVersion, ComputedAt: oldest, UpToLine: 80},
+			CodeActivity:    &CodeActivityCardRecord{Version: CodeActivityCardVersion, ComputedAt: base, UpToLine: 90},
+			Conversation:    &ConversationCardRecord{Version: ConversationCardVersion, ComputedAt: base, UpToLine: 90},
+			AgentsAndSkills: &AgentsAndSkillsCardRecord{Version: AgentsAndSkillsCardVersion, ComputedAt: base, UpToLine: 90},
+			Redactions:      &RedactionsCardRecord{Version: RedactionsCardVersion, ComputedAt: base, UpToLine: 90},
+			Workflows:       &WorkflowsCardRecord{Version: WorkflowsCardVersion, ComputedAt: base, UpToLine: 90},
+		}
+	}
+
+	t.Run("current-version cards lagging the line count are servable, reporting the oldest computed_at", func(t *testing.T) {
+		cards := makeCards()
+		if cards.AllValid(100) {
+			t.Fatal("fixture must not be AllValid at 100 lines")
+		}
+		got, ok := cards.ServableStale()
+		if !ok {
+			t.Fatal("ServableStale = false, want true for current-version cards")
+		}
+		if !got.Equal(oldest) {
+			t.Errorf("oldest computed_at = %v, want %v", got, oldest)
+		}
+	})
+
+	t.Run("nil cards are not servable", func(t *testing.T) {
+		var cards *Cards
+		if _, ok := cards.ServableStale(); ok {
+			t.Error("ServableStale on nil Cards = true, want false")
+		}
+	})
+
+	var cardFields []string
+	for field := range reflect.TypeFor[Cards]().Fields() {
+		if field.Type.Kind() == reflect.Pointer && strings.HasSuffix(field.Type.Elem().Name(), "CardRecord") {
+			cardFields = append(cardFields, field.Name)
+		}
+	}
+	for _, name := range cardFields {
+		t.Run("missing_"+name+"_is_not_servable", func(t *testing.T) {
+			cards := makeCards()
+			f := reflect.ValueOf(cards).Elem().FieldByName(name)
+			f.Set(reflect.Zero(f.Type()))
+			if _, ok := cards.ServableStale(); ok {
+				t.Errorf("ServableStale = true with %s=nil; a missing card must block on a fresh compute", name)
+			}
+		})
+		t.Run("old_version_"+name+"_is_not_servable", func(t *testing.T) {
+			cards := makeCards()
+			v := reflect.ValueOf(cards).Elem().FieldByName(name).Elem().FieldByName("Version")
+			v.SetInt(v.Int() - 1)
+			if _, ok := cards.ServableStale(); ok {
+				t.Errorf("ServableStale = true with an old %s version; a version bump must block on a fresh compute", name)
+			}
+		})
+	}
+}

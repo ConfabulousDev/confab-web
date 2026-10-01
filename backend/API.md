@@ -895,6 +895,12 @@ Returns computed analytics for a session. Uses the same canonical access model a
 - If `as_of_line` >= current transcript line count: returns `304 Not Modified`
 - Useful for polling: pass the `computed_lines` from a previous response to avoid redundant computation
 
+**Caching and staleness:**
+- Cards are cached per session. When the session has grown since the cards were computed, the endpoint returns the cached cards immediately with the **old** `computed_lines`, which is then lower than the current line count. Clients should keep polling with `as_of_line=<computed_lines>`; the response catches up once a refresh lands.
+- A background refresh starts only when the cached cards are more than 2 minutes old, so a live session's analytics lag by up to about 2 minutes plus the compute time.
+- On first view, or after a card schema version change, the request waits for the compute. Concurrent requests for the same session share one compute. If the client disconnects, the compute still finishes and caches its result.
+- `validation_error_count` is set only on a response that waited for a fresh compute.
+
 **Response:**
 ```json
 {
@@ -1025,7 +1031,7 @@ Returns computed analytics for a session. Uses the same canonical access model a
 | Field | Type | Description |
 |-------|------|-------------|
 | `computed_at` | string | ISO timestamp when analytics were computed |
-| `computed_lines` | int | Line count through which analytics are computed |
+| `computed_lines` | int | Line count through which analytics are computed. May be lower than the session's current line count when stale cards are served; see *Caching and staleness* |
 | `tokens.*` | object | *Deprecated:* Use `cards.tokens` instead |
 | `cost.*` | object | *Deprecated:* Use `cards.tokens.estimated_usd` instead |
 | `compaction.*` | object | *Deprecated:* Use `cards.session` instead |
