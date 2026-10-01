@@ -216,7 +216,7 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		}
 	})
 
-	t.Run("invalidates cache when new data is synced", func(t *testing.T) {
+	t.Run("serves stale cards with the old computed_lines after new data is synced", func(t *testing.T) {
 		env.CleanDB(t)
 
 		user := testutil.CreateTestUser(t, env, "test@example.com", "Test User")
@@ -258,7 +258,11 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		// Update sync_files to reflect new line count (CreateTestSyncFile uses ON CONFLICT DO UPDATE)
 		testutil.CreateTestSyncFile(t, env, sessionID, "transcript.jsonl", "transcript", 2)
 
-		// Second request - cache should be invalid (line count mismatch), recompute
+		// Second request - the cached cards lag the line count but are at the
+		// current version, and younger than the refresh cooldown, so they are
+		// served as-is. computed_lines (1) < total lines (2) keeps the client
+		// polling with as_of_line. The background refresh is covered in
+		// analytics_cache_http_integration_test.go.
 		resp2, err := client.Get(fmt.Sprintf("/api/v1/sessions/%s/analytics", sessionID))
 		if err != nil {
 			t.Fatalf("request 2 failed: %v", err)
@@ -269,12 +273,11 @@ func TestGetSessionAnalytics_HTTP_Integration(t *testing.T) {
 		var result2 analytics.AnalyticsResponse
 		testutil.ParseJSON(t, resp2, &result2)
 
-		// Should reflect NEW data (100 + 200 = 300 input tokens)
-		if result2.Tokens.Input != 300 {
-			t.Errorf("expected updated input tokens 300, got %d", result2.Tokens.Input)
+		if result2.Tokens.Input != 100 {
+			t.Errorf("expected stale input tokens 100, got %d", result2.Tokens.Input)
 		}
-		if result2.ComputedLines != 2 {
-			t.Errorf("expected computed_lines 2, got %d", result2.ComputedLines)
+		if result2.ComputedLines != 1 {
+			t.Errorf("expected stale computed_lines 1, got %d", result2.ComputedLines)
 		}
 	})
 

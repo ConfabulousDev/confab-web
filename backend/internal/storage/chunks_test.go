@@ -278,3 +278,31 @@ func TestParseChunkKey(t *testing.T) {
 		})
 	}
 }
+
+// TestMergeChunks_ResultSizedExactly guards the 5m68 allocation fix: the merged
+// buffer is allocated once at its exact size, even when overlapping chunks
+// make the summed chunk sizes an overestimate.
+func TestMergeChunks_ResultSizedExactly(t *testing.T) {
+	chunks := []ChunkInfo{
+		{Key: "chunk_00000001_00000005.jsonl", FirstLine: 1, LastLine: 5, Data: []byte("old1\nold2\nold3\nold4\nold5\n")},
+		{Key: "chunk_00000001_00000010.jsonl", FirstLine: 1, LastLine: 10, Data: []byte("new1\nnew2\nnew3\nnew4\nnew5\nnew6\nnew7\nnew8\nnew9\nnew10\n")},
+	}
+	result, err := MergeChunks(chunks)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cap(result) != len(result) {
+		t.Errorf("cap(result) = %d, len(result) = %d; the merged buffer must be sized exactly", cap(result), len(result))
+	}
+
+	empty, err := MergeChunks([]ChunkInfo{
+		{Key: "chunk_00000001_00000001.jsonl", FirstLine: 1, LastLine: 1},
+		{Key: "chunk_00000002_00000002.jsonl", FirstLine: 2, LastLine: 2},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if empty != nil {
+		t.Errorf("merging chunks with no lines = %q, want nil", empty)
+	}
+}

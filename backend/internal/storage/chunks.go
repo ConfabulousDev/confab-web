@@ -218,8 +218,19 @@ func MergeChunks(chunks []ChunkInfo) ([]byte, error) {
 		}
 	}
 
-	// Build result from array
-	var result []byte
+	// Size the result exactly before building it, so the append loop never
+	// regrows and copies (overlapping chunks make summed chunk sizes an
+	// overestimate).
+	size := 0
+	for _, line := range lines {
+		if line != nil {
+			size += len(line) + 1
+		}
+	}
+	if size == 0 {
+		return nil, nil
+	}
+	result := make([]byte, 0, size)
 	for _, line := range lines {
 		if line != nil {
 			result = append(result, line...)

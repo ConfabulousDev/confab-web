@@ -24,7 +24,7 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 - **`ListChunks(ctx, userID, provider, externalID, fileName)`** -- Lists all chunk keys for a file under the named provider, sorted lexicographically (correct order due to zero-padded names). Returns `ErrTooManyChunks` if the count exceeds `MaxChunksPerFile`.
 - **`DownloadAndMergeChunks(ctx, userID, provider, externalID, fileName)`** -- Convenience method: lists chunks, downloads in parallel, merges with overlap handling. Returns nil for files with no chunks.
 - **`DownloadChunks(ctx, chunkKeys)`** -- Downloads chunks in parallel with bounded concurrency (`maxParallelDownloads = 10`). Skips unparseable keys with a warning.
-- **`MergeChunks(chunks)`** -- Merges chunks into a single byte slice using line-indexed array. Handles overlapping line ranges (last write wins). Logs warnings for conflicting content on overlaps and for large merges (> 1M lines).
+- **`MergeChunks(chunks)`** -- Merges chunks into a single byte slice using line-indexed array. Handles overlapping line ranges (last write wins). Allocates the merged buffer once, at its exact size (5m68). Logs warnings for conflicting content on overlaps and for large merges (> 1M lines).
 - **`DeleteAllSessionChunks(ctx, userID, provider, externalID)`** -- Deletes all chunks under a session's provider-scoped prefix. Chunks written under a different provider for the same `(userID, externalID)` are untouched.
 - **`ParseChunkKey(key)`** -- Extracts first/last line numbers from a chunk S3 key. Opaque to the provider segment.
 

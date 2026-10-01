@@ -12,15 +12,10 @@ type RedactionsResult struct {
 	RedactionCounts map[string]int // Type -> count (e.g., "GITHUB_TOKEN" -> 5)
 }
 
-// RedactionsAnalyzer extracts redaction counts from transcripts.
-// It recursively walks the JSON structure of each line to find all
-// [REDACTED:TYPE] markers in string values.
-//
-// Memory note: This analyzer uses TranscriptLine.RawData which stores the full
-// parsed JSON alongside the typed struct, roughly doubling memory per line.
-// If memory becomes an issue, consider a two-phase approach: run raw-bytes
-// analyzers first, then parse into structs and discard raw bytes before
-// running struct-based analyzers.
+// RedactionsAnalyzer sums the [REDACTED:TYPE] marker counts of each file.
+// Counting happens at parse time (TranscriptFile.RedactionCounts, filled by
+// parseTranscriptFile from the line's transient validation map), so parsed
+// lines never retain a generic copy of their JSON.
 type RedactionsAnalyzer struct {
 	result RedactionsResult
 }
@@ -31,10 +26,9 @@ func (a *RedactionsAnalyzer) ProcessFile(file *TranscriptFile, isMain bool) {
 		a.result.RedactionCounts = make(map[string]int)
 	}
 
-	for _, line := range file.Lines {
-		if line.RawData != nil {
-			a.walkValue(line.RawData)
-		}
+	for redactionType, n := range file.RedactionCounts {
+		a.result.RedactionCounts[redactionType] += n
+		a.result.TotalRedactions += n
 	}
 }
 
@@ -56,33 +50,35 @@ func (a *RedactionsAnalyzer) Analyze(fc *FileCollection) (*RedactionsResult, err
 	return a.Result(), nil
 }
 
-// walkValue recursively walks a JSON value and counts redaction markers in strings.
-func (a *RedactionsAnalyzer) walkValue(v any) {
+// countRedactionsInValue recursively walks a decoded JSON value and adds every
+// [REDACTED:TYPE] marker found in string values (not object keys) to counts.
+// The literal placeholder [REDACTED:TYPE] is skipped. counts is allocated on
+// the first marker found.
+func countRedactionsInValue(v any, counts *map[string]int) {
 	switch val := v.(type) {
 	case string:
-		a.countRedactionsInString(val)
+		countRedactionsInString(val, counts)
 	case map[string]any:
 		for _, elem := range val {
-			a.walkValue(elem)
+			countRedactionsInValue(elem, counts)
 		}
 	case []any:
 		for _, elem := range val {
-			a.walkValue(elem)
+			countRedactionsInValue(elem, counts)
 		}
 	}
 }
 
-// countRedactionsInString finds all [REDACTED:TYPE] markers in a string.
-func (a *RedactionsAnalyzer) countRedactionsInString(s string) {
-	matches := redactionPattern.FindAllStringSubmatch(s, -1)
-	for _, match := range matches {
-		if len(match) >= 2 {
-			redactionType := match[1]
-			if redactionType == "TYPE" {
-				continue
-			}
-			a.result.RedactionCounts[redactionType]++
-			a.result.TotalRedactions++
+// countRedactionsInString adds the [REDACTED:TYPE] markers in s to counts.
+func countRedactionsInString(s string, counts *map[string]int) {
+	for _, match := range redactionPattern.FindAllStringSubmatch(s, -1) {
+		redactionType := match[1]
+		if redactionType == "TYPE" {
+			continue
 		}
+		if *counts == nil {
+			*counts = make(map[string]int)
+		}
+		(*counts)[redactionType]++
 	}
 }
