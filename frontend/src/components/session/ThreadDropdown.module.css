@@ -1,4 +1,5 @@
-/* we3k: thread-strip popovers — the active chip's menu and the All subagents list. */
+/* we3k / jgk8: thread popovers — the active chip's menu and ThreadListDropdown
+   (All subagents, and the subagent path's sibling / Launched here lists). */
 
 .container {
   position: relative;
@@ -7,7 +8,7 @@
   align-items: center;
 }
 
-.allButton {
+.trigger {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -25,13 +26,13 @@
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
-.allButton:hover,
-.allButtonOpen {
+.trigger:hover,
+.triggerOpen {
   color: var(--color-text-primary);
   background: var(--color-bg-hover);
 }
 
-.allButton:focus-visible {
+.trigger:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
@@ -106,13 +107,18 @@
   outline: none;
 }
 
-/* All subagents list, pinned to the bar's right edge. */
+/* Thread list, pinned to the trigger's right edge (strip) or left edge (path). */
 .listPopover {
   right: 0;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
   width: min(360px, calc(100vw - 32px));
+}
+
+.listPopoverStart {
+  right: auto;
+  left: 0;
 }
 
 .filter {
@@ -152,10 +158,6 @@
   padding: 6px var(--spacing-sm);
   border-radius: var(--radius-md);
   cursor: pointer;
-}
-
-.rowNested {
-  padding-left: calc(var(--spacing-sm) + var(--spacing-md));
 }
 
 .rowHighlighted {
@@ -215,4 +217,14 @@
   padding: var(--spacing-sm);
   font-size: var(--font-sm);
   color: var(--color-text-muted);
+}
+
+/* jgk8 D7: non-interactive note under the list. */
+.footer {
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-sm) 2px;
+  font-size: var(--font-xs);
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border-light);
 }

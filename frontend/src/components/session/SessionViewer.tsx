@@ -7,72 +7,17 @@ import { useTranscriptData } from '@/providers/useTranscriptData';
 import SessionHeader from './SessionHeader';
 import SessionSummaryPanel from './SessionSummaryPanel';
 import TranscriptThreadTabs from './TranscriptThreadTabs';
+import ThreadBreadcrumb from './ThreadBreadcrumb';
+import { threadPath } from './threadDetails';
 import styles from './SessionViewer.module.css';
 
 export type ViewTab = 'summary' | 'transcript';
 
 const NO_THREADS: TranscriptThreadRef[] = [];
+const NO_CHILDREN: ReadonlyMap<string, TranscriptThreadRef[]> = new Map();
 const NO_LINES: unknown[] = [];
 // et0r D9: a revisited thread renders from the service cache, then polls.
 const THREAD_DATA_OPTIONS = { preferCache: true };
-
-/**
- * we3k D8: Main-launched threads in launch order, each followed by the nested
- * threads opened beneath it (depth-first, in open order). Nested threads whose
- * parent isn't in the strip go last.
- */
-function orderStripThreads(
-  mainThreads: TranscriptThreadRef[],
-  nestedThreads: TranscriptThreadRef[],
-): TranscriptThreadRef[] {
-  if (nestedThreads.length === 0) return mainThreads;
-  const mainIds = new Set(mainThreads.map((t) => t.id));
-  const nested = nestedThreads.filter((t) => !mainIds.has(t.id));
-  const childrenOf = new Map<string, TranscriptThreadRef[]>();
-  for (const ref of nested) {
-    if (typeof ref.parentThreadId !== 'string') continue;
-    childrenOf.set(ref.parentThreadId, [...(childrenOf.get(ref.parentThreadId) ?? []), ref]);
-  }
-  const ordered: TranscriptThreadRef[] = [];
-  const placed = new Set<string>();
-  function place(ref: TranscriptThreadRef) {
-    if (placed.has(ref.id)) return;
-    placed.add(ref.id);
-    ordered.push(ref);
-    for (const child of childrenOf.get(ref.id) ?? []) place(child);
-  }
-  mainThreads.forEach(place);
-  nested.forEach(place);
-  return ordered;
-}
-
-function sameThreadRef(a: TranscriptThreadRef, b: TranscriptThreadRef): boolean {
-  return (
-    a.id === b.id &&
-    a.fileName === b.fileName &&
-    a.label === b.label &&
-    a.parentThreadId === b.parentThreadId &&
-    a.launchTargetId === b.launchTargetId &&
-    a.status === b.status &&
-    a.subtitle === b.subtitle &&
-    a.model === b.model &&
-    a.durationMs === b.durationMs
-  );
-}
-
-/** Replace stored nested refs with their fresh rediscovery; returns `refs` itself when nothing changed. */
-function refreshNestedThreads(refs: TranscriptThreadRef[], fresh: TranscriptThreadRef[]): TranscriptThreadRef[] {
-  if (refs.length === 0 || fresh.length === 0) return refs;
-  const freshById = new Map(fresh.map((t) => [t.id, t]));
-  let changed = false;
-  const next = refs.map((ref) => {
-    const update = freshById.get(ref.id);
-    if (!update || update.parentThreadId !== ref.parentThreadId || sameThreadRef(ref, update)) return ref;
-    changed = true;
-    return update;
-  });
-  return changed ? next : refs;
-}
 
 interface SessionViewerProps {
   session: SessionDetail;
@@ -175,21 +120,30 @@ function SessionViewer({
     [threadsCapability, main.items],
   );
 
-  // Nested threads opened from inside a subagent tab stay in the strip for the
-  // rest of the visit. Scoped to the session so a session switch starts clean.
-  const [openedThreads, setOpenedThreads] = useState<{ sessionId: string; refs: TranscriptThreadRef[] }>(
-    { sessionId: session.id, refs: [] },
-  );
-  const nestedThreads = openedThreads.sessionId === session.id ? openedThreads.refs : NO_THREADS;
+  // jgk8 D1: each subagent's children, recorded when it loads and remembered for
+  // the visit, so every level stays reachable after switching away. Scoped to
+  // the session so a session switch starts clean.
+  const [childMemory, setChildMemory] = useState<{
+    sessionId: string;
+    byParent: ReadonlyMap<string, TranscriptThreadRef[]>;
+  }>({ sessionId: session.id, byParent: NO_CHILDREN });
+  const childrenByParent = childMemory.sessionId === session.id ? childMemory.byParent : NO_CHILDREN;
 
-  const knownThreads = useMemo(() => orderStripThreads(mainThreads, nestedThreads), [mainThreads, nestedThreads]);
+  // Every thread discovered this visit; Main's discovery wins, then first seen.
+  const knownThreads = useMemo(() => {
+    const known = new Map(mainThreads.map((t) => [t.id, t]));
+    for (const children of childrenByParent.values()) {
+      for (const child of children) if (!known.has(child.id)) known.set(child.id, child);
+    }
+    return known;
+  }, [mainThreads, childrenByParent]);
 
-  // A thread id with no discovered ref (deep link to a nested agent, or Main
-  // not yet showing its launch) still opens, labeled by id (et0r D10).
+  // A thread id with no discovered ref (cold deep link to a nested agent, or
+  // Main not yet showing its launch) still opens, labeled by id (et0r D10).
   const activeThread = useMemo<TranscriptThreadRef | null>(() => {
     if (!activeThreadId || !threadsCapability) return null;
     return (
-      knownThreads.find((t) => t.id === activeThreadId) ?? {
+      knownThreads.get(activeThreadId) ?? {
         id: activeThreadId,
         fileName: threadsCapability.fileNameFor(activeThreadId),
         label: activeThreadId,
@@ -198,10 +152,42 @@ function SessionViewer({
     );
   }, [activeThreadId, threadsCapability, knownThreads]);
 
-  const stripThreads = useMemo(
-    () => (activeThread && !knownThreads.includes(activeThread) ? [...knownThreads, activeThread] : knownThreads),
+  // Depth-1 → open thread; undefined when the ancestry isn't known (jgk8 D8).
+  const activePath = useMemo(
+    () => (activeThread ? threadPath(activeThread, knownThreads) : undefined),
     [activeThread, knownThreads],
   );
+
+  // jgk8 D4: the strip is Main's direct subagents, plus a chip for an open
+  // thread whose ancestry is unknown (D8). Nested agents live in the path row.
+  const stripThreads = useMemo(
+    () => (activeThread && !activePath ? [...mainThreads, activeThread] : mainThreads),
+    [activeThread, activePath, mainThreads],
+  );
+
+  // jgk8 D5: the depth-1 ancestor chip shows "in path" and lands on the launch row.
+  const inPath = useMemo(() => {
+    const [depth1, next] = activePath ?? [];
+    return depth1 && next ? { threadId: depth1.id, targetId: next.launchTargetId } : undefined;
+  }, [activePath]);
+
+  // jgk8 D7: the All-subagents total counts every uploaded thread file. That
+  // is a page-load snapshot, so on a live session it is floored at every
+  // distinct agent known this visit (Main's, remembered children, an unknown
+  // open one): the total never drops below a list it summarizes.
+  const threadFileCount = useMemo(
+    () => threadsCapability?.countThreadFiles?.(session.files),
+    [threadsCapability, session.files],
+  );
+  const knownThreadCount = knownThreads.size + (activeThread && !knownThreads.has(activeThread.id) ? 1 : 0);
+  const allThreadsCount = Math.max(threadFileCount ?? 0, knownThreadCount);
+  const nestedThreadCount = Math.max(0, allThreadsCount - mainThreads.length);
+
+  const childrenOf = useCallback(
+    (threadId: string) => childrenByParent.get(threadId) ?? NO_THREADS,
+    [childrenByParent],
+  );
+  const childCountOf = useCallback((threadId: string) => childrenOf(threadId).length, [childrenOf]);
 
   const threadSeed = useMemo(() => {
     if (seed === undefined) return undefined;
@@ -221,16 +207,19 @@ function SessionViewer({
     [openThreadId, threadsCapability, thread.items],
   );
 
-  // we3k D8: nested refs take their parent's latest discovery (live status),
-  // and keep it after switching away from the parent.
-  const [syncedChildThreads, setSyncedChildThreads] = useState(childThreads);
+  // Record the open thread's latest discovery (live status). Transcripts only
+  // grow, so an empty discovery (still loading, or a failed fetch) never
+  // replaces remembered children.
+  const [syncedChildThreads, setSyncedChildThreads] = useState(NO_THREADS);
   if (childThreads !== syncedChildThreads) {
     setSyncedChildThreads(childThreads);
-    setOpenedThreads((prev) => {
-      if (prev.sessionId !== session.id) return prev;
-      const refs = refreshNestedThreads(prev.refs, childThreads);
-      return refs === prev.refs ? prev : { sessionId: prev.sessionId, refs };
-    });
+    if (openThreadId !== undefined && childThreads.length > 0) {
+      setChildMemory((prev) => {
+        const byParent = new Map(prev.sessionId === session.id ? prev.byParent : NO_CHILDREN);
+        byParent.set(openThreadId, childThreads);
+        return { sessionId: session.id, byParent };
+      });
+    }
   }
 
   // Everything transcript-facing follows the open tab: counts, filters,
@@ -266,24 +255,6 @@ function SessionViewer({
       sessionDate,
     };
   }, [adapter, main.items, main.raw, session.first_seen, session.last_sync_at]);
-
-  const handleOpenThread = useCallback(
-    (threadId: string) => {
-      // A nested agent opened from inside a subagent tab joins the strip,
-      // right after its parent (we3k D8).
-      if (!knownThreads.some((t) => t.id === threadId)) {
-        const child = childThreads.find((t) => t.id === threadId);
-        if (child) {
-          setOpenedThreads((prev) => ({
-            sessionId: session.id,
-            refs: [...(prev.sessionId === session.id ? prev.refs : []), child],
-          }));
-        }
-      }
-      changeThread(threadId);
-    },
-    [knownThreads, childThreads, session.id, changeThread],
-  );
 
   const lastAppliedSuggestedTitleRef = useRef<string | null>(null);
   const handleSuggestedTitleChange = useCallback(
@@ -360,6 +331,21 @@ function SessionViewer({
             activeThreadId={activeThread?.id ?? null}
             sessionId={session.id}
             onSelect={changeThread}
+            allThreadsCount={allThreadsCount}
+            nestedThreadCount={nestedThreadCount}
+            childCountOf={childCountOf}
+            inPath={inPath}
+            launchedHere={activePath?.length === 1 ? childrenOf(activePath[0]!.id) : undefined}
+          />
+        )}
+
+        {showTranscriptControls && activeThread && (
+          <ThreadBreadcrumb
+            active={activeThread}
+            path={activePath}
+            childrenOf={childrenOf}
+            sessionId={session.id}
+            onSelect={changeThread}
           />
         )}
 
@@ -393,7 +379,7 @@ function SessionViewer({
                 firstSeen={session.first_seen}
                 lastSyncAt={session.last_sync_at}
                 activeThreadId={activeThread?.id ?? null}
-                onOpenThread={threadsCapability ? handleOpenThread : undefined}
+                onOpenThread={threadsCapability ? changeThread : undefined}
                 notSynced={activeThread !== null && thread.notFound}
               />
             </div>

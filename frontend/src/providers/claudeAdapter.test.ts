@@ -432,6 +432,39 @@ describe('claudeAdapter.threads', () => {
   it('builds the thread file name for an arbitrary (deep-linked) thread id', () => {
     expect(claudeAdapter.threads?.fileNameFor('zz')).toBe('agent-zz.jsonl');
   });
+
+  // jgk8 D7: the All-subagents total counts every classic subagent file.
+  describe('countThreadFiles', () => {
+    function file(file_name: string, file_type: string) {
+      return { file_name, file_type, last_synced_line: 1, updated_at: '2026-09-30T00:00:00Z' };
+    }
+
+    it('counts every flat agent file, at any spawn depth', () => {
+      const files = [
+        file('transcript.jsonl', 'transcript'),
+        file('agent-a05d3d182343d2ab7.jsonl', 'agent'),
+        file('agent-a7437088c9e3342e0.jsonl', 'agent'),
+        file('agent-af22b3c603bbfa454.jsonl', 'agent'),
+      ];
+      expect(claudeAdapter.threads?.countThreadFiles?.(files)).toBe(3);
+    });
+
+    it('excludes workflow-run agent files and non-agent files', () => {
+      const files = [
+        file('transcript.jsonl', 'transcript'),
+        file('agent-a1.jsonl', 'agent'),
+        file('subagents/workflows/run1/agent-w1.jsonl', 'agent'),
+        file('subagents/workflows/run1/journal.jsonl', 'agent'),
+        file('todo-a1.json', 'todo'),
+      ];
+      expect(claudeAdapter.threads?.countThreadFiles?.(files)).toBe(1);
+    });
+
+    it('is zero for a session without subagent files', () => {
+      expect(claudeAdapter.threads?.countThreadFiles?.([file('transcript.jsonl', 'transcript')])).toBe(0);
+      expect(claudeAdapter.threads?.countThreadFiles?.([])).toBe(0);
+    });
+  });
 });
 
 // CF-436: Per-provider tooltip strings for the Tokens summary card live on

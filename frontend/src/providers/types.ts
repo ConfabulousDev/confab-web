@@ -112,6 +112,18 @@ interface TranscriptThreadsCapability<TItem> {
   discover(items: TItem[], parentThreadId: string | null): TranscriptThreadRef[];
   /** File name for a thread id not (yet) discovered — deep links. */
   fileNameFor(threadId: string): string;
+  /**
+   * jgk8: how many threads the session's uploaded files hold, at any depth
+   * (the All-subagents total). Optional; without it the total is the count
+   * of threads Main launched.
+   */
+  countThreadFiles?(files: readonly SessionFileRef[]): number;
+}
+
+/** The parts of a session file (`SessionDetail.files[number]`) thread counting reads. */
+interface SessionFileRef {
+  file_name: string;
+  file_type: string;
 }
 
 export interface SessionMetaFallback {

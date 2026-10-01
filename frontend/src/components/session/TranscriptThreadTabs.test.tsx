@@ -3,7 +3,7 @@
 // active chip's menu (Go to parent / Copy link), and manual-activation tabs.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { TranscriptThreadRef } from '@/providers/types';
 import TranscriptThreadTabs from './TranscriptThreadTabs';
@@ -103,33 +103,127 @@ describe('TranscriptThreadTabs / layout', () => {
     expect(tooltip).toHaveTextContent('running');
   });
 
-  it("shows the duration in the tooltip when known, and names a nested agent's parent", () => {
-    renderStrip({
-      threads: [...threads, thread('c1', 'Read session store', { parentThreadId: 'a1', status: 'running' })],
-    });
+  it('shows the duration in the tooltip when known', () => {
+    renderStrip();
     act(() => {
       tab(/^Write tests/).focus();
     });
     expect(screen.getByRole('tooltip')).toHaveTextContent('1m 30s');
-    act(() => {
-      tab(/^Read session store/).focus();
-    });
-    expect(screen.getByRole('tooltip')).toHaveTextContent('Launched by Explore the codebase');
-  });
-
-  it('marks a nested chip with an indent and keeps its own label', () => {
-    renderStrip({
-      threads: [threads[0]!, thread('c1', 'Read session store', { parentThreadId: 'a1' }), threads[1]!],
-    });
-    const nested = tab(/^Read session store/);
-    expect(nested.textContent).toBe('Read session store');
-    expect(nested.querySelector('[data-nested]')).not.toBeNull();
-    expect(tab(/^Write tests/).querySelector('[data-nested]')).toBeNull();
   });
 
   it('renders the All subagents button with the subagent count', () => {
     renderStrip();
     expect(screen.getByRole('button', { name: 'All subagents (3)' })).toBeInTheDocument();
+  });
+});
+
+// jgk8 D7: the strip lists Main's direct subagents; the menu counts every one.
+describe('TranscriptThreadTabs / All subagents total and footer', () => {
+  it('counts every subagent in the session when a total is given', () => {
+    renderStrip({ allThreadsCount: 375, nestedThreadCount: 372 });
+    expect(screen.getByRole('button', { name: 'All subagents (375)' })).toBeInTheDocument();
+  });
+
+  it('lists only the strip threads, then a footer for the ones launched by subagents', async () => {
+    const user = userEvent.setup();
+    renderStrip({ allThreadsCount: 375, nestedThreadCount: 372 });
+    await user.click(screen.getByRole('button', { name: /^All subagents/ }));
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+    expect(screen.getByText('372 more launched by subagents. Open one to see the ones it launched.')).toBeInTheDocument();
+  });
+
+  it('shows no footer when no subagent launched others', async () => {
+    const user = userEvent.setup();
+    renderStrip({ allThreadsCount: 3, nestedThreadCount: 0 });
+    await user.click(screen.getByRole('button', { name: /^All subagents/ }));
+    expect(screen.queryByText(/more launched by/)).not.toBeInTheDocument();
+  });
+
+  it('shows "launched N" on rows whose children are known', async () => {
+    const user = userEvent.setup();
+    renderStrip({ childCountOf: (id) => (id === 'a1' ? 43 : 0) });
+    await user.click(screen.getByRole('button', { name: /^All subagents/ }));
+    const options = screen.getAllByRole('option');
+    expect(options[1]).toHaveTextContent('launched 43');
+    expect(options[2]).not.toHaveTextContent(/launched/);
+  });
+});
+
+// jgk8 D9 review: the open depth-1 agent's children sit in the strip itself.
+describe('TranscriptThreadTabs / Launched here', () => {
+  const kids = [
+    thread('j1', 'Judge arrays r1', { parentThreadId: 'a1', status: 'running' }),
+    thread('j2', 'Judge arrays r2', { parentThreadId: 'a1', status: 'completed' }),
+  ];
+
+  it('shows "Launched here (n)" left of All subagents, outside the chip scroller', () => {
+    renderStrip({ activeThreadId: 'a1', launchedHere: kids });
+    const launched = screen.getByRole('button', { name: 'Launched here (2)' });
+    expect(screen.getByTestId('thread-scroller')).not.toContainElement(launched);
+    expect(screen.getByRole('tablist')).not.toContainElement(launched);
+    const all = screen.getByRole('button', { name: /^All subagents/ });
+    expect(launched.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("lists the open agent's children, none checked, and opens the picked one", async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderStrip({ activeThreadId: 'a1', launchedHere: kids });
+    await user.click(screen.getByRole('button', { name: 'Launched here (2)' }));
+    const options = within(screen.getByRole('listbox', { name: 'Launched by Explore the codebase' })).getAllByRole(
+      'option',
+    );
+    expect(options.map((o) => o.textContent)).toEqual([
+      expect.stringContaining('Judge arrays r1'),
+      expect.stringContaining('Judge arrays r2'),
+    ]);
+    for (const option of options) expect(option).toHaveAttribute('aria-selected', 'false');
+    await user.click(options[1]!);
+    expect(onSelect).toHaveBeenCalledWith('j2');
+  });
+
+  it('is hidden when the open agent has no known children', () => {
+    renderStrip({ activeThreadId: 'a1', launchedHere: [] });
+    expect(screen.queryByRole('button', { name: /^Launched here/ })).not.toBeInTheDocument();
+    renderStrip({ activeThreadId: 'a2' });
+    expect(screen.queryByRole('button', { name: /^Launched here/ })).not.toBeInTheDocument();
+  });
+
+  it('has a compact icon + count form that keeps the full accessible name', () => {
+    renderStrip({ activeThreadId: 'a1', launchedHere: kids });
+    const launched = screen.getByRole('button', { name: 'Launched here (2)' });
+    expect(launched.querySelector('[class*="allCompact"]')).toHaveTextContent('2');
+    expect(launched.querySelector('[class*="allLabel"]')).toHaveTextContent('Launched here (2)');
+  });
+});
+
+// jgk8 D5: a nested agent never gets a chip; its depth-1 ancestor shows "in path".
+describe('TranscriptThreadTabs / in-path chip', () => {
+  const inPath = { threadId: 'a1', targetId: 'launch-j1' };
+
+  it('selects the depth-1 ancestor chip with the in-path style instead of the active style', () => {
+    renderStrip({ activeThreadId: 'j1', inPath });
+    const ancestor = tab(/^Explore the codebase/);
+    expect(ancestor).toHaveAttribute('aria-selected', 'true');
+    expect(ancestor).toHaveAttribute('data-in-path', 'true');
+    expect(ancestor.className).not.toMatch(/chipActive/);
+    expect(tab('Main')).toHaveAttribute('aria-selected', 'false');
+    expect(ancestor).toHaveAttribute('tabindex', '0');
+  });
+
+  it('opens the depth-1 agent at the launch row on click, with no chip menu', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderStrip({ activeThreadId: 'j1', inPath });
+    const ancestor = tab(/^Explore the codebase/);
+    expect(ancestor).not.toHaveAttribute('aria-haspopup');
+    await user.click(ancestor);
+    expect(onSelect).toHaveBeenCalledWith('a1', 'launch-j1');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('gives other chips no in-path mark', () => {
+    renderStrip({ activeThreadId: 'j1', inPath });
+    expect(tab(/^Write tests/)).not.toHaveAttribute('data-in-path');
+    expect(tab('Main')).not.toHaveAttribute('data-in-path');
   });
 });
 

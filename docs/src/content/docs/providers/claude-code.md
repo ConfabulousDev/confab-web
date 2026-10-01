@@ -29,13 +29,23 @@ When a session launches subagents with the Agent tool (or the older Task tool), 
 
 Select **Open transcript** on a card to read that subagent's own conversation. It opens in a tab under **Transcript**, next to **Main**:
 
-- Subagents launched from the main conversation get a tab each, in launch order. A subagent launched by another subagent gets a tab right after its parent once you open it.
+- Subagents launched from the main conversation get a tab each, in launch order.
 - Each tab shows the subagent's status: running, completed, failed, or stopped. Hover or focus a tab for its type, model, and duration.
 - Select the open subagent's tab for **Go to parent**, which returns to the conversation that launched it at the launch point, and **Copy link to this subagent**.
-- **All subagents** lists every subagent with its status, type, model, and duration, so you can jump to any of them. Long lists get a filter.
-- The open tab is in the URL (`?agent=<id>`), so links copied from a subagent tab open that tab. Anyone who can view the session can view its subagents.
+- **All subagents (n)** counts every subagent in the session and lists the ones launched from the main conversation, with status, type, model, and duration. A subagent that launched others shows how many. If subagents launched more, a note under the list says how many. Long lists get a filter.
+- The open subagent is in the URL (`?agent=<id>`), so a copied link opens it. Anyone who can view the session can view its subagents.
 - Transcript filters apply to whichever tab is open. Search runs within the open tab.
 - A running subagent's tab updates live. If its transcript hasn't synced yet, the tab says so and loads when it arrives.
+
+### Nested subagents
+
+Subagents launched by other subagents (for example, judges that an implementer agent starts) don't get tabs:
+
+- When the open top-level subagent launched others, **Launched here (n)** appears next to **All subagents** and lists them.
+- Inside a nested subagent, a row under the tabs shows where you are, starting below the top-level subagent, such as **↳ Judge arrays r1 (43) › Re-run judge (1)**. The tab of the top-level subagent above it stays outlined; select it to go back.
+- Each level in the row is a dropdown of the subagents launched alongside it, with a count, so you can switch between siblings. Selecting an earlier level returns to it at the point where it launched the next one.
+- If the nested subagent launched others, the row ends with its own **Launched here (n)**. The copy-link button at the end copies a link to the open nested subagent. Opening that link labels its tab by id until you reach it through its parent.
+- The dropdowns remember what each subagent launched for the rest of your visit, even after you move to another subagent.
 
 Subagents started by workflow runs don't appear in the transcript yet.
 

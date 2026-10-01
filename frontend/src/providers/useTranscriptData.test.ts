@@ -115,6 +115,32 @@ describe('useTranscriptData', () => {
     expect(result.current.loading).toBe(true);
   });
 
+  // jgk8: SessionViewer remembers each thread's children from its items during
+  // render, so even the render pass React discards on a switch must not see the
+  // previous file's lines (they would be credited to the new thread).
+  it("never returns the previous file's items, even in the render pass where fileName changes", async () => {
+    const fetchInitial = vi
+      .fn()
+      .mockResolvedValueOnce({ items: ['a1-line'], raw: ['a1-line'], totalLines: 1 })
+      .mockReturnValueOnce(new Promise(() => {}));
+    const adapter = makeAdapter({ fetchInitial });
+    const seen: { fileName: string; items: unknown[] }[] = [];
+    const { rerender } = renderHook(
+      ({ fileName }: { fileName: string }) => {
+        const data = useTranscriptData(adapter, 's1', fileName, undefined);
+        seen.push({ fileName, items: data.items });
+        return data;
+      },
+      { initialProps: { fileName: 'agent-a1.jsonl' } },
+    );
+    await flush();
+    seen.length = 0;
+
+    rerender({ fileName: 'agent-a2.jsonl' });
+    expect(seen.length).toBeGreaterThan(0);
+    for (const pass of seen) expect(pass.items).toEqual([]);
+  });
+
   it('does not append a stale poll result after fileName changes', async () => {
     let resolvePoll: (v: unknown) => void = () => {};
     const fetchIncremental = vi.fn().mockReturnValueOnce(

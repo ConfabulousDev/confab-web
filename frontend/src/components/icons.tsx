@@ -448,6 +448,20 @@ export const ClockIcon = (
   </svg>
 );
 
+/** ↳ — "launched by the thing above" (subagent path row, Launched here). */
+export const NestedArrowIcon = (
+  <svg width="12" height="12" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2.5 1.5v3.25a1.5 1.5 0 0 0 1.5 1.5h4M6.5 4.75l1.5 1.5-1.5 1.5" />
+  </svg>
+);
+
+export const LinkIcon = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6.5 9.5a3 3 0 0 0 4.24 0l2-2a3 3 0 0 0-4.24-4.24l-1 1" />
+    <path d="M9.5 6.5a3 3 0 0 0-4.24 0l-2 2a3 3 0 0 0 4.24 4.24l1-1" />
+  </svg>
+);
+
 // Right-pointing chevron (a `>`); rotate the wrapper to point down when expanded.
 export const ChevronIcon = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
