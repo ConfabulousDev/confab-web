@@ -332,6 +332,7 @@ function SessionViewer({
             nestedThreadCount={nestedThreadCount}
             childCountOf={childCountOf}
             inPath={inPath}
+            launchedHere={activePath?.length === 1 ? childrenOf(activePath[0]!.id) : undefined}
           />
         )}
 

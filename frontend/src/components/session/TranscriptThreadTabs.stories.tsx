@@ -60,7 +60,7 @@ const fortyThreads = Array.from({ length: 40 }, (_, i) =>
 
 type ExtraProps = Pick<
   React.ComponentProps<typeof TranscriptThreadTabs>,
-  'allThreadsCount' | 'nestedThreadCount' | 'childCountOf' | 'inPath'
+  'allThreadsCount' | 'nestedThreadCount' | 'childCountOf' | 'inPath' | 'launchedHere'
 >;
 
 function Interactive({
@@ -135,11 +135,38 @@ export const FortyLongLabels: Story = {
 
 /**
  * jgk8 D5: a nested agent (launched by "Implement pedp") is open, so it has no
- * chip; its depth-1 ancestor shows outlined "in path". Clicking it opens that
- * agent at the nested agent's launch row.
+ * chip; its depth-1 ancestor shows outlined "in path" (the path row below it
+ * is in Session/ThreadBreadcrumb). Clicking it opens that agent at the nested
+ * agent's launch row.
  */
 export const InPathChip: Story = {
   args: { threads: mixedStatuses, initial: 'judge-7', inPath: { threadId: 'a2', targetId: 'launch-judge-7' } },
+};
+
+const judgeThreads = Array.from({ length: 6 }, (_, i) =>
+  thread(`judge-${i + 1}`, `Judge kata ${i + 1} r1`, {
+    parentThreadId: 'a2',
+    status: STATUS_CYCLE[i % STATUS_CYCLE.length],
+    model: 'claude-opus-5',
+  }),
+);
+
+/** jgk8 D9 review: the open depth-1 agent launched six judges, so "Launched here (6)" sits left of All subagents. */
+export const LaunchedHereDepth1: Story = {
+  args: { threads: mixedStatuses, initial: 'a2', launchedHere: judgeThreads },
+};
+
+/** Launched here open: the open agent's children, none checked. */
+export const LaunchedHereOpen: Story = {
+  args: { threads: mixedStatuses, initial: 'a2', launchedHere: judgeThreads },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /^Launched here/ }));
+  },
+};
+
+/** ~400px: Launched here and All subagents both collapse to icon + count. */
+export const NarrowLaunchedHere: Story = {
+  args: { threads: twelveThreads, initial: 'm3', width: 400, launchedHere: judgeThreads, allThreadsCount: 40, nestedThreadCount: 28 },
 };
 
 /**

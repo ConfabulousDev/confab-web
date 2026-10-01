@@ -1,7 +1,7 @@
-// jgk8: per-level subagent path under the thread strip. Main and the depth-1
-// agent are links; each deeper level is a dropdown of its siblings; a trailing
-// "Launched here (n)" lists the open agent's children; nested agents get a
-// copy-link button.
+// jgk8 (D9 review: trim + inline): nested-subagent path row. Only at depth ≥ 2;
+// starts at depth 2 (Main and the depth-1 agent are in the strip); each level is
+// a dropdown of its siblings; a trailing "Launched here (n)" lists the open
+// agent's children; copy link at the end.
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -17,7 +17,7 @@ const impl = thread('impl', 'Implement 0e6y verification step', null);
 const judgeArrays = thread('j1', 'Judge arrays r1', 'impl');
 const judgeArrays2 = thread('j2', 'Judge arrays r2', 'impl');
 const simplify = thread('j3', 'Simplify 0e6y Go changes', 'impl');
-const grandchild = thread('g1', 'Re-run the flaky judge', 'j1');
+const grandchild = { ...thread('g1', 'Re-run the flaky judge', 'j1'), status: 'running' as const };
 
 const children: Record<string, TranscriptThreadRef[]> = {
   impl: [judgeArrays, judgeArrays2, simplify],
@@ -37,10 +37,15 @@ function nav() {
   return screen.queryByRole('navigation', { name: 'Subagent path' });
 }
 
+function buttonNames() {
+  return within(nav()!)
+    .getAllByRole('button')
+    .map((b) => b.getAttribute('aria-label') ?? b.textContent);
+}
+
 describe('ThreadBreadcrumb / when it shows', () => {
-  it('renders nothing for a depth-1 agent that launched no subagents', () => {
-    const lone = thread('a2', 'Write tests', null);
-    renderCrumbs({ active: lone, path: [lone] });
+  it('renders nothing for a depth-1 agent, even one with children (the strip has its Launched here)', () => {
+    renderCrumbs({ active: impl, path: [impl] });
     expect(nav()).not.toBeInTheDocument();
   });
 
@@ -50,83 +55,47 @@ describe('ThreadBreadcrumb / when it shows', () => {
     expect(nav()).not.toBeInTheDocument();
   });
 
-  it('shows Main, the current depth-1 agent and "Launched here (n)" for a depth-1 agent with children', () => {
-    renderCrumbs({ active: impl, path: [impl] });
-    const crumbs = within(nav()!);
-    expect(crumbs.getByRole('button', { name: 'Main' })).toBeInTheDocument();
-    expect(crumbs.getByText('Implement 0e6y verification step').closest('[aria-current]')).toHaveAttribute(
+  it('shows only "Launched here" and copy link for a cold deep link whose children are known', () => {
+    const cold = { ...judgeArrays, parentThreadId: undefined };
+    renderCrumbs({ active: cold, path: undefined });
+    expect(buttonNames()).toEqual(['Launched here (1)', 'Copy link to this subagent']);
+  });
+
+  it('starts at depth 2: no Main and no depth-1 crumb', () => {
+    renderCrumbs({ active: judgeArrays2, path: [impl, judgeArrays2] });
+    expect(buttonNames()).toEqual(['Judge arrays r2', 'Copy link to this subagent']);
+    expect(within(nav()!).queryByText('Main')).not.toBeInTheDocument();
+    expect(within(nav()!).queryByText('Implement 0e6y verification step')).not.toBeInTheDocument();
+  });
+});
+
+describe('ThreadBreadcrumb / segments', () => {
+  it("shows each segment's status glyph and its level's sibling count", () => {
+    renderCrumbs({ active: grandchild, path: [impl, judgeArrays, grandchild] });
+    const [judgeSegment, grandSegment] = within(nav()!)
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-haspopup') === 'listbox');
+    expect(judgeSegment).toHaveTextContent('Judge arrays r1(3)');
+    expect(judgeSegment!.querySelector('[data-status]')).toHaveAttribute('data-status', 'completed');
+    expect(grandSegment).toHaveTextContent('Re-run the flaky judge(1)');
+    expect(grandSegment!.querySelector('[data-status]')).toHaveAttribute('data-status', 'running');
+  });
+
+  it('marks the open agent segment as the current location', () => {
+    renderCrumbs({ active: judgeArrays2, path: [impl, judgeArrays2] });
+    expect(screen.getByRole('button', { name: 'Judge arrays r2' }).closest('[aria-current]')).toHaveAttribute(
       'aria-current',
       'location',
     );
-    expect(crumbs.queryByRole('button', { name: 'Implement 0e6y verification step' })).not.toBeInTheDocument();
-    expect(crumbs.getByRole('button', { name: 'Launched here (3)' })).toBeInTheDocument();
-    expect(crumbs.queryByRole('button', { name: 'Copy link to this subagent' })).not.toBeInTheDocument();
   });
 
-  it('shows only "Launched here" for a cold deep link whose children are known (no ancestor crumbs)', () => {
-    const cold = { ...judgeArrays, parentThreadId: undefined };
-    renderCrumbs({ active: cold, path: undefined });
-    const crumbs = within(nav()!);
-    expect(crumbs.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
-      'Launched here (1)',
-    ]);
-  });
-});
-
-describe('ThreadBreadcrumb / Launched here', () => {
-  it("lists the open agent's children, none checked, and opens the picked one", async () => {
-    const user = userEvent.setup();
-    const { onSelect } = renderCrumbs({ active: impl, path: [impl] });
-    await user.click(screen.getByRole('button', { name: 'Launched here (3)' }));
-    const list = screen.getByRole('listbox', { name: 'Launched by Implement 0e6y verification step' });
-    const options = within(list).getAllByRole('option');
-    expect(options.map((o) => o.textContent)).toEqual([
-      expect.stringContaining('Judge arrays r1'),
-      expect.stringContaining('Judge arrays r2'),
-      expect.stringContaining('Simplify 0e6y Go changes'),
-    ]);
-    for (const option of options) expect(option).toHaveAttribute('aria-selected', 'false');
-    await user.click(options[1]!);
-    expect(onSelect).toHaveBeenCalledWith('j2');
-  });
-
-  it('shows "launched N" on rows whose own children are known', async () => {
-    const user = userEvent.setup();
-    renderCrumbs({ active: impl, path: [impl] });
-    await user.click(screen.getByRole('button', { name: 'Launched here (3)' }));
-    const options = screen.getAllByRole('option');
-    expect(options[0]).toHaveTextContent('launched 1');
-    expect(options[1]).not.toHaveTextContent(/launched/);
-  });
-
-  it('gets a filter once more than 8 children are known', async () => {
-    const user = userEvent.setup();
-    const many = Array.from({ length: 43 }, (_, i) => thread(`k${i}`, `Judge task ${i} r1`, 'impl'));
-    renderCrumbs({ active: impl, path: [impl], childrenOf: (id) => (id === 'impl' ? many : []) });
-    await user.click(screen.getByRole('button', { name: 'Launched here (43)' }));
-    expect(screen.getByRole('searchbox', { name: 'Filter subagents' })).toHaveFocus();
-  });
-});
-
-describe('ThreadBreadcrumb / nested path', () => {
-  it('at depth 2: Main and depth-1 links land on the launch row of the child you came from', async () => {
-    const user = userEvent.setup();
-    const { onSelect } = renderCrumbs({ active: judgeArrays, path: [impl, judgeArrays] });
-    await user.click(screen.getByRole('button', { name: 'Main' }));
-    expect(onSelect).toHaveBeenLastCalledWith(null, 'launch-impl');
-    await user.click(screen.getByRole('button', { name: 'Implement 0e6y verification step' }));
-    expect(onSelect).toHaveBeenLastCalledWith('impl', 'launch-j1');
-  });
-
-  it('at depth 2: the current segment is a dropdown of its siblings with the current one checked', async () => {
+  it('a segment is a dropdown of its siblings with the current one checked; picking one switches', async () => {
     const user = userEvent.setup();
     const { onSelect } = renderCrumbs({ active: judgeArrays2, path: [impl, judgeArrays2] });
-    const segment = screen.getByRole('button', { name: 'Judge arrays r2' });
-    expect(segment.closest('[aria-current]')).toHaveAttribute('aria-current', 'location');
-    await user.click(segment);
-    const options = within(screen.getByRole('listbox', { name: 'Launched by Implement 0e6y verification step' })).getAllByRole(
-      'option',
-    );
+    await user.click(screen.getByRole('button', { name: 'Judge arrays r2' }));
+    const options = within(
+      screen.getByRole('listbox', { name: 'Launched by Implement 0e6y verification step' }),
+    ).getAllByRole('option');
     expect(options).toHaveLength(3);
     expect(options[1]).toHaveAttribute('aria-selected', 'true');
     await user.click(options[2]!);
@@ -142,15 +111,10 @@ describe('ThreadBreadcrumb / nested path', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
-  it('at depth 3: two dropdown segments, and picking the depth-2 ancestor lands on the launch row', async () => {
+  it('at depth 3, picking the depth-2 ancestor lands on the launch row of the agent you came from', async () => {
     const user = userEvent.setup();
     const { onSelect } = renderCrumbs({ active: grandchild, path: [impl, judgeArrays, grandchild] });
-    const dropdowns = within(nav()!)
-      .getAllByRole('button')
-      .filter((b) => b.getAttribute('aria-haspopup') === 'listbox');
-    expect(dropdowns.map((b) => b.getAttribute('aria-label'))).toEqual(['Judge arrays r1', 'Re-run the flaky judge']);
-
-    await user.click(dropdowns[0]!);
+    await user.click(screen.getByRole('button', { name: 'Judge arrays r1' }));
     const options = screen.getAllByRole('option');
     expect(options[0]).toHaveAttribute('aria-selected', 'true');
     await user.click(options[0]!);
@@ -164,9 +128,35 @@ describe('ThreadBreadcrumb / nested path', () => {
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('Judge arrays r1')]);
   });
 
-  it('adds "Launched here" after a nested agent that launched its own', () => {
-    renderCrumbs({ active: judgeArrays, path: [impl, judgeArrays] });
-    expect(screen.getByRole('button', { name: 'Launched here (1)' })).toBeInTheDocument();
+  it('gets a filter once a level has more than 8 siblings', async () => {
+    const user = userEvent.setup();
+    const many = [judgeArrays, ...Array.from({ length: 42 }, (_, i) => thread(`k${i}`, `Judge task ${i} r1`, 'impl'))];
+    renderCrumbs({ active: judgeArrays, path: [impl, judgeArrays], childrenOf: (id) => (id === 'impl' ? many : []) });
+    expect(screen.getByRole('button', { name: 'Judge arrays r1' })).toHaveTextContent('(43)');
+    await user.click(screen.getByRole('button', { name: 'Judge arrays r1' }));
+    expect(screen.getByRole('searchbox', { name: 'Filter subagents' })).toHaveFocus();
+  });
+});
+
+describe('ThreadBreadcrumb / Launched here', () => {
+  it('appears after a nested agent that launched its own, listing them unchecked', async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderCrumbs({ active: judgeArrays, path: [impl, judgeArrays] });
+    expect(buttonNames()).toEqual(['Judge arrays r1', 'Launched here (1)', 'Copy link to this subagent']);
+    await user.click(screen.getByRole('button', { name: 'Launched here (1)' }));
+    const option = within(screen.getByRole('listbox', { name: 'Launched by Judge arrays r1' })).getByRole('option');
+    expect(option).toHaveAttribute('aria-selected', 'false');
+    await user.click(option);
+    expect(onSelect).toHaveBeenCalledWith('g1');
+  });
+
+  it('shows "launched N" on sibling rows whose own children are known', async () => {
+    const user = userEvent.setup();
+    renderCrumbs({ active: judgeArrays2, path: [impl, judgeArrays2] });
+    await user.click(screen.getByRole('button', { name: 'Judge arrays r2' }));
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveTextContent('launched 1');
+    expect(options[1]).not.toHaveTextContent(/launched/);
   });
 });
 

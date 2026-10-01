@@ -39,12 +39,12 @@ Select **Open transcript** on a card to read that subagent's own conversation. I
 
 ### Nested subagents
 
-Subagents launched by other subagents (for example, judges that an implementer agent starts) don't get tabs. Open a subagent that launched others and a path row appears under the tabs:
+Subagents launched by other subagents (for example, judges that an implementer agent starts) don't get tabs:
 
-- **Launched here (n)** lists the subagents the open one launched.
-- The path shows where you are, such as **Main › Implement step › Judge arrays**. Each nested level is a dropdown of the subagents launched alongside it, so you can switch between siblings. Selecting an earlier level returns to it at the point where it launched the next one.
-- While you're inside a nested subagent, the tab of the top-level subagent above it stays outlined.
-- The copy-link button at the end of the path copies a link to the open nested subagent. Opening that link labels its tab by id until you reach it through its parent.
+- When the open top-level subagent launched others, **Launched here (n)** appears next to **All subagents** and lists them.
+- Inside a nested subagent, a row under the tabs shows where you are, starting below the top-level subagent, such as **↳ Judge arrays r1 (43) › Re-run judge (1)**. The tab of the top-level subagent above it stays outlined; select it to go back.
+- Each level in the row is a dropdown of the subagents launched alongside it, with a count, so you can switch between siblings. Selecting an earlier level returns to it at the point where it launched the next one.
+- If the nested subagent launched others, the row ends with its own **Launched here (n)**. The copy-link button at the end copies a link to the open nested subagent. Opening that link labels its tab by id until you reach it through its parent.
 - The dropdowns remember what each subagent launched for the rest of your visit, even after you move to another subagent.
 
 Subagents started by workflow runs don't appear in the transcript yet.

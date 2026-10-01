@@ -61,8 +61,8 @@ Subagent subtabs (et0r) are Claude-only today, but `SessionViewer` must stay
 free of provider branching. An adapter that implements `threads` gets the
 subtab strip for free: `SessionViewer` calls `discover(mainItems, null)` for
 the strip, `discover(threadItems, threadId)` for the agents the open subagent
-launched (remembered per parent for the visit and shown in the jgk8 path row,
-never as chips), and `fileNameFor(id)` for deep links to a thread it hasn't
+launched (remembered per parent for the visit and shown in the strip's
+"Launched here" at depth 1 and the jgk8 path row deeper, never as chips), and `fileNameFor(id)` for deep links to a thread it hasn't
 discovered. The optional `countThreadFiles(session.files)` gives the
 All-subagents total at every depth; without it the total is Main's direct
 count and no "more launched by subagents" note shows. It then runs a second

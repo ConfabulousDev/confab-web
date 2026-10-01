@@ -340,7 +340,7 @@ export const WithCustomTitle: Story = {
  * et0r: Claude session that launched subagents. Opens on the Transcript tab;
  * the subtab strip lists Main + each subagent. Click a card's
  * "Open transcript →" or a tab to switch threads; the nested helper inside
- * "Explore the auth middleware" opens from its card or the path row's
+ * "Explore the auth middleware" opens from its card or the strip's
  * "Launched here" (jgk8), and gets no chip of its own.
  */
 const subagentMainMessages: TranscriptLine[] = [
@@ -436,8 +436,8 @@ export const WithManySubagents: Story = {
  * background; it launches six background judges (`async_launched`), and the
  * first judge launches a helper (depth 3). `session.files` lists every agent
  * file, so All subagents counts 9 and notes the 7 launched by subagents.
- * Open the implementer, then use the path row's "Launched here" and the
- * sibling dropdowns.
+ * Open the implementer, then use the strip's "Launched here", the depth-2
+ * row's sibling dropdowns and the judge's own "Launched here".
  */
 const IMPL_ID = 'a05d3d18c4e2b7f1';
 const JUDGE_IDS = ['a7437088c9e3342e', 'af22b3c603bbfa45', 'ac2e410dcee9aeca', 'a19b3e8c27d40f6a', 'ab70c2d9e5f81346', 'a704e85fe42a11cb'];
@@ -517,7 +517,7 @@ function ControlledThreadViewer(props: React.ComponentProps<typeof SessionViewer
   );
 }
 
-/** The same session opened on the implementer: the path row shows "Launched here (6)". */
+/** The same session opened on the implementer: the strip shows "Launched here (6)"; pick a judge for the depth-2 row. */
 export const NestedImplementerOpen: Story = {
   args: WithNestedSubagents.args,
   render: (args) => <ControlledThreadViewer {...args} initialThreadId={IMPL_ID} />,

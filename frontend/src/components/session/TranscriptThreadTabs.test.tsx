@@ -3,7 +3,7 @@
 // active chip's menu (Go to parent / Copy link), and manual-activation tabs.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { TranscriptThreadRef } from '@/providers/types';
 import TranscriptThreadTabs from './TranscriptThreadTabs';
@@ -146,6 +146,53 @@ describe('TranscriptThreadTabs / All subagents total and footer', () => {
     const options = screen.getAllByRole('option');
     expect(options[1]).toHaveTextContent('launched 43');
     expect(options[2]).not.toHaveTextContent(/launched/);
+  });
+});
+
+// jgk8 D9 review: the open depth-1 agent's children sit in the strip itself.
+describe('TranscriptThreadTabs / Launched here', () => {
+  const kids = [
+    thread('j1', 'Judge arrays r1', { parentThreadId: 'a1', status: 'running' }),
+    thread('j2', 'Judge arrays r2', { parentThreadId: 'a1', status: 'completed' }),
+  ];
+
+  it('shows "Launched here (n)" left of All subagents, outside the chip scroller', () => {
+    renderStrip({ activeThreadId: 'a1', launchedHere: kids });
+    const launched = screen.getByRole('button', { name: 'Launched here (2)' });
+    expect(screen.getByTestId('thread-scroller')).not.toContainElement(launched);
+    expect(screen.getByRole('tablist')).not.toContainElement(launched);
+    const all = screen.getByRole('button', { name: /^All subagents/ });
+    expect(launched.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("lists the open agent's children, none checked, and opens the picked one", async () => {
+    const user = userEvent.setup();
+    const { onSelect } = renderStrip({ activeThreadId: 'a1', launchedHere: kids });
+    await user.click(screen.getByRole('button', { name: 'Launched here (2)' }));
+    const options = within(screen.getByRole('listbox', { name: 'Launched by Explore the codebase' })).getAllByRole(
+      'option',
+    );
+    expect(options.map((o) => o.textContent)).toEqual([
+      expect.stringContaining('Judge arrays r1'),
+      expect.stringContaining('Judge arrays r2'),
+    ]);
+    for (const option of options) expect(option).toHaveAttribute('aria-selected', 'false');
+    await user.click(options[1]!);
+    expect(onSelect).toHaveBeenCalledWith('j2');
+  });
+
+  it('is hidden when the open agent has no known children', () => {
+    renderStrip({ activeThreadId: 'a1', launchedHere: [] });
+    expect(screen.queryByRole('button', { name: /^Launched here/ })).not.toBeInTheDocument();
+    renderStrip({ activeThreadId: 'a2' });
+    expect(screen.queryByRole('button', { name: /^Launched here/ })).not.toBeInTheDocument();
+  });
+
+  it('has a compact icon + count form that keeps the full accessible name', () => {
+    renderStrip({ activeThreadId: 'a1', launchedHere: kids });
+    const launched = screen.getByRole('button', { name: 'Launched here (2)' });
+    expect(launched.querySelector('[class*="allCompact"]')).toHaveTextContent('2');
+    expect(launched.querySelector('[class*="allLabel"]')).toHaveTextContent('Launched here (2)');
   });
 });
 

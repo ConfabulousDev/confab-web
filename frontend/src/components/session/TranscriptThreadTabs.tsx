@@ -7,13 +7,15 @@
 // manual activation, so arrowing past chips never fetches their transcripts.
 // Provider-agnostic: it only knows `TranscriptThreadRef`s.
 //
-// jgk8: chips are Main's direct subagents only. While a nested agent is open
-// (found through ThreadBreadcrumb), its depth-1 ancestor chip is "in path":
-// outlined, and a click opens that ancestor at the launch row.
+// jgk8: chips are Main's direct subagents only. When the open depth-1 agent
+// launched others, a "Launched here (n)" dropdown sits left of All subagents.
+// While a nested agent is open (ThreadBreadcrumb row below), its depth-1
+// ancestor chip is "in path": outlined, and a click opens that ancestor at the
+// launch row.
 
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from 'react';
 import { useCopyToClipboard, useDropdown } from '@/hooks';
-import { ChevronIcon } from '@/components/icons';
+import { ChevronIcon, NestedArrowIcon } from '@/components/icons';
 import Tooltip from '@/components/Tooltip';
 import { formatDuration } from '@/components/transcript/timelineFormat';
 import type { TranscriptThreadRef } from '@/providers/types';
@@ -57,6 +59,8 @@ interface TranscriptThreadTabsProps {
    * `targetId` the row a click lands on (the launch row of the path's next agent).
    */
   inPath?: { threadId: string; targetId?: string };
+  /** jgk8 D9 review: children of the open depth-1 agent; a non-empty list shows "Launched here (n)". */
+  launchedHere?: readonly TranscriptThreadRef[];
 }
 
 function prefersReducedMotion(): boolean {
@@ -162,6 +166,7 @@ export default function TranscriptThreadTabs({
   nestedThreadCount = 0,
   childCountOf,
   inPath,
+  launchedHere,
 }: TranscriptThreadTabsProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -398,6 +403,27 @@ export default function TranscriptThreadTabs({
         )}
       </div>
       <span className={styles.divider} aria-hidden="true" />
+      {launchedHere && launchedHere.length > 0 && (
+        <ThreadListDropdown
+          threads={launchedHere}
+          activeThreadId={null}
+          onSelect={(threadId) => {
+            if (threadId !== null) onSelect(threadId);
+          }}
+          label={`Launched here (${launchedHere.length})`}
+          listLabel={activeThread ? `Launched by ${activeThread.label}` : 'Launched here'}
+          buttonContent={
+            <>
+              <span className={dropdownStyles.allLabel}>Launched here ({launchedHere.length})</span>
+              <span className={dropdownStyles.allCompact}>
+                {NestedArrowIcon}
+                {launchedHere.length}
+              </span>
+            </>
+          }
+          childCountOf={childCountOf}
+        />
+      )}
       <ThreadListDropdown
         threads={threads}
         activeThreadId={activeThreadId}
