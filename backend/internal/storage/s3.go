@@ -35,9 +35,12 @@ var (
 const MaxChunksPerFile = 30000
 
 // MaxAgentFiles is the maximum number of agent files to download per session.
-// This is an OOM safety cap — sessions with more agents than this will have
-// the excess agents skipped (with fallback token counting from toolUseResult).
-const MaxAgentFiles = 200
+// For providers that materialize every agent in memory (Codex, OpenCode,
+// Cursor — see 8gp1) it is an OOM guard; Claude streams one agent at a time,
+// so for Claude it bounds compute time and S3 traffic instead. Agents past the
+// cap are skipped: Claude falls back to toolUseResult.usage for their tokens,
+// which background launches (status "async_launched") do not carry.
+const MaxAgentFiles = 500
 
 // S3Config holds S3/MinIO configuration
 type S3Config struct {
