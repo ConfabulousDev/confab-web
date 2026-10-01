@@ -465,11 +465,44 @@ describe('SessionViewer / subagent thread tabs', () => {
     expect(screen.getByText('4 more launched by subagents. Open one to see the ones it launched.')).toBeInTheDocument();
   });
 
-  it("floors the All subagents count at Main's direct agents and shows no footer when nothing is nested", async () => {
+  it('floors the All subagents count at the known agents when no subagent files are listed, with no footer', async () => {
     const user = userEvent.setup();
     render(viewer());
     await user.click(screen.getByRole('button', { name: 'All subagents (2)' }));
     expect(screen.queryByText(/more launched by/)).not.toBeInTheDocument();
+  });
+
+  // jgk8 D9 round 2: session.files is a page-load snapshot; children found
+  // later must never push a list above the All-subagents total.
+  it('floors the All subagents total at every distinct known agent when session.files lags', async () => {
+    const user = userEvent.setup();
+    const agentFile = (id: string) => ({
+      file_name: `agent-${id}.jsonl`,
+      file_type: 'agent',
+      last_synced_line: 3,
+      updated_at: '2026-09-13T10:00:00Z',
+    });
+    const session = { ...claudeSession, files: [...claudeSession.files, agentFile('a1'), agentFile('a2')] };
+    const sixJudges: TranscriptLine[] = Array.from({ length: 6 }, (_, i) => [
+      agentToolUse({ uuid: `six-u${i}`, toolUseId: `tsix${i}`, description: `Judge kata ${i}`, agentId: 'a1' }),
+      asyncAgentResult({ uuid: `six-r${i}`, toolUseId: `tsix${i}`, agentId: `six${i}`, description: `Judge kata ${i}` }),
+    ]).flat();
+    render(
+      viewer({
+        session,
+        activeThreadId: 'a1',
+        onThreadChange: () => {},
+        initialThreadMessages: { ...threadMessages, a1: sixJudges },
+      }),
+    );
+    expect(stripLaunchedHere(6)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'All subagents (8)' }));
+    expect(screen.getByText('6 more launched by subagents. Open one to see the ones it launched.')).toBeInTheDocument();
+  });
+
+  it('counts an unknown deep-linked agent in the All subagents floor', () => {
+    render(viewer({ activeThreadId: 'zz-unknown', onThreadChange: () => {} }));
+    expect(screen.getByRole('button', { name: 'All subagents (3)' })).toBeInTheDocument();
   });
 
   // jgk8 D9 review (trim + inline): depth 1 uses the strip; the row is for depth ≥ 2.

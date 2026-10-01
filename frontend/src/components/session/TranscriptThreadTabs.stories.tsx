@@ -140,7 +140,15 @@ export const FortyLongLabels: Story = {
  * agent's launch row.
  */
 export const InPathChip: Story = {
-  args: { threads: mixedStatuses, initial: 'judge-7', inPath: { threadId: 'a2', targetId: 'launch-judge-7' } },
+  args: {
+    threads: mixedStatuses,
+    initial: 'judge-7',
+    inPath: { threadId: 'a2', targetId: 'launch-judge-7' },
+    // 5 launched from Main + 7 judges launched by "Implement pedp".
+    allThreadsCount: 12,
+    nestedThreadCount: 7,
+    childCountOf: (id: string) => (id === 'a2' ? 7 : 0),
+  },
 };
 
 const judgeThreads = Array.from({ length: 6 }, (_, i) =>
@@ -151,14 +159,21 @@ const judgeThreads = Array.from({ length: 6 }, (_, i) =>
   }),
 );
 
+// 5 launched from Main + the 6 judges below: All subagents never reads lower than Launched here.
+const judgeTotals = {
+  allThreadsCount: 11,
+  nestedThreadCount: 6,
+  childCountOf: (id: string) => (id === 'a2' ? 6 : 0),
+};
+
 /** jgk8 D9 review: the open depth-1 agent launched six judges, so "Launched here (6)" sits left of All subagents. */
 export const LaunchedHereDepth1: Story = {
-  args: { threads: mixedStatuses, initial: 'a2', launchedHere: judgeThreads },
+  args: { threads: mixedStatuses, initial: 'a2', launchedHere: judgeThreads, ...judgeTotals },
 };
 
 /** Launched here open: the open agent's children, none checked. */
 export const LaunchedHereOpen: Story = {
-  args: { threads: mixedStatuses, initial: 'a2', launchedHere: judgeThreads },
+  args: { threads: mixedStatuses, initial: 'a2', launchedHere: judgeThreads, ...judgeTotals },
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /^Launched here/ }));
   },
@@ -166,7 +181,16 @@ export const LaunchedHereOpen: Story = {
 
 /** ~400px: Launched here and All subagents both collapse to icon + count. */
 export const NarrowLaunchedHere: Story = {
-  args: { threads: twelveThreads, initial: 'm3', width: 400, launchedHere: judgeThreads, allThreadsCount: 40, nestedThreadCount: 28 },
+  args: {
+    threads: twelveThreads,
+    initial: 'm3',
+    width: 400,
+    launchedHere: judgeThreads,
+    // 12 launched from Main + 6 judges.
+    allThreadsCount: 18,
+    nestedThreadCount: 6,
+    childCountOf: (id: string) => (id === 'm3' ? 6 : 0),
+  },
 };
 
 /**

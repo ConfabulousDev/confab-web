@@ -171,14 +171,17 @@ function SessionViewer({
     return depth1 && next ? { threadId: depth1.id, targetId: next.launchTargetId } : undefined;
   }, [activePath]);
 
-  // jgk8 D7: the All-subagents total counts every uploaded thread file (a
-  // page-load snapshot, so floored at what Main shows for live sessions).
+  // jgk8 D7: the All-subagents total counts every uploaded thread file. That
+  // is a page-load snapshot, so on a live session it is floored at every
+  // distinct agent known this visit (Main's, remembered children, an unknown
+  // open one): the total never drops below a list it summarizes.
   const threadFileCount = useMemo(
     () => threadsCapability?.countThreadFiles?.(session.files),
     [threadsCapability, session.files],
   );
-  const allThreadsCount = Math.max(threadFileCount ?? 0, mainThreads.length);
-  const nestedThreadCount = allThreadsCount - mainThreads.length;
+  const knownThreadCount = knownThreads.size + (activeThread && !knownThreads.has(activeThread.id) ? 1 : 0);
+  const allThreadsCount = Math.max(threadFileCount ?? 0, knownThreadCount);
+  const nestedThreadCount = Math.max(0, allThreadsCount - mainThreads.length);
 
   const childrenOf = useCallback(
     (threadId: string) => childrenByParent.get(threadId) ?? NO_THREADS,

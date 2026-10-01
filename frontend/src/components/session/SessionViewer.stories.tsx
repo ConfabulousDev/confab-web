@@ -48,6 +48,22 @@ const mockSession: SessionDetail = makeSessionDetailFixture('claude-code', {
   owner_email: 'developer@example.com',
 });
 
+/** A session whose `files` also lists an uploaded `agent-<id>.jsonl` per subagent id (jgk8: the All-subagents total). */
+function withAgentFiles(session: SessionDetail, agentIds: string[]): SessionDetail {
+  return {
+    ...session,
+    files: [
+      ...session.files,
+      ...agentIds.map((id) => ({
+        file_name: `agent-${id}.jsonl`,
+        file_type: 'agent',
+        last_synced_line: 3,
+        updated_at: '2025-01-15T12:30:00Z',
+      })),
+    ],
+  };
+}
+
 // Mock transcript messages
 const mockUserMessage: UserMessage = {
   type: 'user',
@@ -394,7 +410,15 @@ const manySubagentMessages: TranscriptLine[] = MANY_SUBAGENT_LABELS.flatMap((des
 
 export const WithSubagents: Story = {
   args: {
-    session: mockSession,
+    // Five agents launched from Main plus the nested "Read session store".
+    session: withAgentFiles(mockSession, [
+      'a1b2c3d4e5f60718',
+      'b2c3d4e5f6071829',
+      'd4e5f60718293041',
+      'e5f6071829304152',
+      'f607182930415263',
+      'c3d4e5f607182930',
+    ]),
     isOwner: true,
     isShared: false,
     activeTab: 'transcript',
@@ -477,18 +501,7 @@ const nestedThreadMessages: Record<string, TranscriptLine[]> = {
   ),
 };
 
-const nestedSession: SessionDetail = {
-  ...mockSession,
-  files: [
-    ...mockSession.files,
-    ...[IMPL_ID, 'b17c9e20d4a3f586', ...JUDGE_IDS, HELPER_ID].map((id) => ({
-      file_name: `agent-${id}.jsonl`,
-      file_type: 'agent',
-      last_synced_line: 3,
-      updated_at: '2025-01-15T12:30:00Z',
-    })),
-  ],
-};
+const nestedSession = withAgentFiles(mockSession, [IMPL_ID, 'b17c9e20d4a3f586', ...JUDGE_IDS, HELPER_ID]);
 
 export const WithNestedSubagents: Story = {
   args: {

@@ -76,6 +76,9 @@ function Harness({ mainThreads, childrenById, initial, width }: HarnessProps) {
     setLanding(targetId);
   };
   const [depth1, next] = path ?? [];
+  // A realistic All-subagents total: every agent in the fixture tree (as
+  // session.files would list them), plus an unknown open one.
+  const total = known.size + (activeRef && !known.has(activeRef.id) ? 1 : 0);
   return (
     <div style={{ maxWidth: width, minHeight: 600 }}>
       <TranscriptThreadTabs
@@ -83,6 +86,8 @@ function Harness({ mainThreads, childrenById, initial, width }: HarnessProps) {
         activeThreadId={active}
         sessionId="story-session"
         onSelect={onSelect}
+        allThreadsCount={total}
+        nestedThreadCount={total - mainThreads.length}
         childCountOf={(id) => childrenOf(id).length}
         inPath={depth1 && next ? { threadId: depth1.id, targetId: next.launchTargetId } : undefined}
         launchedHere={path?.length === 1 ? childrenOf(path[0]!.id) : undefined}

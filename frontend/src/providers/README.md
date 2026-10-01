@@ -64,8 +64,9 @@ the strip, `discover(threadItems, threadId)` for the agents the open subagent
 launched (remembered per parent for the visit and shown in the strip's
 "Launched here" at depth 1 and the jgk8 path row deeper, never as chips), and `fileNameFor(id)` for deep links to a thread it hasn't
 discovered. The optional `countThreadFiles(session.files)` gives the
-All-subagents total at every depth; without it the total is Main's direct
-count and no "more launched by subagents" note shows. It then runs a second
+All-subagents total at every depth. Either way the total is floored at the
+distinct threads known this visit (a page-load snapshot can lag a live
+session), so without it the total is just the known count. It then runs a second
 `useTranscriptData` for the active thread's file and routes counts, filters,
 deep-link reset, and the pane through it. Adapters without `threads` render no
 strip and never receive `onOpenThread`.
