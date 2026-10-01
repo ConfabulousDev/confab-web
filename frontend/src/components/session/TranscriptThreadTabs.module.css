@@ -154,13 +154,20 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* jgk8 D5: depth-1 ancestor of the open nested agent — outlined, not filled. */
+.chipInPath,
+.chipInPath:hover {
+  color: var(--color-text-primary);
+  background: transparent;
+  border-color: var(--color-border-dark);
+}
+
 .label {
   max-width: 40ch;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.nestedMark,
 .caret {
   display: inline-flex;
   color: var(--color-text-muted);
@@ -195,10 +202,6 @@
 
 .detailsList dd {
   margin: 0;
-}
-
-.detailsNote {
-  color: var(--color-text-muted);
 }
 
 /* Touch and narrow screens: swipe the strip, use All subagents to jump (D15). */

@@ -105,6 +105,15 @@ export function agentFileName(agentId: string): string {
   return `agent-${agentId}.jsonl`;
 }
 
+/**
+ * jgk8: classic subagent files among a session's uploaded files, at any spawn
+ * depth (they all sit flat beside the transcript). Workflow-run files carry a
+ * `subagents/workflows/<runId>/` path and are excluded, as in the index.
+ */
+export function countAgentFiles(files: readonly { file_name: string; file_type: string }[]): number {
+  return files.filter((f) => f.file_type === 'agent' && !f.file_name.includes('/')).length;
+}
+
 /** Display name for an agent: description → subagent_type → agentId. */
 export function agentDisplayName(agent: ClaudeAgentInfo): string {
   return agent.description || agent.subagentType || agent.agentId;

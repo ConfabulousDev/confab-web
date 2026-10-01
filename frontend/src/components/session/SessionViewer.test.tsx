@@ -8,7 +8,7 @@
 
 import { isValidElement } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import SessionViewer from './SessionViewer';
@@ -283,13 +283,30 @@ describe('SessionViewer / subagent thread tabs', () => {
     asyncAgentResult({ uuid: 'r2', toolUseId: 't2', agentId: 'a2', description: 'Write tests' }),
   ];
 
+  // jgk8: a1 (depth 1) launches three background judges (depth 2); j1 launches
+  // g1 (depth 3). Every launch is an `async_launched` background result.
   const a1Messages: TranscriptLine[] = [
     subagentAssistantText('s1', 'a1', 'Looking around'),
-    agentToolUse({ uuid: 's2', toolUseId: 'tn', description: 'Nested helper', agentId: 'a1' }),
-    asyncAgentResult({ uuid: 's3', toolUseId: 'tn', agentId: 'child', description: 'Nested helper' }),
+    agentToolUse({ uuid: 's2', toolUseId: 'tj1', description: 'Judge arrays r1', agentId: 'a1' }),
+    asyncAgentResult({ uuid: 's3', toolUseId: 'tj1', agentId: 'j1', description: 'Judge arrays r1' }),
+    agentToolUse({ uuid: 's4', toolUseId: 'tj2', description: 'Judge arrays r2', agentId: 'a1' }),
+    asyncAgentResult({ uuid: 's5', toolUseId: 'tj2', agentId: 'j2', description: 'Judge arrays r2' }),
+    agentToolUse({ uuid: 's6', toolUseId: 'tj3', description: 'Simplify Go changes', agentId: 'a1' }),
+    asyncAgentResult({ uuid: 's7', toolUseId: 'tj3', agentId: 'j3', description: 'Simplify Go changes' }),
   ];
 
-  const childMessages: TranscriptLine[] = [subagentAssistantText('c1', 'child', 'Helping')];
+  const j1Messages: TranscriptLine[] = [
+    subagentAssistantText('j1-1', 'j1', 'Judging'),
+    agentToolUse({ uuid: 'j1-2', toolUseId: 'tg1', description: 'Re-run the flaky judge', agentId: 'j1' }),
+    asyncAgentResult({ uuid: 'j1-3', toolUseId: 'tg1', agentId: 'g1', description: 'Re-run the flaky judge' }),
+  ];
+
+  const threadMessages: Record<string, TranscriptLine[]> = {
+    a1: a1Messages,
+    j1: j1Messages,
+    j2: [subagentAssistantText('j2-1', 'j2', 'Judging r2')],
+    g1: [subagentAssistantText('g1-1', 'g1', 'Re-running')],
+  };
 
   function viewer(props: Partial<React.ComponentProps<typeof SessionViewer>> = {}) {
     return (
@@ -299,11 +316,33 @@ describe('SessionViewer / subagent thread tabs', () => {
           activeTab="transcript"
           onTabChange={() => {}}
           initialMessages={mainMessages}
-          initialThreadMessages={{ a1: a1Messages, child: childMessages }}
+          initialThreadMessages={threadMessages}
           {...props}
         />
       </MemoryRouter>
     );
+  }
+
+  function crumbs() {
+    return within(screen.getByRole('navigation', { name: 'Subagent path' }));
+  }
+
+  function stripLabels() {
+    return screen.getAllByRole('tab').map((t) => t.textContent);
+  }
+
+  /** Controlled walk Main → a1 → … through the pane's "Open transcript", re-rendering as the page would. */
+  function walk(path: string[], props: Partial<React.ComponentProps<typeof SessionViewer>> = {}) {
+    const onThreadChange = vi.fn();
+    const utils = render(viewer({ activeThreadId: path[0], onThreadChange, ...props }));
+    for (const id of path.slice(1)) {
+      act(() => {
+        openThread(id);
+      });
+      utils.rerender(viewer({ activeThreadId: id, onThreadChange, ...props }));
+    }
+    onThreadChange.mockClear();
+    return { onThreadChange, ...utils };
   }
 
   function filterCounts() {
@@ -372,41 +411,6 @@ describe('SessionViewer / subagent thread tabs', () => {
     expect(screen.queryByRole('menuitem', { name: /Go to parent/ })).not.toBeInTheDocument();
   });
 
-  it('places a nested agent opened from inside a subagent tab right after its parent, with its own label', () => {
-    const onThreadChange = vi.fn();
-    const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
-
-    act(() => {
-      openThread('child');
-    });
-    expect(onThreadChange).toHaveBeenCalledWith('child', undefined);
-
-    rerender(viewer({ activeThreadId: 'child', onThreadChange }));
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-      'Main',
-      'Explore the codebase',
-      'Nested helper',
-      'Write tests',
-    ]);
-    expect(screen.getByRole('tab', { name: 'Nested helper, running' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('button', { name: /Launched from/ })).not.toBeInTheDocument();
-  });
-
-  it("Go to parent from a nested agent returns to the parent subagent's launch row", async () => {
-    const user = userEvent.setup();
-    const onThreadChange = vi.fn();
-    const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
-    act(() => {
-      openThread('child');
-    });
-    rerender(viewer({ activeThreadId: 'child', onThreadChange }));
-    onThreadChange.mockClear();
-
-    await user.click(screen.getByRole('tab', { name: /^Nested helper/ }));
-    await user.click(screen.getByRole('menuitem', { name: 'Go to parent (Explore the codebase)' }));
-    expect(onThreadChange).toHaveBeenCalledWith('a1', 's3');
-  });
-
   it('Go to parent returns to Main at the launching row', async () => {
     const user = userEvent.setup();
     const onThreadChange = vi.fn();
@@ -416,25 +420,180 @@ describe('SessionViewer / subagent thread tabs', () => {
     expect(onThreadChange).toHaveBeenCalledWith(null, 'r1');
   });
 
-  it("refreshes a nested agent's status whenever its parent thread's transcript updates, and keeps it", () => {
+  // jgk8 D4: the strip holds Main + Main's direct agents only.
+  it('keeps nested agents out of the strip when opened from a subagent tab', () => {
+    const { onThreadChange, rerender } = walk(['a1']);
+    act(() => {
+      openThread('j1');
+    });
+    expect(onThreadChange).toHaveBeenCalledWith('j1', undefined);
+    rerender(viewer({ activeThreadId: 'j1', onThreadChange }));
+    expect(stripLabels()).toEqual(['Main', 'Explore the codebase', 'Write tests']);
+    expect(claudePaneProps.current?.activeThreadId).toBe('j1');
+    expect(claudePaneProps.current?.allMessages).toEqual(j1Messages);
+  });
+
+  // jgk8 D7: the total comes from session.files; the footer counts the rest.
+  it('counts every uploaded subagent file in All subagents, with a footer for the nested ones', async () => {
+    const user = userEvent.setup();
+    const file = (file_name: string, file_type = 'agent') => ({
+      file_name,
+      file_type,
+      last_synced_line: 3,
+      updated_at: '2026-09-13T10:00:00Z',
+    });
+    const session = {
+      ...claudeSession,
+      files: [
+        file('transcript.jsonl', 'transcript'),
+        ...['a1', 'a2', 'j1', 'j2', 'j3', 'g1'].map((id) => file(`agent-${id}.jsonl`)),
+        file('subagents/workflows/run1/agent-w1.jsonl'),
+      ],
+    };
+    render(viewer({ session }));
+    await user.click(screen.getByRole('button', { name: 'All subagents (6)' }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      expect.stringContaining('Main'),
+      expect.stringContaining('Explore the codebase'),
+      expect.stringContaining('Write tests'),
+    ]);
+    expect(screen.getByText('4 more launched by subagents. Open one to see the ones it launched.')).toBeInTheDocument();
+  });
+
+  it("floors the All subagents count at Main's direct agents and shows no footer when nothing is nested", async () => {
+    const user = userEvent.setup();
+    render(viewer());
+    await user.click(screen.getByRole('button', { name: 'All subagents (2)' }));
+    expect(screen.queryByText(/more launched by/)).not.toBeInTheDocument();
+  });
+
+  // jgk8 D3: the path row shows only when it adds something.
+  it('shows no path row for a depth-1 agent that launched nothing', () => {
+    render(viewer({ activeThreadId: 'a2', onThreadChange: () => {} }));
+    expect(screen.queryByRole('navigation', { name: 'Subagent path' })).not.toBeInTheDocument();
+  });
+
+  it('shows "Launched here (n)" for a depth-1 agent that launched subagents', () => {
+    render(viewer({ activeThreadId: 'a1', onThreadChange: () => {} }));
+    expect(crumbs().getByRole('button', { name: 'Launched here (3)' })).toBeInTheDocument();
+  });
+
+  it('opens a child picked from Launched here; the path names it and the depth-1 chip shows in path', async () => {
+    const user = userEvent.setup();
     const onThreadChange = vi.fn();
     const { rerender } = render(viewer({ activeThreadId: 'a1', onThreadChange }));
-    act(() => {
-      openThread('child');
-    });
-    rerender(viewer({ activeThreadId: 'child', onThreadChange }));
-    expect(screen.getByRole('tab', { name: 'Nested helper, running' })).toBeInTheDocument();
+    await user.click(crumbs().getByRole('button', { name: 'Launched here (3)' }));
+    await user.click(screen.getByRole('option', { name: /^Judge arrays r2/ }));
+    expect(onThreadChange).toHaveBeenCalledWith('j2', undefined);
+
+    rerender(viewer({ activeThreadId: 'j2', onThreadChange }));
+    expect(crumbs().getByRole('button', { name: 'Main' })).toBeInTheDocument();
+    expect(crumbs().getByRole('button', { name: 'Explore the codebase' })).toBeInTheDocument();
+    expect(crumbs().getByRole('button', { name: 'Judge arrays r2' })).toBeInTheDocument();
+    expect(crumbs().queryByRole('button', { name: /^Launched here/ })).not.toBeInTheDocument();
+    const ancestor = screen.getByRole('tab', { name: /^Explore the codebase/ });
+    expect(ancestor).toHaveAttribute('data-in-path', 'true');
+    expect(ancestor).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('lists the depth-2 siblings with the open one checked, and switches to a picked sibling', async () => {
+    const user = userEvent.setup();
+    const { onThreadChange } = walk(['a1', 'j1']);
+    await user.click(crumbs().getByRole('button', { name: 'Judge arrays r1' }));
+    const options = screen.getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual([
+      expect.stringContaining('Judge arrays r1'),
+      expect.stringContaining('Judge arrays r2'),
+      expect.stringContaining('Simplify Go changes'),
+    ]);
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(options[0]).toHaveTextContent('launched 1');
+    await user.click(options[2]!);
+    expect(onThreadChange).toHaveBeenCalledWith('j3', undefined);
+  });
+
+  it('picking an ancestor lands on the launch row of the agent you came from', async () => {
+    const user = userEvent.setup();
+    const { onThreadChange } = walk(['a1', 'j1']);
+    await user.click(crumbs().getByRole('button', { name: 'Explore the codebase' }));
+    expect(onThreadChange).toHaveBeenLastCalledWith('a1', 's3');
+    await user.click(crumbs().getByRole('button', { name: 'Main' }));
+    expect(onThreadChange).toHaveBeenLastCalledWith(null, 'r1');
+    await user.click(screen.getByRole('tab', { name: /^Explore the codebase/ }));
+    expect(onThreadChange).toHaveBeenLastCalledWith('a1', 's3');
+  });
+
+  it('shows two dropdown segments at depth 3', () => {
+    walk(['a1', 'j1', 'g1']);
+    const dropdowns = crumbs()
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-haspopup') === 'listbox')
+      .map((b) => b.getAttribute('aria-label'));
+    expect(dropdowns).toEqual(['Judge arrays r1', 'Re-run the flaky judge']);
+    expect(stripLabels()).toEqual(['Main', 'Explore the codebase', 'Write tests']);
+  });
+
+  it('remembers a thread’s children after leaving it, so the sibling dropdown still lists them', async () => {
+    const user = userEvent.setup();
+    const { rerender, onThreadChange } = walk(['a1', 'j1']);
+    // a1 is no longer loaded (only the open thread is fetched): drop its seed to prove it.
+    rerender(viewer({ activeThreadId: 'j1', onThreadChange, initialThreadMessages: { j1: j1Messages } }));
+    await user.click(crumbs().getByRole('button', { name: 'Judge arrays r1' }));
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+  });
+
+  it("refreshes a nested agent's status from its parent's latest transcript, and keeps it after leaving", async () => {
+    const user = userEvent.setup();
+    const { rerender, onThreadChange } = walk(['a1']);
+    await user.click(crumbs().getByRole('button', { name: 'Launched here (3)' }));
+    expect(screen.getByRole('option', { name: /^Judge arrays r1/ })).toHaveTextContent('running');
+    await user.keyboard('{Escape}');
 
     const a1Finished = [
       ...a1Messages,
-      taskNotificationMessage('s4', { taskId: 'child', toolUseId: 'tn', status: 'completed' }),
+      taskNotificationMessage('s8', { taskId: 'j1', toolUseId: 'tj1', status: 'completed' }),
     ];
-    const threadMessages = { a1: a1Finished, child: childMessages };
-    rerender(viewer({ activeThreadId: 'a1', onThreadChange, initialThreadMessages: threadMessages }));
-    expect(screen.getByRole('tab', { name: 'Nested helper, completed' })).toBeInTheDocument();
+    const finished = { ...threadMessages, a1: a1Finished };
+    rerender(viewer({ activeThreadId: 'a1', onThreadChange, initialThreadMessages: finished }));
+    await user.click(crumbs().getByRole('button', { name: 'Launched here (3)' }));
+    expect(screen.getByRole('option', { name: /^Judge arrays r1/ })).toHaveTextContent('completed');
+    await user.keyboard('{Escape}');
 
-    rerender(viewer({ activeThreadId: 'child', onThreadChange, initialThreadMessages: threadMessages }));
-    expect(screen.getByRole('tab', { name: 'Nested helper, completed' })).toBeInTheDocument();
+    act(() => {
+      openThread('j1');
+    });
+    rerender(viewer({ activeThreadId: 'j1', onThreadChange, initialThreadMessages: finished }));
+    await user.click(crumbs().getByRole('button', { name: 'Judge arrays r1' }));
+    expect(screen.getByRole('option', { name: /^Judge arrays r1/ })).toHaveTextContent('completed');
+  });
+
+  // jgk8 D8: a cold deep link to a nested agent keeps the id chip, with no ancestor crumbs.
+  it('a cold deep link to a nested agent shows an id chip, no ancestor crumbs, and Launched here once loaded', () => {
+    render(viewer({ activeThreadId: 'j1', onThreadChange: () => {} }));
+    expect(screen.getByRole('tab', { name: 'j1, status unknown' })).toHaveAttribute('aria-selected', 'true');
+    expect(crumbs().getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual([
+      'Launched here (1)',
+    ]);
+  });
+
+  it("a child of a cold deep-linked agent gets its own labeled chip, since its ancestry is unknown", () => {
+    const { rerender, onThreadChange } = walk(['j1']);
+    act(() => {
+      openThread('g1');
+    });
+    expect(onThreadChange).toHaveBeenCalledWith('g1', undefined);
+    rerender(viewer({ activeThreadId: 'g1', onThreadChange }));
+    expect(stripLabels()).toEqual(['Main', 'Explore the codebase', 'Write tests', 'Re-run the flaky judge']);
+    expect(screen.getByRole('tab', { name: 'Re-run the flaky judge, running' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('navigation', { name: 'Subagent path' })).not.toBeInTheDocument();
+  });
+
+  it('switching sessions forgets the remembered children', () => {
+    const { rerender, onThreadChange } = walk(['a1', 'j1']);
+    const other = { ...claudeSession, id: 'other-session' };
+    rerender(viewer({ session: other, activeThreadId: 'j1', onThreadChange }));
+    expect(screen.getByRole('tab', { name: 'j1, status unknown' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Explore the codebase' })).not.toBeInTheDocument();
   });
 
   it('renders no strip for Codex sessions even with a thread id', async () => {

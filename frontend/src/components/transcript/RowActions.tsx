@@ -17,6 +17,7 @@
 //   (parent hides at the ends of a same-kind chain).
 
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import { LinkIcon } from '@/components/icons';
 import styles from './RowActions.module.css';
 
 interface RowActionsProps {
@@ -119,10 +120,7 @@ export default function RowActions({
             <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
           </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6.5 9.5a3 3 0 0 0 4.24 0l2-2a3 3 0 0 0-4.24-4.24l-1 1" />
-            <path d="M9.5 6.5a3 3 0 0 0-4.24 0l-2 2a3 3 0 0 0 4.24 4.24l1-1" />
-          </svg>
+          LinkIcon
         )}
       </button>
     </span>

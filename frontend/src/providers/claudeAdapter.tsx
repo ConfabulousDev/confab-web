@@ -29,6 +29,7 @@ import {
   agentDisplayName,
   agentFileName,
   buildClaudeAgentIndex,
+  countAgentFiles,
   normalizeAgentStatus,
 } from '@/components/transcript/claude/claudeAgentIndex';
 import type { ClaudeAdapter, TranscriptThreadRef } from './types';
@@ -114,6 +115,7 @@ export const claudeAdapter: ClaudeAdapter = {
   threads: {
     discover: discoverClaudeThreads,
     fileNameFor: agentFileName,
+    countThreadFiles: countAgentFiles,
   },
 
   tokensCostTooltip:

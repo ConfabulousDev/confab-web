@@ -38,6 +38,7 @@ interface TranscriptData {
 }
 
 const NO_OPTIONS: TranscriptDataOptions = {};
+const NO_RAW: unknown[] = [];
 
 function isNotFoundError(e: unknown): boolean {
   return e instanceof APIError && e.status === 404;
@@ -72,7 +73,8 @@ export function useTranscriptData(
   // in flight (React "adjust state on prop change" pattern).
   const sourceKey = `${sessionId}\u0000${fileName ?? ''}`;
   const [prevSourceKey, setPrevSourceKey] = useState(sourceKey);
-  if (sourceKey !== prevSourceKey) {
+  const switching = sourceKey !== prevSourceKey;
+  if (switching) {
     setPrevSourceKey(sourceKey);
     setRaw([]);
     setLoading(willFetch);
@@ -146,7 +148,12 @@ export function useTranscriptData(
     };
   }, [adapter, sessionId, fileName, willFetch, isVisible, loading, notFound]);
 
-  const effectiveRaw = seed ? seed.raw : raw;
+  // React finishes the render pass that switched sources before re-rendering,
+  // and callers derive state from it (jgk8: a thread's children), so even that
+  // pass must not see the previous file's lines.
+  let effectiveRaw = raw;
+  if (seed) effectiveRaw = seed.raw;
+  else if (switching) effectiveRaw = NO_RAW;
   // Stabilize items via the adapter's normalize. Claude's is identity; Codex normalizes.
   const items = useMemo(() => adapter.normalize(effectiveRaw), [adapter, effectiveRaw]);
 

@@ -1,0 +1,132 @@
+/* jgk8: subagent path row under the thread strip. Tokens only. It wraps rather
+   than scrolls on narrow screens so its dropdown popovers are never clipped. */
+
+.bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  min-height: 34px;
+  padding: 3px var(--spacing-md);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.item + .item::before {
+  content: '›';
+  padding-inline: 2px;
+  font-size: var(--font-sm);
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding-inline: 6px;
+  font-family: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.link:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.link:focus-visible,
+.copy:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Applied to ThreadListDropdown's trigger (sibling segments, Launched here);
+   scoped under .bar so it outranks the trigger's base size regardless of
+   stylesheet order. */
+.bar .dropdownTrigger {
+  height: 24px;
+  padding-inline: 6px;
+  border-radius: var(--radius-md);
+}
+
+.segmentLabel {
+  display: inline-block;
+  max-width: 24ch;
+  overflow: hidden;
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* The open agent: plain text at depth 1, the dropdown label deeper. */
+.current {
+  padding-inline: 6px;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.dropdownTrigger .current {
+  padding-inline: 0;
+}
+
+.copy {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-xs);
+  height: 24px;
+  min-width: 24px;
+  padding-inline: 5px;
+  font-family: inherit;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.copy:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.copiedText {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 480px) {
+  .bar {
+    padding-inline: var(--spacing-sm);
+  }
+}

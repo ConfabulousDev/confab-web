@@ -58,18 +58,17 @@ const fortyThreads = Array.from({ length: 40 }, (_, i) =>
   }),
 );
 
-const nestedThreads = [
-  thread('a1', 'Explore the auth middleware', { status: 'completed', subtitle: 'Explore', model: 'claude-opus-5' }),
-  thread('c1', 'Read session store', { status: 'running', parentThreadId: 'a1', launchTargetId: 'launch-c1' }),
-  thread('c2', 'Check cookie flags', { status: 'completed', parentThreadId: 'a1', launchTargetId: 'launch-c2' }),
-  thread('a2', 'Write integration tests', { status: 'running', model: 'claude-opus-5' }),
-];
+type ExtraProps = Pick<
+  React.ComponentProps<typeof TranscriptThreadTabs>,
+  'allThreadsCount' | 'nestedThreadCount' | 'childCountOf' | 'inPath'
+>;
 
 function Interactive({
   threads,
   initial,
   width,
-}: {
+  ...extra
+}: ExtraProps & {
   threads: TranscriptThreadRef[];
   initial: string | null;
   width?: number;
@@ -79,6 +78,7 @@ function Interactive({
   return (
     <div style={{ maxWidth: width }}>
       <TranscriptThreadTabs
+        {...extra}
         threads={threads}
         activeThreadId={active}
         sessionId="story-session"
@@ -133,9 +133,28 @@ export const FortyLongLabels: Story = {
   play: async ({ canvasElement }) => openAllSubagents(canvasElement),
 };
 
-/** Two nested subagents placed after their parent, with an indent mark; open the nested chip's menu for Go to parent. */
-export const NestedLive: Story = {
-  args: { threads: nestedThreads, initial: 'c1' },
+/**
+ * jgk8 D5: a nested agent (launched by "Implement pedp") is open, so it has no
+ * chip; its depth-1 ancestor shows outlined "in path". Clicking it opens that
+ * agent at the nested agent's launch row.
+ */
+export const InPathChip: Story = {
+  args: { threads: mixedStatuses, initial: 'judge-7', inPath: { threadId: 'a2', targetId: 'launch-judge-7' } },
+};
+
+/**
+ * jgk8 D7: the button counts every subagent in the session; the list shows
+ * Main's direct ones with "launched N", then a footer for the rest.
+ */
+export const AllSubagentsWithFooter: Story = {
+  args: {
+    threads: mixedStatuses,
+    initial: null,
+    allThreadsCount: 375,
+    nestedThreadCount: 370,
+    childCountOf: (id: string) => ({ a1: 2, a2: 43 })[id] ?? 0,
+  },
+  play: async ({ canvasElement }) => openAllSubagents(canvasElement),
 };
 
 /** The active subagent chip's menu: Go to parent (Main) and Copy link. */

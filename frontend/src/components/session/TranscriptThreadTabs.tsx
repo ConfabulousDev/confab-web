@@ -6,6 +6,10 @@
 // subagent chip opens its menu (Go to parent, Copy link). WAI-ARIA tabs with
 // manual activation, so arrowing past chips never fetches their transcripts.
 // Provider-agnostic: it only knows `TranscriptThreadRef`s.
+//
+// jgk8: chips are Main's direct subagents only. While a nested agent is open
+// (found through ThreadBreadcrumb), its depth-1 ancestor chip is "in path":
+// outlined, and a click opens that ancestor at the launch row.
 
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from 'react';
 import { useCopyToClipboard, useDropdown } from '@/hooks';
@@ -14,9 +18,9 @@ import Tooltip from '@/components/Tooltip';
 import { formatDuration } from '@/components/transcript/timelineFormat';
 import type { TranscriptThreadRef } from '@/providers/types';
 import { cx } from '@/utils/utils';
-import AllThreadsDropdown from './AllThreadsDropdown';
+import ThreadListDropdown from './ThreadListDropdown';
 import ThreadStatusGlyph from './ThreadStatusGlyph';
-import { THREAD_STATUS_LABEL, isNestedThread, parentLabel, threadStatus } from './threadDetails';
+import { THREAD_STATUS_LABEL, nestedThreadsNote, parentLabel, threadDeepLink, threadStatus } from './threadDetails';
 import dropdownStyles from './ThreadDropdown.module.css';
 import styles from './TranscriptThreadTabs.module.css';
 
@@ -28,9 +32,9 @@ const COPIED_MS = 800;
 /** Line-mode wheel deltas (Firefox) are converted at roughly one line of text. */
 const WHEEL_LINE_PX = 16;
 
-const NestedGlyph = (
-  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M2.5 1.5v3.25a1.5 1.5 0 0 0 1.5 1.5h4M6.5 4.75l1.5 1.5-1.5 1.5" />
+const ListGlyph = (
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M2 3h8M2 6h8M2 9h8" />
   </svg>
 );
 
@@ -42,6 +46,17 @@ interface TranscriptThreadTabsProps {
   sessionId: string;
   /** Switch threads; `targetId` is the row to land on (Go to parent → the launch row). */
   onSelect: (threadId: string | null, targetId?: string) => void;
+  /** jgk8 D7: every subagent in the session, for the All-subagents count; defaults to `threads.length`. */
+  allThreadsCount?: number;
+  /** jgk8 D7: subagents launched by other subagents, for the All-subagents footer. */
+  nestedThreadCount?: number;
+  /** jgk8 D6: known children per thread ("launched N" in All subagents). */
+  childCountOf?: (threadId: string) => number;
+  /**
+   * jgk8 D5: a nested agent is open; `threadId` is its depth-1 ancestor's chip,
+   * `targetId` the row a click lands on (the launch row of the path's next agent).
+   */
+  inPath?: { threadId: string; targetId?: string };
 }
 
 function prefersReducedMotion(): boolean {
@@ -108,7 +123,7 @@ function useWheelScrollsSideways(scrollerRef: RefObject<HTMLDivElement | null>) 
   }, [scrollerRef]);
 }
 
-function ChipDetails({ thread, threads }: { thread: TranscriptThreadRef; threads: TranscriptThreadRef[] }) {
+function ChipDetails({ thread }: { thread: TranscriptThreadRef }) {
   return (
     <div className={styles.details}>
       <div className={styles.detailsTitle}>{thread.label}</div>
@@ -134,12 +149,20 @@ function ChipDetails({ thread, threads }: { thread: TranscriptThreadRef; threads
           </>
         )}
       </dl>
-      {isNestedThread(thread) && <div className={styles.detailsNote}>Launched by {parentLabel(thread, threads)}</div>}
     </div>
   );
 }
 
-export default function TranscriptThreadTabs({ threads, activeThreadId, sessionId, onSelect }: TranscriptThreadTabsProps) {
+export default function TranscriptThreadTabs({
+  threads,
+  activeThreadId,
+  sessionId,
+  onSelect,
+  allThreadsCount,
+  nestedThreadCount = 0,
+  childCountOf,
+  inPath,
+}: TranscriptThreadTabsProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -151,12 +174,14 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
   useWheelScrollsSideways(scrollerRef);
 
   const keys = [MAIN_KEY, ...threads.map((t) => t.id)];
-  const activeKey = activeThreadId !== null && keys.includes(activeThreadId) ? activeThreadId : MAIN_KEY;
+  const inPathKey = inPath && inPath.threadId !== activeThreadId && keys.includes(inPath.threadId) ? inPath.threadId : null;
+  const activeKey = activeThreadId !== null && keys.includes(activeThreadId) ? activeThreadId : (inPathKey ?? MAIN_KEY);
   const rovingKey = focusKey !== null && keys.includes(focusKey) ? focusKey : activeKey;
   const activeThread = threads.find((t) => t.id === activeThreadId);
   // The menu belongs to the chip it was opened on; switching threads closes it.
   const menuOpen = menuIsOpen && activeThread !== undefined && menuAnchor?.threadId === activeThread.id;
   const goToParentLabel = activeThread?.launchTargetId ? parentLabel(activeThread, threads) : undefined;
+  const allCount = allThreadsCount ?? threads.length;
 
   // Keep the active chip in view when the thread changes.
   useEffect(() => {
@@ -201,6 +226,11 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
 
   function handleChipClick(thread: TranscriptThreadRef | undefined, event: MouseEvent<HTMLButtonElement>) {
     setFocusKey(null);
+    if (thread && thread.id === inPathKey) {
+      setMenuOpen(false);
+      onSelect(thread.id, inPath?.targetId);
+      return;
+    }
     if ((thread?.id ?? MAIN_KEY) !== activeKey) {
       setMenuOpen(false);
       onSelect(thread ? thread.id : null);
@@ -249,8 +279,7 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
 
   function copyLink() {
     if (!activeThread) return;
-    const url = `${window.location.origin}/sessions/${sessionId}?tab=transcript&agent=${encodeURIComponent(activeThread.id)}`;
-    copy(url).then(
+    copy(threadDeepLink(sessionId, activeThread.id)).then(
       () => window.setTimeout(() => setMenuOpen(false), COPIED_MS),
       () => setMenuOpen(false),
     );
@@ -265,7 +294,8 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
   function renderChip(thread: TranscriptThreadRef | undefined) {
     const key = thread?.id ?? MAIN_KEY;
     const isActive = key === activeKey;
-    const hasMenu = isActive && thread !== undefined;
+    const isInPath = key === inPathKey;
+    const hasMenu = isActive && thread !== undefined && !isInPath;
     const chip = (
       <button
         key={key}
@@ -280,15 +310,11 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
         aria-haspopup={hasMenu ? 'menu' : undefined}
         aria-expanded={hasMenu ? menuOpen : undefined}
         tabIndex={key === rovingKey ? 0 : -1}
-        className={cx(styles.chip, isActive && styles.chipActive)}
+        className={cx(styles.chip, isActive && !isInPath && styles.chipActive, isInPath && styles.chipInPath)}
+        data-in-path={isInPath || undefined}
         onFocus={() => setFocusKey(key)}
         onClick={(event) => handleChipClick(thread, event)}
       >
-        {thread && isNestedThread(thread) && (
-          <span className={styles.nestedMark} data-nested aria-hidden="true">
-            {NestedGlyph}
-          </span>
-        )}
         {thread && <ThreadStatusGlyph status={threadStatus(thread)} />}
         <span className={styles.label}>{thread ? thread.label : 'Main'}</span>
         {hasMenu && (
@@ -300,7 +326,7 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
     );
     if (!thread) return chip;
     return (
-      <Tooltip key={key} content={<ChipDetails thread={thread} threads={threads} />} disabled={menuOpen}>
+      <Tooltip key={key} content={<ChipDetails thread={thread} />} disabled={menuOpen}>
         {chip}
       </Tooltip>
     );
@@ -372,7 +398,25 @@ export default function TranscriptThreadTabs({ threads, activeThreadId, sessionI
         )}
       </div>
       <span className={styles.divider} aria-hidden="true" />
-      <AllThreadsDropdown threads={threads} activeThreadId={activeThreadId} onSelect={onSelect} />
+      <ThreadListDropdown
+        threads={threads}
+        activeThreadId={activeThreadId}
+        onSelect={onSelect}
+        includeMain
+        label={`All subagents (${allCount})`}
+        listLabel="All subagents"
+        buttonContent={
+          <>
+            <span className={dropdownStyles.allLabel}>All subagents ({allCount})</span>
+            <span className={dropdownStyles.allCompact}>
+              {ListGlyph}
+              {allCount}
+            </span>
+          </>
+        }
+        footer={nestedThreadsNote(nestedThreadCount)}
+        childCountOf={childCountOf}
+      />
     </div>
   );
 }
