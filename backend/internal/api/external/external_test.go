@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/andybalholm/brotli"
+
 	"github.com/ConfabulousDev/confab-web/internal/api"
 	"github.com/ConfabulousDev/confab-web/internal/api/apitest"
 	"github.com/ConfabulousDev/confab-web/internal/models"
@@ -619,6 +621,80 @@ func TestSessionFileDownload_HTTP_Integration(t *testing.T) {
 		defer resp.Body.Close()
 
 		testutil.RequireStatus(t, resp, http.StatusUnauthorized)
+	})
+
+	t.Run("multi-chunk download streams the merged bytes and keeps Content-Disposition", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-7", testutil.TestSessionFullOpts{
+			Summary: "Streamed download",
+		})
+
+		// ~2.4MB over overlapping chunks: spans more than one 1MB flush interval.
+		var lines []string
+		for i := range 800 {
+			n := strconv.Itoa(i)
+			lines = append(lines, `{"type":"user","n":`+strconv.Itoa(i+1)+`,"pad":"`+strings.Repeat(n, 3000/len(n))+`"}`)
+		}
+		joined := func(ls []string) []byte { return []byte(strings.Join(ls, "\n") + "\n") }
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "ext-dl-7", "transcript.jsonl", 1, 500, joined(lines[:500]))
+		testutil.UploadTestChunk(t, env, user.ID, models.ProviderClaudeCode, "ext-dl-7", "transcript.jsonl", 401, 800, joined(lines[400:]))
+		want := string(joined(lines))
+
+		ts := apitest.NewServer(t, env, apitest.Options{})
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.RequestWithHeaders(http.MethodGet, "/api/v1/sessions/"+sessionID+"/files/download?file_name=transcript.jsonl", nil,
+			map[string]string{"Accept-Encoding": "br"})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		if cd := resp.Header.Get("Content-Disposition"); cd != `attachment; filename="transcript.jsonl"` {
+			t.Errorf("Content-Disposition = %q, want attachment; filename=\"transcript.jsonl\"", cd)
+		}
+		if ce := resp.Header.Get("Content-Encoding"); ce != "br" {
+			t.Fatalf("Content-Encoding = %q, want br", ce)
+		}
+		body, err := io.ReadAll(brotli.NewReader(resp.Body))
+		if err != nil {
+			t.Fatalf("decoding br body: %v", err)
+		}
+		if string(body) != want {
+			t.Errorf("download body: got %d bytes, want %d identical bytes", len(body), len(want))
+		}
+	})
+
+	t.Run("download of a file with no chunks returns an empty 200", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "owner@example.com", "Owner")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "Test Key")
+		sessionID := testutil.CreateTestSessionFull(t, env, user.ID, "ext-dl-8", testutil.TestSessionFullOpts{
+			Summary: "No chunks yet",
+		})
+
+		ts := apitest.NewServer(t, env, apitest.Options{})
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		resp, err := client.Get("/api/v1/sessions/" + sessionID + "/files/download?file_name=transcript.jsonl")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		testutil.RequireStatus(t, resp, http.StatusOK)
+		if cd := resp.Header.Get("Content-Disposition"); cd != `attachment; filename="transcript.jsonl"` {
+			t.Errorf("Content-Disposition = %q, want attachment; filename=\"transcript.jsonl\"", cd)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if len(body) != 0 {
+			t.Errorf("expected an empty body, got %d bytes", len(body))
+		}
 	})
 }
 

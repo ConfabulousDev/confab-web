@@ -7,7 +7,7 @@ S3/MinIO object storage client for session file chunks: upload, download, list, 
 | File | Role |
 |------|------|
 | `s3.go` | `S3Storage` struct, `NewS3Storage` constructor, core operations (`Download`, `Delete`), provider-aware chunk operations (`UploadChunk`, `ListChunks`, `DeleteAllSessionChunks`), the shared `chunkPrefix` builder, error classification (`classifyStorageError`), sentinel errors, and safety constants (`MaxChunksPerFile`, `MaxAgentFiles`) |
-| `chunks.go` | Chunk processing: `ParseChunkKey`, `DownloadAndMergeChunks`, `DownloadChunks` (parallel with bounded concurrency), `MergeChunks` (line-based dedup with overlap handling), and internal helpers (`splitLines`, `ChunkInfo` type) |
+| `chunks.go` | Chunk processing: `ParseChunkKey`, `DownloadAndMergeChunks`, `DownloadChunks` (parallel with bounded concurrency), `MergeChunks` (line-based dedup with overlap handling), `WriteMergedLines` (the same merge streamed to an `io.Writer`), `ValidateMerge`, and internal helpers (`buildLineIndex`, `writeLines`, `mergeMaxLine`, `splitLines`, `ChunkInfo` type) |
 
 ## Key Types
 
@@ -24,7 +24,9 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 - **`ListChunks(ctx, userID, provider, externalID, fileName)`** -- Lists all chunk keys for a file under the named provider, sorted lexicographically (correct order due to zero-padded names). Returns `ErrTooManyChunks` if the count exceeds `MaxChunksPerFile`.
 - **`DownloadAndMergeChunks(ctx, userID, provider, externalID, fileName)`** -- Convenience method: lists chunks, downloads in parallel, merges with overlap handling. Returns nil for files with no chunks.
 - **`DownloadChunks(ctx, chunkKeys)`** -- Downloads chunks in parallel with bounded concurrency (`maxParallelDownloads = 10`). Skips unparseable keys with a warning.
-- **`MergeChunks(chunks)`** -- Merges chunks into a single byte slice using line-indexed array. Handles overlapping line ranges (last write wins). Allocates the merged buffer once, at its exact size (5m68). Logs warnings for conflicting content on overlaps and for large merges (> 1M lines).
+- **`MergeChunks(chunks)`** -- Merges chunks into a single byte slice using line-indexed array. Handles overlapping line ranges (last write wins). Allocates the merged buffer once, at its exact size (5m68), and fills it through the same line writer as `WriteMergedLines`. Logs warnings for conflicting content on overlaps and for large merges (> 1M lines).
+- **`WriteMergedLines(w, chunks, afterLine)`** -- Streams the same merge to `w` without a merged copy (x4ry): each line numbered above `afterLine` (absolute, 1-based), newline-terminated, written straight from chunk `Data`. A single chunk with `afterLine <= 0` is written verbatim, so `afterLine == 0` output is byte-identical to `MergeChunks`. Returns bytes written and the first write error. Used by the API's `sync/file` and `files/download` handlers; callers that must parse the content keep using `MergeChunks`.
+- **`ValidateMerge(chunks)`** -- The `MaxMergeLines` check alone, without reading chunk data. `WriteMergedLines` returns this error before writing anything, so an HTTP handler calls it before sending headers to keep a 500.
 - **`DeleteAllSessionChunks(ctx, userID, provider, externalID)`** -- Deletes all chunks under a session's provider-scoped prefix. Chunks written under a different provider for the same `(userID, externalID)` are untouched.
 - **`ParseChunkKey(key)`** -- Extracts first/last line numbers from a chunk S3 key. Opaque to the provider segment.
 
@@ -41,14 +43,14 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 - Chunk keys use zero-padded 8-digit line numbers to ensure lexicographic sort equals numeric sort.
 - `fileName` may itself contain slashes (e.g. the workflow subagent path `subagents/workflows/<runId>/agent-<id>.jsonl`, CF-532). Those slashes simply become extra S3 key segments; `chunkPrefix`/`UploadChunk`/`ListChunks`/`DownloadAndMergeChunks` round-trip them unchanged.
 - `ListChunks` enforces `MaxChunksPerFile` as a hard limit to prevent unbounded memory from listing.
-- `MergeChunks` enforces `MaxMergeLines` to prevent memory exhaustion from corrupted chunk filenames.
+- `MergeChunks`, `WriteMergedLines`, and `ValidateMerge` enforce `MaxMergeLines` to prevent memory exhaustion from corrupted chunk filenames.
 - The bucket must exist before `NewS3Storage` is called; the server will not auto-create buckets.
 - Error classification maps MinIO errors to sentinel errors: `ErrObjectNotFound`, `ErrAccessDenied`, `ErrNetworkError`, `ErrTooManyChunks`.
-- `MergeChunks` uses "last write wins" for overlapping line ranges. It logs warnings when overlapping chunks have different content for the same line, but does not fail.
+- `MergeChunks` and `WriteMergedLines` share one line index (`buildLineIndex`) and use "last write wins" (chunk slice order) for overlapping line ranges. It logs warnings when overlapping chunks have different content for the same line, but does not fail.
 
 ## Design Decisions
 
-- **Line-indexed merge**: `MergeChunks` allocates an array indexed by line number and writes each chunk's lines into it. This handles arbitrary overlaps correctly at the cost of allocating for the full line range. The `MaxMergeLines` limit bounds this allocation.
+- **Line-indexed merge**: `buildLineIndex` allocates an array indexed by line number and points each entry at that line's bytes inside the chunk data (no copies). This handles arbitrary overlaps correctly at the cost of one slice header per line in the full range. The `MaxMergeLines` limit bounds this allocation. `WriteMergedLines` writes from this index directly, so a streamed read holds only the chunks plus the index.
 - **Bounded parallel downloads**: Uses a semaphore channel pattern with `maxParallelDownloads` slots to limit concurrent S3 connections without spawning unbounded goroutines.
 - **Error classification**: `classifyStorageError` translates MinIO-specific errors into domain sentinel errors so callers don't need to import MinIO types. Network errors are detected by string matching as a fallback.
 - **Chunk count as estimate**: The DB `chunk_count` column is an estimate that can drift. The read path (in the session package) self-heals by comparing against the actual S3 chunk list.
@@ -56,7 +58,7 @@ All chunk methods take a `provider string` argument (one of `models.ProviderClau
 
 ## Testing
 
-- Unit tests: `chunks_test.go` (ParseChunkKey, MergeChunks), `s3_test.go` (`containsAny`, `classifyStorageError`, sentinel errors, `UploadChunk` bounds and provider validation).
+- Unit tests: `chunks_test.go` (ParseChunkKey, MergeChunks, and WriteMergedLines: byte parity with the pre-x4ry `MergeChunks` output, `afterLine` boundaries including gaps, write-error propagation, the `MaxMergeLines` check before any write, and an allocation guard against a merged copy), `s3_test.go` (`containsAny`, `classifyStorageError`, sentinel errors, `UploadChunk` bounds and provider validation).
 - Integration tests: `s3_integration_test.go` exercises real S3 round-trips through `testutil`'s MinIO container — `UploadChunk`/`Download`, missing-key classification, `ListChunks` ordering, `Delete`, `DeleteAllSessionChunks` (session-scoped, cross-provider scoping, and empty-prefix no-op), `DeleteAllUserData` (cross-user `{userID}/` substring-boundary scoping and empty-prefix no-op), and `NewS3Storage` with a missing bucket.
 
 ## Dependencies

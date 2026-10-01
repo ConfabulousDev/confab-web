@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 )
@@ -160,10 +161,10 @@ func (s *S3Storage) DownloadChunks(ctx context.Context, chunkKeys []string) ([]C
 	return chunks, nil
 }
 
-// MergeChunks takes downloaded chunks and merges them, handling overlaps.
-// Uses a simple array indexed by line number - each chunk's lines are written
-// to the array, and later chunks overwrite earlier ones for the same line.
-// The final array is then concatenated into the result.
+// MergeChunks takes downloaded chunks and merges them into one byte slice,
+// handling overlaps (last write wins, see buildLineIndex). A single chunk is
+// returned as-is; no chunks or no lines return nil. Use WriteMergedLines
+// instead when the result is only written out, to avoid the merged copy.
 //
 // Returns an error if maxLine exceeds MaxMergeLines to prevent memory exhaustion.
 func MergeChunks(chunks []ChunkInfo) ([]byte, error) {
@@ -174,53 +175,13 @@ func MergeChunks(chunks []ChunkInfo) ([]byte, error) {
 		return chunks[0].Data, nil
 	}
 
-	// Find max line number
-	maxLine := 0
-	for _, c := range chunks {
-		if c.LastLine > maxLine {
-			maxLine = c.LastLine
-		}
+	lines, err := buildLineIndex(chunks)
+	if err != nil {
+		return nil, err
 	}
 
-	// Safety check: prevent memory exhaustion from corrupted data
-	if maxLine > MaxMergeLines {
-		return nil, fmt.Errorf("maxLine %d exceeds safety limit %d", maxLine, MaxMergeLines)
-	}
-
-	// Log warning for unusually large merges
-	if maxLine > LargeMergeWarningThreshold {
-		slog.Warn("Large chunk merge operation",
-			"max_line", maxLine,
-			"chunk_count", len(chunks),
-			"threshold", LargeMergeWarningThreshold)
-	}
-
-	// Build array indexed by line number (0-indexed, so line 1 is at index 0)
-	lines := make([][]byte, maxLine)
-
-	// Populate array from each chunk (last write wins)
-	for _, c := range chunks {
-		chunkLines := splitLines(c.Data)
-		for i, line := range chunkLines {
-			lineNum := c.FirstLine + i // 1-based line number
-			if lineNum >= 1 && lineNum <= maxLine {
-				idx := lineNum - 1
-				// Check for conflicting content on overlap
-				if lines[idx] != nil && !bytes.Equal(lines[idx], line) {
-					slog.Warn("Chunk overlap with differing content",
-						"line_num", lineNum,
-						"chunk", c.Key,
-						"old_len", len(lines[idx]),
-						"new_len", len(line))
-				}
-				lines[idx] = line
-			}
-		}
-	}
-
-	// Size the result exactly before building it, so the append loop never
-	// regrows and copies (overlapping chunks make summed chunk sizes an
-	// overestimate).
+	// Size the result exactly before building it, so the buffer never regrows
+	// and copies (overlapping chunks make summed chunk sizes an overestimate).
 	size := 0
 	for _, line := range lines {
 		if line != nil {
@@ -230,15 +191,118 @@ func MergeChunks(chunks []ChunkInfo) ([]byte, error) {
 	if size == 0 {
 		return nil, nil
 	}
-	result := make([]byte, 0, size)
-	for _, line := range lines {
-		if line != nil {
-			result = append(result, line...)
-			result = append(result, '\n')
+	buf := bytes.NewBuffer(make([]byte, 0, size))
+	if _, err := writeLines(buf, lines, 0); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// WriteMergedLines streams the merge of chunks to w without materializing it:
+// every line whose 1-based line number is greater than afterLine, in line
+// order, each followed by '\n'. Lines are written straight from chunk Data.
+// For a single chunk with afterLine <= 0, its Data is written verbatim (the
+// same bytes MergeChunks returns). Returns the bytes written and the first
+// write error.
+//
+// It returns ValidateMerge's error before writing anything, so a caller can
+// call ValidateMerge first to rule out errors other than write errors.
+func WriteMergedLines(w io.Writer, chunks []ChunkInfo, afterLine int) (int64, error) {
+	if len(chunks) == 1 && afterLine <= 0 {
+		if err := ValidateMerge(chunks); err != nil {
+			return 0, err
 		}
+		n, err := w.Write(chunks[0].Data)
+		return int64(n), err
+	}
+	lines, err := buildLineIndex(chunks)
+	if err != nil {
+		return 0, err
+	}
+	return writeLines(w, lines, afterLine)
+}
+
+// ValidateMerge reports whether chunks exceed the MaxMergeLines safety limit,
+// without reading their data.
+func ValidateMerge(chunks []ChunkInfo) error {
+	_, err := mergeMaxLine(chunks)
+	return err
+}
+
+// mergeMaxLine returns the highest line number across chunks, or an error if
+// it exceeds MaxMergeLines (corrupted chunk keys would otherwise size the line
+// index arbitrarily large).
+func mergeMaxLine(chunks []ChunkInfo) (int, error) {
+	maxLine := 0
+	for _, c := range chunks {
+		maxLine = max(maxLine, c.LastLine)
+	}
+	if maxLine > MaxMergeLines {
+		return 0, fmt.Errorf("maxLine %d exceeds safety limit %d", maxLine, MaxMergeLines)
+	}
+	return maxLine, nil
+}
+
+// buildLineIndex indexes chunk lines by line number (line 1 at index 0).
+// Chunks are applied in slice order, so a later chunk overwrites an earlier
+// one on overlap (last write wins). Entries are slices into chunk Data, not
+// copies; nil marks a line no chunk covers.
+func buildLineIndex(chunks []ChunkInfo) ([][]byte, error) {
+	maxLine, err := mergeMaxLine(chunks)
+	if err != nil {
+		return nil, err
+	}
+	if maxLine > LargeMergeWarningThreshold {
+		slog.Warn("Large chunk merge operation",
+			"max_line", maxLine,
+			"chunk_count", len(chunks),
+			"threshold", LargeMergeWarningThreshold)
 	}
 
-	return result, nil
+	lines := make([][]byte, maxLine)
+	for _, c := range chunks {
+		for i, line := range splitLines(c.Data) {
+			lineNum := c.FirstLine + i // 1-based line number
+			if lineNum < 1 || lineNum > maxLine {
+				continue
+			}
+			idx := lineNum - 1
+			if lines[idx] != nil && !bytes.Equal(lines[idx], line) {
+				slog.Warn("Chunk overlap with differing content",
+					"line_num", lineNum,
+					"chunk", c.Key,
+					"old_len", len(lines[idx]),
+					"new_len", len(line))
+			}
+			lines[idx] = line
+		}
+	}
+	return lines, nil
+}
+
+var newline = []byte{'\n'}
+
+// writeLines writes each indexed line numbered above afterLine, followed by
+// '\n', and returns the bytes written and the first write error.
+func writeLines(w io.Writer, lines [][]byte, afterLine int) (int64, error) {
+	start := min(max(afterLine, 0), len(lines)) // index of line afterLine+1
+	var total int64
+	for _, line := range lines[start:] {
+		if line == nil {
+			continue
+		}
+		n, err := w.Write(line)
+		total += int64(n)
+		if err != nil {
+			return total, err
+		}
+		n, err = w.Write(newline)
+		total += int64(n)
+		if err != nil {
+			return total, err
+		}
+	}
+	return total, nil
 }
 
 // splitLines splits data into lines, preserving each line's content without the newline.
