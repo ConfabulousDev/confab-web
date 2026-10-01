@@ -13,7 +13,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CostAmount } from '@/components/CostAmount';
 import { cx } from '@/utils/utils';
-import { addCmdFListener, retryOnAnimationFrame } from '@/components/transcript/timelineUtils';
+import {
+  addCmdFListener,
+  firstIndexAtOrAfter,
+  retryOnAnimationFrame,
+  scrollToSearchMatch,
+} from '@/components/transcript/timelineUtils';
+import { useFirstVisibleIndex } from '@/components/transcript/useFirstVisibleIndex';
 import { TimeSeparator } from '@/components/transcript/TimeSeparator';
 import TimelineBar from '@/components/transcript/TimelineBar';
 import { CostBar } from '@/components/transcript/CostBar';
@@ -218,7 +224,6 @@ export default function OpenCodeTranscriptPane({
 }: OpenCodeTranscriptPaneProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const hasScrolledToTarget = useRef(false);
-  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   // 5p9j: Cmd-F transcript search, parameterized over `filteredItems` so
@@ -252,6 +257,11 @@ export default function OpenCodeTranscriptPane({
       virtualItems[index]?.type === 'separator' ? ESTIMATED_SEPARATOR_HEIGHT : ESTIMATED_ROW_HEIGHT,
     overscan: 8,
   });
+
+  // Filtered index of the first visible row, so the bar indicator has something
+  // to point at when the user hasn't hovered a row. 6h7m: divider rows are
+  // skipped.
+  const firstVisibleIndex = useFirstVisibleIndex(parentRef, virtualizer, virtualItems, 'item');
 
   const targetIndex = useMemo(() => {
     if (!targetId) return -1;
@@ -338,29 +348,6 @@ export default function OpenCodeTranscriptPane({
     });
   }, [isCostMode, segmentLayout.segments, items]);
 
-  // Track the first visible row so the bar indicator has something to point at
-  // when the user hasn't hovered a row. 6h7m: skip divider rows and report
-  // the first visible ITEM's filtered index (mirrors ClaudeMessageTimeline's
-  // updateFirstVisible / CursorTranscriptPane's equivalent).
-  const updateFirstVisible = useCallback(() => {
-    const visible = virtualizer.getVirtualItems();
-    for (const vItem of visible) {
-      const vi = virtualItems[vItem.index];
-      if (vi && vi.type === 'item') {
-        setFirstVisibleIndex(vi.index);
-        return;
-      }
-    }
-  }, [virtualizer, virtualItems]);
-
-  useEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', updateFirstVisible, { passive: true });
-    updateFirstVisible();
-    return () => el.removeEventListener('scroll', updateFirstVisible);
-  }, [updateFirstVisible]);
-
   // 6h7m: `filteredIdx` is the FILTERED index (the axis skip-nav/deep-
   // link/bar-seek all speak) — translate through `filteredIndexToVirtualIndex`
   // before scrolling, so a divider preceding the target row doesn't throw off
@@ -385,15 +372,10 @@ export default function OpenCodeTranscriptPane({
     (unfilteredStart: number) => {
       const filteredIds = new Map<string, number>();
       filteredItems.forEach((it, idx) => filteredIds.set(it.id, idx));
-      for (let i = unfilteredStart; i < items.length; i++) {
-        const candidate = items[i];
-        if (!candidate) continue;
-        const filteredIdx = filteredIds.get(candidate.id);
-        if (filteredIdx !== undefined) {
-          scrollToItem(filteredIdx);
-          return;
-        }
-      }
+      const filteredIdx = firstIndexAtOrAfter(items, unfilteredStart, (it) =>
+        filteredIds.get(it.id),
+      );
+      if (filteredIdx !== undefined) scrollToItem(filteredIdx);
     },
     [items, filteredItems, scrollToItem],
   );
@@ -423,55 +405,18 @@ export default function OpenCodeTranscriptPane({
   // 5p9j: scroll to the current search match, then bring its first <mark> into
   // view inside the row. 6h7m: the match's filtered index is no longer its
   // virtual index once dividers can be injected, so translate through
-  // `filteredIndexToVirtualIndex` first. Structurally mirrors
-  // `CodexMessageTimeline.tsx`: scrollToIndex retries across frames as
-  // measurements settle, so we wait a few frames before locating the <mark> to
-  // avoid the bring-into-view being clobbered by a retry. This is what surfaces
-  // matches that live in rows the virtualizer hasn't mounted yet.
+  // `filteredIndexToVirtualIndex` first. The shared settle-then-locate sequence
+  // is what surfaces matches that live in rows the virtualizer hasn't mounted
+  // yet.
   useEffect(() => {
     if (search.currentMatchFilteredIndex === null) return;
     const idx = search.currentMatchFilteredIndex;
     const virtualIndex = filteredIndexToVirtualIndex.get(idx);
     if (virtualIndex === undefined) return;
 
-    retryOnAnimationFrame(
-      () => virtualizer.scrollToIndex(virtualIndex, { align: 'center' }),
-      () => false,
-    );
+    const cancel = scrollToSearchMatch(virtualizer, () => parentRef.current, virtualIndex);
     setSelectedIndex(idx);
-
-    let cancelled = false;
-    const scrollToIndexFrames = 6;
-    const maxMarkRetries = 10;
-    function scrollToMark(attempt: number) {
-      if (cancelled || attempt >= maxMarkRetries) return;
-      const scrollEl = parentRef.current;
-      if (!scrollEl) return;
-      const rowEl = scrollEl.querySelector(`[data-index="${virtualIndex}"]`);
-      if (!rowEl) {
-        requestAnimationFrame(() => scrollToMark(attempt + 1));
-        return;
-      }
-      const mark = rowEl.querySelector('mark');
-      if (mark) {
-        mark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } else {
-        requestAnimationFrame(() => scrollToMark(attempt + 1));
-      }
-    }
-    function delayThenScroll(framesLeft: number) {
-      if (cancelled) return;
-      if (framesLeft <= 0) {
-        scrollToMark(0);
-        return;
-      }
-      requestAnimationFrame(() => delayThenScroll(framesLeft - 1));
-    }
-    delayThenScroll(scrollToIndexFrames);
-
-    return () => {
-      cancelled = true;
-    };
+    return cancel;
   }, [search.currentMatchFilteredIndex, filteredIndexToVirtualIndex, virtualizer]);
 
   if (loading || error) {
