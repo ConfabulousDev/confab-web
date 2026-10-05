@@ -17,7 +17,23 @@ import (
 const (
 	MaxFailedAttempts = 5
 	LockoutDuration   = 15 * time.Minute
+
+	// BcryptCost is the cost factor for bcrypt hashing.
+	// 12 is a good balance of security and performance (~250ms on modern hardware).
+	// It lives here rather than in internal/auth (which aliases it as
+	// auth.BcryptCost) because auth imports dbauth, and dummyPasswordHash must
+	// stay at the same cost.
+	BcryptCost = 12
 )
+
+// dummyPasswordHash is a real bcrypt hash at BcryptCost of a random,
+// discarded string. AuthenticatePassword compares against it when no password
+// identity matches the email, so an unknown email costs the same bcrypt work
+// as a known email with a wrong password. It must be a well-formed hash at
+// BcryptCost: bcrypt rejects a malformed hash before doing any key expansion,
+// which would reopen the user-enumeration timing gap. Regenerate it if
+// BcryptCost changes (TestDummyPasswordHashIsValidAtBcryptCost enforces this).
+const dummyPasswordHash = "$2a$12$baXy3aUqA6YTfCrnFu9Iv.Y.fkuZA/N/tVOakmzltx87fa3xkl1GC"
 
 // AuthenticatePassword verifies email/password and returns the user if valid.
 // Handles account lockout after too many failed attempts.
@@ -53,8 +69,10 @@ func (s *Store) AuthenticatePassword(ctx context.Context, email, password string
 	)
 
 	if err == sql.ErrNoRows {
-		// No such user - but use constant time to prevent timing attacks
-		bcrypt.CompareHashAndPassword([]byte("$2a$12$dummy.hash.to.prevent.timing.attacks."), []byte(password))
+		// No such user: still pay a full-cost bcrypt comparison so response
+		// timing doesn't reveal whether the email exists. The result is
+		// irrelevant; the caller always gets ErrInvalidCredentials.
+		_ = bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(password))
 		return nil, db.ErrInvalidCredentials
 	}
 	if err != nil {
