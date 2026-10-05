@@ -26,7 +26,35 @@ const (
 	// BcryptCost is the cost factor for bcrypt hashing. Defined in dbauth,
 	// which needs it for its unknown-user dummy hash and cannot import auth.
 	BcryptCost = dbauth.BcryptCost
+
+	// MinPasswordBytes and MaxPasswordBytes bound password length in bytes,
+	// not characters. 72 is bcrypt's input limit: GenerateFromPassword rejects
+	// longer input, and CompareHashAndPassword silently ignores bytes past 72.
+	MinPasswordBytes = 8
+	MaxPasswordBytes = 72
 )
+
+var (
+	// ErrPasswordTooShort is returned by ValidatePasswordLength for a password
+	// shorter than MinPasswordBytes.
+	ErrPasswordTooShort = errors.New("password too short")
+	// ErrPasswordTooLong is returned by ValidatePasswordLength for a password
+	// longer than MaxPasswordBytes.
+	ErrPasswordTooLong = errors.New("password too long")
+)
+
+// ValidatePasswordLength enforces the password length policy for paths that
+// set a password: MinPasswordBytes to MaxPasswordBytes bytes. Over-long
+// passwords are rejected, never truncated.
+func ValidatePasswordLength(password string) error {
+	switch {
+	case len(password) < MinPasswordBytes:
+		return ErrPasswordTooShort
+	case len(password) > MaxPasswordBytes:
+		return ErrPasswordTooLong
+	}
+	return nil
+}
 
 // HashPassword creates a bcrypt hash of the password
 func HashPassword(password string) (string, error) {
@@ -69,7 +97,9 @@ func HandlePasswordLogin(database *db.DB, config *OAuthConfig) http.HandlerFunc 
 			redirectWithError(w, r, "Password is required")
 			return
 		}
-		if len(password) > 1024 {
+		// Checked before AuthenticatePassword, so it never counts as a failed
+		// attempt. No stored hash can belong to a longer password.
+		if len(password) > MaxPasswordBytes {
 			redirectWithError(w, r, "Password is too long")
 			return
 		}
@@ -215,9 +245,11 @@ func BootstrapAdmin(ctx context.Context, database *db.DB, allowedDomains []strin
 		return fmt.Errorf("ADMIN_BOOTSTRAP_EMAIL domain %q is not in ALLOWED_EMAIL_DOMAINS", domain)
 	}
 
-	// Validate password (minimum 8 characters)
-	if len(password) < 8 {
-		return fmt.Errorf("ADMIN_BOOTSTRAP_PASSWORD must be at least 8 characters")
+	switch err := ValidatePasswordLength(password); {
+	case errors.Is(err, ErrPasswordTooShort):
+		return fmt.Errorf("ADMIN_BOOTSTRAP_PASSWORD must be at least %d characters", MinPasswordBytes)
+	case errors.Is(err, ErrPasswordTooLong):
+		return fmt.Errorf("ADMIN_BOOTSTRAP_PASSWORD must be at most %d bytes", MaxPasswordBytes)
 	}
 
 	// Hash password

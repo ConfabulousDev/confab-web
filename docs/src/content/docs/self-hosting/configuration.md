@@ -57,7 +57,7 @@ Recommended for self-hosted deployments.
 |----------|---------|----------|-------------|
 | `AUTH_PASSWORD_ENABLED` | `false` | No | Set to `true` to enable username/password login |
 | `ADMIN_BOOTSTRAP_EMAIL` | *(none)* | If password auth enabled | Email for the initial admin user (created on first startup if no users exist) |
-| `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | If password auth enabled | Password for the initial admin user; remove after setup |
+| `ADMIN_BOOTSTRAP_PASSWORD` | *(none)* | If password auth enabled | Password for the initial admin user, 8–72 bytes; remove after setup |
 
 ### GitHub OAuth
 

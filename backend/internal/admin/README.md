@@ -42,7 +42,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | Method | Route pattern | Description |
 |--------|--------------|-------------|
 | `HandleListUsersAPI` | `GET /api/v1/admin/users` | Returns JSON user list with recap stats and totals |
-| `HandleCreateUserAPI` | `POST /api/v1/admin/users` | Creates a password-authenticated user (when password auth enabled) |
+| `HandleCreateUserAPI` | `POST /api/v1/admin/users` | Creates a password-authenticated user (when password auth enabled). Password length is checked with `auth.ValidatePasswordLength` (8–72 bytes) before hashing; violations are a 400. |
 | `HandleDeactivateUserAPI` | `POST /api/v1/admin/users/{id}/deactivate` | Sets user status to inactive. Body `confirm` must echo the target email (kyrr). |
 | `HandleActivateUserAPI` | `POST /api/v1/admin/users/{id}/activate` | Sets user status to active |
 | `HandleGrantAdminAPI` / `HandleRevokeAdminAPI` | `POST /api/v1/admin/users/{id}/grant-admin` \| `/revoke-admin` | Toggles the `users.is_admin` column (5k4v). Grant on a `read_only` user is rejected (D-S2). No last-admin lockout. |
@@ -94,6 +94,6 @@ Unit tests cover `IsSuperAdmin` with various env var configurations. Integration
 
 ## Dependencies
 
-**Uses:** `internal/analytics`, `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbadmincardinvalidations`, `internal/db/dbadminsettings`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`, `golang.org/x/crypto/bcrypt`
+**Uses:** `internal/analytics`, `internal/auth`, `internal/db`, `internal/db/access`, `internal/db/dbadmincardinvalidations`, `internal/db/dbadminsettings`, `internal/db/dbauth`, `internal/db/user`, `internal/httputil`, `internal/logger`, `internal/models`, `internal/recapquota`, `internal/storage`, `internal/validation`, `github.com/go-chi/chi/v5`
 
 **Used by:** `internal/api` (server setup and routing)
