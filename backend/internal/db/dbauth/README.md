@@ -8,7 +8,7 @@ Authentication and authorization database operations: OAuth identity management,
 |------|------|
 | `store.go` | `Store` struct definition |
 | `oauth.go` | `FindOrCreateUserByOAuth(ctx, info, autoLinkEmail)` -- finds user by provider identity, optionally links new identities to existing accounts by email match, or creates new users. When `autoLinkEmail` is false (the default), an email match with no existing identity returns `db.ErrAutoLinkDisabled` instead of linking (cm4f — prevents account takeover). Resolves pending share recipients on user creation. |
-| `password.go` | `AuthenticatePassword`, `CreatePasswordUser`, `BootstrapPasswordAdmin`, `UpdateUserPassword`, `GetUserByEmail`, `IsUserAdmin`. Includes bcrypt verification, account lockout after failed attempts, and timing-attack mitigation. |
+| `password.go` | `AuthenticatePassword`, `CreatePasswordUser`, `BootstrapPasswordAdmin`, `UpdateUserPassword`, `GetUserByEmail`, `IsUserAdmin`, plus the shared `BcryptCost` (12; aliased as `auth.BcryptCost`, defined here because `auth` imports `dbauth`). Includes bcrypt verification, account lockout after failed attempts, and timing-attack mitigation (unexported `dummyPasswordHash`). |
 | `web_sessions.go` | `CreateWebSession`, `GetWebSession`, `DeleteWebSession` -- browser session management with expiration. The `id` column stores `db.HashToken(cookieValue)` (sha256), never the raw token — callers pass the raw cookie value and the store hashes internally (40hj). `UpsertSharedSession` + `DeleteOtherSessionsForUser` (CF-483) keep the demo identity at exactly one persistent session row keyed by `auth.DemoSessionCookieID` (also hashed at rest); the demo cookie comparison stays raw-vs-raw. `GetWebSession` also returns `users.read_only` for `EnforceReadOnly`. **Idle timeout (60j6):** `GetWebSession(ctx, id, idleTimeout)` gates on a sliding `last_activity_at` (nullable; `COALESCE(last_activity_at, created_at)`) in addition to the absolute `expires_at` cap; on a valid read it refreshes `last_activity_at` via a throttled (≤1 write / 60s) race-safe conditional `UPDATE`. A non-positive `idleTimeout` disables both the gate and the touch (the demo shared session passes `0`). The idle window is resolved per-request in `auth` (`resolveSessionIdleTimeout`, env `SESSION_IDLE_TIMEOUT`, default 48h) and threaded in — placing the gate in the store means every caller (middleware + CLI/device/demo) inherits it. |
 | `api_keys.go` | `ValidateAPIKey`, `CreateAPIKeyWithReturn`, `ReplaceAPIKey`, `ListAPIKeys`, `DeleteAPIKey`, `CountAPIKeys`, `UpdateAPIKeyLastUsed` -- API key lifecycle with per-user limits. `ValidateAPIKey` also returns `users.read_only` (CF-483) so the auth middleware can stash the flag in request context. |
 | `device_codes.go` | `CreateDeviceCode`, `GetDeviceCodeByUserCode`, `GetDeviceCodeByDeviceCode`, `AuthorizeDeviceCode`, `DeleteDeviceCode` -- OAuth device code flow for CLI authentication. `device_code` is stored hashed at rest (`db.HashToken`, 40hj); `user_code` stays plaintext (low-entropy, short-lived — defended by the 8epk verify throttle). |
@@ -16,7 +16,7 @@ Authentication and authorization database operations: OAuth identity management,
 ## Key API
 
 - **`FindOrCreateUserByOAuth(ctx, info, autoLinkEmail)`** -- Three-step flow: (1) find by provider+provider_id, (2) find by email and link identity, (3) create new user+identity. Step 2 only links when `autoLinkEmail` is true; otherwise it returns `db.ErrAutoLinkDisabled` (cm4f, default — prevents OAuth→existing-account takeover). The OAuth callbacks map that sentinel to a `/login?error=account_exists` redirect. Resolves pending share recipients on new user creation (step 3).
-- **`AuthenticatePassword(ctx, email, password)`** -- Verifies credentials with bcrypt. Tracks failed attempts and locks accounts after 5 failures for 15 minutes. Uses constant-time comparison even for nonexistent users.
+- **`AuthenticatePassword(ctx, email, password)`** -- Verifies credentials with bcrypt. Tracks failed attempts and locks accounts after 5 failures for 15 minutes. For an email with no password identity it still runs a full-cost bcrypt comparison against `dummyPasswordHash` and returns `db.ErrInvalidCredentials` (yjr3).
 - **`CreatePasswordUser(ctx, email, hash, isAdmin)`** -- Creates user, password identity, and credentials in one transaction. Derives display name from email prefix. Resolves pending share recipients. Body factored into the tx-scoped `createPasswordUserTx` helper so `BootstrapPasswordAdmin` reuses it under its own lock.
 - **`BootstrapPasswordAdmin(ctx, email, hash)`** (7ys0) -- Atomically creates the initial admin iff no users exist. Takes a transaction-scoped `pg_advisory_xact_lock(bootstrapAdvisoryLockKey)`, re-checks `COUNT(*) FROM users` inside the lock, and only then creates the admin. Returns `(user, created=true, nil)` on the winning path and `(nil, created=false, nil)` for losers — no duplicate-email error. Called only by `auth.BootstrapAdmin` at startup.
 - **`ReplaceAPIKey(ctx, userID, keyHash, name)`** -- Atomically replaces an existing key with the same name or creates a new one (subject to `MaxAPIKeysPerUser`). Used by CLI device code flow.
@@ -40,18 +40,20 @@ Authentication and authorization database operations: OAuth identity management,
 - Admin bootstrap is serialized by a single transaction-scoped advisory lock (`bootstrapAdvisoryLockKey`, the only advisory lock the app takes). The count-check and admin create run inside that one transaction, so concurrent server starts against an empty DB create exactly one admin (7ys0 / CF-425 A3/E1).
 - Web sessions are filtered by `expires_at > NOW()` in the SELECT query, not by application-level expiry checks.
 - Device codes must be both unexpired and unauthorized (`authorized_at IS NULL`) to be authorized.
+- `dummyPasswordHash` must be a well-formed bcrypt hash at `BcryptCost`. A malformed hash (the pre-yjr3 literal was 44 bytes) makes bcrypt return `ErrHashTooShort` before any key expansion, so unknown emails answer in ~1 ms versus ~250 ms for a known email with a wrong password. Regenerate the literal if `BcryptCost` changes; `password_dummy_hash_test.go` enforces both.
 
 ## Design Decisions
 
 - **Identity table pattern**: Users can have multiple identities (OAuth providers, password). The `user_identities` table links providers to users, with `identity_passwords` as a child table for password-specific data.
 - **Account linking by email**: When a new OAuth identity's email matches an existing user, the identity is automatically linked rather than creating a duplicate account.
-- **Timing-attack mitigation**: `AuthenticatePassword` performs a dummy bcrypt comparison for nonexistent users to prevent email enumeration via response timing.
+- **Timing-attack mitigation**: `AuthenticatePassword` performs a full-cost bcrypt comparison against a precomputed dummy hash for nonexistent users to prevent email enumeration via response timing. The hash is a committed literal rather than generated at startup or lazily, so no request pays the generation cost.
 - **Transactional user creation**: User + identity + credentials are created in a single transaction to prevent orphaned rows on partial failure.
 - **`ReplaceAPIKey` atomicity**: Delete-then-insert is wrapped in a transaction so the old key is only removed if the new one is successfully created.
 
 ## Testing
 
 - Integration tests per domain: `oauth_test.go`, `password_test.go`, `web_sessions_test.go`, `api_keys_test.go`, `device_codes_test.go`
+- Unit tests (in-package): `password_dummy_hash_test.go` — `dummyPasswordHash` parses at `BcryptCost` and compares to `ErrMismatchedHashAndPassword`, not a hash-parse error.
 - Tests cover: account linking, lockout progression and reset, key limit enforcement, device code lifecycle, and web session expiry.
 
 ## Dependencies

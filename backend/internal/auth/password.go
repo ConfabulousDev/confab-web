@@ -23,9 +23,9 @@ const (
 	// ProviderPassword is the provider name for password-based auth
 	ProviderPassword = "password"
 
-	// BcryptCost is the cost factor for bcrypt hashing
-	// 12 is a good balance of security and performance (~250ms on modern hardware)
-	BcryptCost = 12
+	// BcryptCost is the cost factor for bcrypt hashing. Defined in dbauth,
+	// which needs it for its unknown-user dummy hash and cannot import auth.
+	BcryptCost = dbauth.BcryptCost
 )
 
 // HashPassword creates a bcrypt hash of the password
