@@ -7,7 +7,7 @@ Input validation and sanitization utilities for field length limits, email forma
 | File | Role |
 |------|------|
 | `input.go` | Field length constants (matching DB constraints), validation functions, `TruncateToByteLimit`, provider constants and validator |
-| `input_test.go` | Tests for `ValidateExternalID`, `ValidateHostname`, `ValidateUsername`, `ValidateProvider` |
+| `input_test.go` | Tests for `ValidateExternalID`, `ValidateHostname`, `ValidateUsername`, `ValidateProvider`, `ValidateCodexRolloutMetadata` (incl. self-parent across UUID spellings), `ValidateGitInfo` |
 | `email.go` | Email format validation, domain allowlist checking, email normalization, and domain list validation |
 | `email_test.go` | Tests for email format validation, domain allowlist logic, `NormalizeEmail`, and domain list validation |
 
@@ -34,6 +34,7 @@ Each function returns `nil` if valid, or an error describing the violation:
 - **`ValidateHostname(hostname string) error`** -- Max 255 characters.
 - **`ValidateUsername(username string) error`** -- Max 255 characters.
 - **`ValidateProvider(provider string) error`** -- Strict exact-match against `ProviderClaudeCode` (`"claude-code"`) and `ProviderCodex` (`"codex"`). No trimming, no case folding. An empty string is rejected — the HTTP handler is responsible for defaulting a missing API field to `ProviderClaudeCode` before calling.
+- **`ValidateCodexRolloutMetadata(threadUUID string, parentThreadUUID *string, rolloutPath, cwd, model, source, threadSource, agentPath, agentRole, agentNickname string) error`** -- The `codex_rollout` sub-block of `POST /api/v1/sync/chunk`. `thread_uuid` is required and must parse as a UUID; `parent_thread_uuid` is optional (nil = root), but an empty string, an unparseable value, or the same UUID as `thread_uuid` is rejected. The self-parent check compares parsed `uuid.UUID` values, not strings, so case, unhyphenated, braced and URN spellings of one UUID count as equal. `rollout_path` is required, and every field has a `MaxCodex*Length` cap.
 
 ### Truncation (`input.go`)
 

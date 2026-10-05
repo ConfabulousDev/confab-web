@@ -273,17 +273,22 @@ func ValidateCodexRolloutMetadata(
 	if threadUUID == "" {
 		return fmt.Errorf("thread_uuid is required")
 	}
-	if _, err := uuid.Parse(threadUUID); err != nil {
+	tid, err := uuid.Parse(threadUUID)
+	if err != nil {
 		return fmt.Errorf("thread_uuid must be a valid UUID")
 	}
 	if parentThreadUUID != nil {
 		if *parentThreadUUID == "" {
 			return fmt.Errorf("parent_thread_uuid must not be empty when provided (omit the field for root rollouts)")
 		}
-		if _, err := uuid.Parse(*parentThreadUUID); err != nil {
+		pid, err := uuid.Parse(*parentThreadUUID)
+		if err != nil {
 			return fmt.Errorf("parent_thread_uuid must be a valid UUID")
 		}
-		if *parentThreadUUID == threadUUID {
+		// Compare parsed values, not strings: every spelling uuid.Parse accepts
+		// (case, raw hex, URN, braces) names one UUID, and the UUID columns
+		// store the spellings Postgres accepts as that same value (wmet).
+		if pid == tid {
 			return fmt.Errorf("parent_thread_uuid must not equal thread_uuid")
 		}
 	}

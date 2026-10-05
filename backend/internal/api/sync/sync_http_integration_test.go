@@ -4293,6 +4293,57 @@ func TestSyncChunk_CodexRollout_HTTP_Integration(t *testing.T) {
 		testutil.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
+	// wmet: the self-link check compares parsed UUIDs, so an upper-case parent
+	// spelling of the lower-case thread UUID is the same Postgres UUID and must
+	// be rejected before any codex_rollouts row is written.
+	t.Run("400 on self-link with differently-cased parent_thread_uuid", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "cr-self-case@example.com", "User")
+		apiKey := testutil.CreateTestAPIKeyWithToken(t, env, user.ID, "K")
+		sessionID := testutil.CreateTestSessionWithProvider(t, env, user.ID, "ext-cr-self-case", "codex")
+
+		ts := setupTestServerWithEnv(t, env)
+		client := testutil.NewTestClient(t, ts).WithAPIKey(apiKey.RawToken)
+
+		const threadUUID = "abcdefab-cdef-4abc-8def-abcdefabcdef"
+		resp, err := client.Post("/api/v1/sync/chunk", api.SyncChunkRequest{
+			SessionID: sessionID,
+			FileName:  "x.jsonl",
+			FileType:  "transcript",
+			FirstLine: 1,
+			Lines:     []string{`{"x":1}`},
+			Metadata: &api.SyncChunkMetadata{
+				CodexRollout: &api.SyncCodexRolloutMetadata{
+					ThreadUUID:       threadUUID,
+					ParentThreadUUID: ptr(strings.ToUpper(threadUUID)),
+					RolloutPath:      "/x.jsonl",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+		testutil.RequireStatus(t, resp, http.StatusBadRequest)
+
+		var result map[string]string
+		testutil.ParseJSON(t, resp, &result)
+		if want := "parent_thread_uuid must not equal thread_uuid"; result["error"] != want {
+			t.Errorf("error = %q, want %q", result["error"], want)
+		}
+
+		var count int
+		if err := env.DB.QueryRow(env.Ctx,
+			`SELECT COUNT(*) FROM codex_rollouts WHERE user_id = $1`, user.ID,
+		).Scan(&count); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("codex_rollouts rows after rejected self-link = %d, want 0", count)
+		}
+	})
+
 	t.Run("400 on empty rollout_path", func(t *testing.T) {
 		env.CleanDB(t)
 
