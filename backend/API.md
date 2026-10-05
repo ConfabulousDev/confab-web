@@ -256,7 +256,7 @@ parent-child tree shape and per-thread metadata.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `thread_uuid` | string | Yes | UUID identifying the thread. Required, must be a valid UUID. |
-| `parent_thread_uuid` | string | No | UUID of the parent thread. Omit for root rollouts. If provided: must be a valid UUID and must not equal `thread_uuid`. An explicit empty string is rejected. Orphan parents (referencing UUIDs not yet uploaded) are allowed. |
+| `parent_thread_uuid` | string | No | UUID of the parent thread. Omit for root rollouts. If provided: must be a valid UUID and must not equal `thread_uuid`, compared as parsed UUIDs (so differently-cased, unhyphenated or braced spellings of the same UUID count as equal). An explicit empty string is rejected. Orphan parents (referencing UUIDs not yet uploaded) are allowed. |
 | `rollout_path` | string | Yes | Filesystem path to the Codex rollout JSONL on the CLI host. ≤ 8192 chars. |
 | `cwd` | string | No | Working directory. ≤ 8192 chars. |
 | `model` | string | No | Model name. ≤ 255 chars. |
@@ -269,7 +269,7 @@ parent-child tree shape and per-thread metadata.
 **Validation errors (400):**
 - `codex_rollout` on a non-codex session
 - Missing or invalid `thread_uuid`
-- Invalid `parent_thread_uuid` (empty string when set, malformed UUID, equal to `thread_uuid`)
+- Invalid `parent_thread_uuid` (empty string when set, malformed UUID, the same UUID as `thread_uuid` in any spelling)
 - Missing `rollout_path`
 - Any field exceeding its length limit
 
