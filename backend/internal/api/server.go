@@ -300,7 +300,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	// but sit OUTSIDE the CSRF group below; guard them with the Fetch-Metadata
 	// cross-origin check (covers the state-changing GET that the CSRF library
 	// skips). Reuses trustedOrigins.
-	r.Get("/auth/cli/authorize", withMaxBody(MaxBodyXS, crossOriginGuard(trustedOrigins, ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db)))))
+	r.Get("/auth/cli/authorize", withMaxBody(MaxBodyXS, crossOriginGuard(trustedOrigins, ratelimit.HandlerFunc(s.authLimiter, auth.HandleCLIAuthorize(s.db, s.oauthConfig.AllowedEmailDomains)))))
 
 	// Device code flow (for CLI on headless/remote machines)
 	backendURL := os.Getenv("BACKEND_URL")

@@ -714,52 +714,46 @@ func generateRandomString(length int) (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
 }
 
-// HandleCLIAuthorize handles CLI API key generation flow
-func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
+// redirectCLIToLogin sends a CLI authorize request to the login selector and
+// sets the cli_redirect cookie so the post-login hop returns here confirmed.
+func redirectCLIToLogin(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "cli_redirect",
+		Value:    "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1",
+		Path:     "/",
+		MaxAge:   300, // 5 minutes
+		HttpOnly: true,
+		Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+}
+
+// HandleCLIAuthorize handles CLI API key generation flow.
+//
+// The route has no credential middleware (it bootstraps a credential), so it
+// rechecks account eligibility itself before minting (dxys): TrySessionAuth
+// treats an inactive account as logged out, read-only identities are denied,
+// and the email domain must pass allowedDomains (empty = no restriction).
+func HandleCLIAuthorize(database *db.DB, allowedDomains []string) http.HandlerFunc {
 	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Ctx(r.Context())
 		ctx := r.Context()
+		frontendURL := os.Getenv("FRONTEND_URL")
 
 		// Check if user confirmed provider choice (came back from login selector)
 		confirmed := r.URL.Query().Get("confirmed") == "1"
 
-		// Get session cookie (user must be logged in via web)
-		cookie, err := r.Cookie(SessionCookieName)
-		if err != nil {
-			// No session - redirect to login selector, then back here
-			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
-			http.SetCookie(w, &http.Cookie{
-				Name:     "cli_redirect",
-				Value:    redirectURL,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
-				SameSite: http.SameSiteLaxMode,
-			})
-			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Validate session
-		session, err := authStore.GetWebSession(ctx, cookie.Value, resolveSessionIdleTimeout(log))
-		if err != nil {
-			// Session is invalid or expired - clear the stale cookie and redirect to login
-			clearCookie(w, SessionCookieName)
-
-			// Redirect to login selector, then back here
-			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
-			http.SetCookie(w, &http.Cookie{
-				Name:     "cli_redirect",
-				Value:    redirectURL,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(), // HTTPS-only (set INSECURE_DEV_MODE=true to disable for local dev)
-				SameSite: http.SameSiteLaxMode,
-			})
-			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+		// User must be logged in via web. A missing, expired, idle or inactive
+		// session all send the user to the login selector, then back here; a
+		// stale cookie is cleared first.
+		session := TrySessionAuth(r, database)
+		if session == nil {
+			if _, err := r.Cookie(SessionCookieName); err == nil {
+				clearCookie(w, SessionCookieName)
+			}
+			redirectCLIToLogin(w, r)
 			return
 		}
 
@@ -767,10 +761,9 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		// Even though the auth/cli/* endpoints are not auto-impersonated,
 		// a visitor who first browsed the SPA holds the shared demo
 		// cookie and would otherwise mint API keys here.
-		if session.ReadOnly {
-			log.Warn("CLI authorize blocked for read-only user", "user_id", session.UserID)
+		if session.userReadOnly {
+			log.Warn("CLI authorize blocked for read-only user", "user_id", session.userID)
 			clearCookie(w, SessionCookieName)
-			frontendURL := os.Getenv("FRONTEND_URL")
 			errorURL := fmt.Sprintf("%s/login?error=access_denied&error_description=%s",
 				frontendURL,
 				url.QueryEscape("This identity cannot create API keys. Log in with your own account."))
@@ -778,20 +771,17 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 			return
 		}
 
+		// Email domain allow-list (no-op when allowedDomains is empty).
+		if !validation.IsAllowedEmailDomain(session.userEmail, allowedDomains) {
+			clearCookie(w, SessionCookieName)
+			redirectUserIneligible(w, r, frontendURL, "cli", session.userEmail, errEmailDomainNotPermitted)
+			return
+		}
+
 		// If user has session but hasn't confirmed provider choice yet, show selector
 		// This allows users to switch accounts/providers during CLI login
 		if !confirmed {
-			redirectURL := "/auth/cli/authorize?" + r.URL.RawQuery + "&confirmed=1"
-			http.SetCookie(w, &http.Cookie{
-				Name:     "cli_redirect",
-				Value:    redirectURL,
-				Path:     "/",
-				MaxAge:   300, // 5 minutes
-				HttpOnly: true,
-				Secure:   cookieSecure(),
-				SameSite: http.SameSiteLaxMode,
-			})
-			http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+			redirectCLIToLogin(w, r)
 			return
 		}
 
@@ -823,13 +813,12 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 
 		// Replace existing API key with same name, or create new one
 		// This prevents unbounded key growth when re-authenticating from the same machine
-		keyID, createdAt, err := authStore.ReplaceAPIKey(ctx, session.UserID, keyHash, keyName)
+		keyID, createdAt, err := authStore.ReplaceAPIKey(ctx, session.userID, keyHash, keyName)
 		if err != nil {
 			if err == db.ErrAPIKeyLimitExceeded {
 				// Redirect to callback with error that CLI can handle
-				frontendURL := os.Getenv("FRONTEND_URL")
 				redirectURL := fmt.Sprintf("%s?error=api_key_limit_exceeded", callback)
-				log.Warn("API key limit exceeded", "user_id", session.UserID)
+				log.Warn("API key limit exceeded", "user_id", session.userID)
 				// Also show a helpful page before redirecting
 				html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -859,7 +848,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 				w.Write([]byte(html))
 				return
 			}
-			log.Error("Failed to create API key in database", "error", err, "user_id", session.UserID)
+			log.Error("Failed to create API key in database", "error", err, "user_id", session.userID)
 			http.Error(w, "Failed to create API key", http.StatusInternalServerError)
 			return
 		}
@@ -867,7 +856,7 @@ func HandleCLIAuthorize(database *db.DB) http.HandlerFunc {
 		log.Info("API key created successfully",
 			"key_id", keyID,
 			"name", keyName,
-			"user_id", session.UserID,
+			"user_id", session.userID,
 			"created_at", createdAt)
 
 		// Redirect to callback with API key

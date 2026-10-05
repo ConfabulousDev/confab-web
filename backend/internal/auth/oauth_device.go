@@ -18,6 +18,7 @@ import (
 	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/httputil"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
@@ -156,6 +157,23 @@ func writeDeviceTokenError(w http.ResponseWriter, statusCode int, errorCode stri
 	httputil.RespondJSON(w, statusCode, DeviceTokenResponse{Error: errorCode})
 }
 
+// deviceTokenIneligibleReason returns why the user that authorized a device
+// code may no longer receive its API key, or "" when it may. A nil user (deleted
+// since authorization) is ineligible.
+func deviceTokenIneligibleReason(user *models.User, allowedDomains []string) string {
+	switch {
+	case user == nil:
+		return "user_not_found"
+	case user.Status == models.UserStatusInactive:
+		return "user_inactive"
+	case user.ReadOnly:
+		return "user_read_only"
+	case !validation.IsAllowedEmailDomain(user.Email, allowedDomains):
+		return "email_domain_not_permitted"
+	}
+	return ""
+}
+
 // HandleDeviceToken exchanges a device code for an API key
 // POST /auth/device/token
 func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFunc {
@@ -201,20 +219,21 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 			return
 		}
 
-		// Check email domain restriction on the authorized user
-		if len(allowedDomains) > 0 {
-			user, err := userStore.GetUserByID(ctx, *dc.UserID)
-			if err != nil {
-				log.Error("Failed to get user for domain check", "error", err, "user_id", *dc.UserID)
-				writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
-				return
-			}
-			if !validation.IsAllowedEmailDomain(user.Email, allowedDomains) {
-				log.Warn("Email domain not permitted in device flow", "email", user.Email, "user_id", *dc.UserID)
-				authStore.DeleteDeviceCode(ctx, req.DeviceCode)
-				writeDeviceTokenError(w, http.StatusForbidden, "access_denied")
-				return
-			}
+		// Recheck the authorizing user's current eligibility (dxys): the account
+		// may have been deactivated, made read-only, or fallen outside the domain
+		// allow-list since it verified the code. Any of these is terminal: the
+		// code is deleted and the poll gets access_denied (RFC 8628).
+		user, err := userStore.GetUserByID(ctx, *dc.UserID)
+		if err != nil && !errors.Is(err, db.ErrUserNotFound) {
+			log.Error("Failed to get user for device token eligibility check", "error", err, "user_id", *dc.UserID)
+			writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
+			return
+		}
+		if reason := deviceTokenIneligibleReason(user, allowedDomains); reason != "" {
+			log.Warn("Device token denied: user not eligible", "reason", reason, "user_id", *dc.UserID)
+			authStore.DeleteDeviceCode(ctx, req.DeviceCode)
+			writeDeviceTokenError(w, http.StatusForbidden, "access_denied")
+			return
 		}
 
 		// Authorized! Generate API key
@@ -262,24 +281,13 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 // HandleDevicePage serves the device verification page
 // GET /auth/device
 func HandleDevicePage(database *db.DB) http.HandlerFunc {
-	authStore := &dbauth.Store{DB: database}
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get pre-filled code from query param
 		prefilledCode := r.URL.Query().Get("code")
 
-		// Check if user is logged in
-		cookie, err := r.Cookie(SessionCookieName)
-		loggedIn := err == nil && cookie.Value != ""
-
-		if loggedIn {
-			_, err := authStore.GetWebSession(r.Context(), cookie.Value, resolveSessionIdleTimeout(logger.Ctx(r.Context())))
-			if err != nil {
-				loggedIn = false
-			}
-		}
-
-		// If not logged in, redirect directly to login selector
-		if !loggedIn {
+		// If not logged in (no, expired, idle or inactive session), redirect
+		// directly to login selector
+		if TrySessionAuth(r, database) == nil {
 			redirectURL := "/auth/device"
 			if prefilledCode != "" {
 				redirectURL = "/auth/device?code=" + url.QueryEscape(prefilledCode)
@@ -324,15 +332,10 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		}
 		loginRedirect := "/login?redirect=" + url.QueryEscape(redirectURL)
 
-		// Must be logged in
-		cookie, err := r.Cookie(SessionCookieName)
-		if err != nil {
-			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
-			return
-		}
-
-		session, err := authStore.GetWebSession(ctx, cookie.Value, resolveSessionIdleTimeout(logger.Ctx(ctx)))
-		if err != nil {
+		// Must be logged in with an active account: a missing, expired, idle or
+		// inactive session is sent to login (dxys).
+		session := TrySessionAuth(r, database)
+		if session == nil {
 			http.Redirect(w, r, loginRedirect, http.StatusTemporaryRedirect)
 			return
 		}
@@ -340,8 +343,8 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		// CF-483 B1: never authorize device codes for the demo (read-only)
 		// user. Same rationale as HandleCLIAuthorize — a visitor holding
 		// the shared demo cookie could otherwise mint a CLI device.
-		if session.ReadOnly {
-			log.Warn("Device verify blocked for read-only user", "user_id", session.UserID)
+		if session.userReadOnly {
+			log.Warn("Device verify blocked for read-only user", "user_id", session.userID)
 			html := generateDeviceResultHTML(false, "This identity cannot authorize devices. Log in with your own account.")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusForbidden)
@@ -350,8 +353,8 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		}
 
 		// Check email domain restriction before authorizing device code
-		if !validation.IsAllowedEmailDomain(session.UserEmail, allowedDomains) {
-			log.Warn("Email domain not permitted in device verify", "email", session.UserEmail)
+		if !validation.IsAllowedEmailDomain(session.userEmail, allowedDomains) {
+			log.Warn("Email domain not permitted in device verify", "email", session.userEmail)
 			html := generateDeviceResultHTML(false, "Your email domain is not permitted. Contact your administrator.")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusForbidden)
@@ -361,9 +364,9 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 
 		// Per-verifier brute-force lockout: too many failed verify attempts by
 		// this session locks it out of device-verify for the window (8epk).
-		limiterKey := strconv.FormatInt(session.UserID, 10)
+		limiterKey := strconv.FormatInt(session.userID, 10)
 		if verifyLimiter.Locked(limiterKey) {
-			log.Warn("Device verify locked out after repeated failures", "user_id", session.UserID)
+			log.Warn("Device verify locked out after repeated failures", "user_id", session.userID)
 			html := generateDeviceResultHTML(false, "Too many attempts. Please wait a few minutes and try again.")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -381,8 +384,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		}
 
 		// Validate and authorize
-		err = authStore.AuthorizeDeviceCode(ctx, userCode, session.UserID)
-		if err != nil {
+		if err := authStore.AuthorizeDeviceCode(ctx, userCode, session.userID); err != nil {
 			verifyLimiter.RecordFailure(limiterKey)
 			log.Warn("Device code authorization failed", "error", err, "user_code", userCode)
 			// Show error page
@@ -394,7 +396,7 @@ func HandleDeviceVerify(database *db.DB, allowedDomains []string) http.HandlerFu
 		}
 		verifyLimiter.Reset(limiterKey) // successful authorize clears the count
 
-		log.Info("Device code authorized", "user_code", userCode, "user_id", session.UserID)
+		log.Info("Device code authorized", "user_code", userCode, "user_id", session.userID)
 
 		// Show success page
 		html := generateDeviceResultHTML(true, "Device authorized! You can close this window and return to your terminal.")
