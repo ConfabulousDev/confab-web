@@ -134,9 +134,25 @@ func (s *Store) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name s
 	}
 	defer tx.Rollback()
 
+	keyID, createdAt, err := replaceAPIKeyTx(ctx, tx, userID, keyHash, name)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, time.Time{}, fmt.Errorf("failed to commit: %w", err)
+	}
+
+	return keyID, createdAt, nil
+}
+
+// replaceAPIKeyTx is ReplaceAPIKey's body, run inside the caller's
+// transaction so key issuance can commit or roll back together with other
+// writes (see ConsumeDeviceCodeAndReplaceKey). The caller owns commit/rollback.
+func replaceAPIKeyTx(ctx context.Context, tx *sql.Tx, userID int64, keyHash, name string) (int64, time.Time, error) {
 	// Check if a key with the same name already exists
 	var existingKeyID int64
-	err = tx.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT id FROM api_keys WHERE user_id = $1 AND name = $2`,
 		userID, name).Scan(&existingKeyID)
 
@@ -177,10 +193,6 @@ func (s *Store) ReplaceAPIKey(ctx context.Context, userID int64, keyHash, name s
 		userID, keyHash, name).Scan(&keyID, &createdAt)
 	if err != nil {
 		return 0, time.Time{}, fmt.Errorf("failed to create API key: %w", err)
-	}
-
-	if err = tx.Commit(); err != nil {
-		return 0, time.Time{}, fmt.Errorf("failed to commit: %w", err)
 	}
 
 	return keyID, createdAt, nil

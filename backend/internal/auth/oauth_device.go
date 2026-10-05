@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -224,28 +225,31 @@ func HandleDeviceToken(database *db.DB, allowedDomains []string) http.HandlerFun
 			return
 		}
 
-		// Replace existing API key with same name, or create new one
-		// This prevents unbounded key growth when re-authenticating from the same machine
-		keyID, createdAt, err := authStore.ReplaceAPIKey(ctx, *dc.UserID, keyHash, dc.KeyName)
+		// Consume the code and issue the key in one transaction (one-time use).
+		// A same-name key is replaced, which prevents unbounded key growth when
+		// re-authenticating from the same machine. A concurrent poll that lost
+		// the claim gets ErrDeviceCodeNotFound; a failed issuance rolls back and
+		// leaves the code unconsumed.
+		consumed, err := authStore.ConsumeDeviceCodeAndReplaceKey(ctx, req.DeviceCode, keyHash)
 		if err != nil {
-			if err == db.ErrAPIKeyLimitExceeded {
+			switch {
+			case errors.Is(err, db.ErrDeviceCodeNotFound):
+				writeDeviceTokenError(w, http.StatusBadRequest, "invalid_grant")
+			case errors.Is(err, db.ErrAPIKeyLimitExceeded):
 				log.Warn("API key limit exceeded during device flow", "user_id", *dc.UserID)
 				writeDeviceTokenError(w, http.StatusConflict, "api_key_limit_exceeded")
-				return
+			default:
+				log.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
+				writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
 			}
-			log.Error("Failed to create API key", "error", err, "user_id", *dc.UserID)
-			writeDeviceTokenError(w, http.StatusInternalServerError, "server_error")
 			return
 		}
 
 		log.Info("API key created via device flow",
-			"key_id", keyID,
-			"name", dc.KeyName,
-			"user_id", *dc.UserID,
-			"created_at", createdAt)
-
-		// Delete the device code (one-time use)
-		authStore.DeleteDeviceCode(ctx, req.DeviceCode)
+			"key_id", consumed.KeyID,
+			"name", consumed.KeyName,
+			"user_id", consumed.UserID,
+			"created_at", consumed.CreatedAt)
 
 		// Return the API key
 		httputil.RespondJSON(w, http.StatusOK, DeviceTokenResponse{
