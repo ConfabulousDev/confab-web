@@ -1,10 +1,12 @@
 package auth_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -247,6 +249,98 @@ func TestDeviceToken_HTTP_Integration(t *testing.T) {
 		}
 		if !strings.HasPrefix(result.AccessToken, "cfb_") {
 			t.Error("expected cfb_ prefix")
+		}
+	})
+
+	t.Run("concurrent polls of an authorized code yield exactly one access token", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "race@example.com", "Race User")
+		deviceCode := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+		testutil.CreateTestDeviceCode(t, env, deviceCode, "RACE-1234", "Race Key", time.Now().UTC().Add(15*time.Minute))
+		testutil.AuthorizeTestDeviceCode(t, env, "RACE-1234", user.ID)
+
+		ts := setupDeviceCodeTestServer(t, env)
+		client := testutil.NewTestClient(t, ts)
+
+		type outcome struct {
+			status int
+			body   auth.DeviceTokenResponse
+			err    error
+		}
+		const n = 10
+		outcomes := make([]outcome, n)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := range n {
+			wg.Go(func() {
+				<-start
+				resp, err := client.Post("/auth/device/token", auth.DeviceTokenRequest{DeviceCode: deviceCode})
+				if err != nil {
+					outcomes[i].err = err
+					return
+				}
+				defer resp.Body.Close()
+				outcomes[i].status = resp.StatusCode
+				outcomes[i].err = json.NewDecoder(resp.Body).Decode(&outcomes[i].body)
+			})
+		}
+		close(start)
+		wg.Wait()
+
+		var tokens []string
+		for i, o := range outcomes {
+			switch {
+			case o.err != nil:
+				t.Errorf("poll %d: %v", i, o.err)
+			case o.status == http.StatusOK:
+				tokens = append(tokens, o.body.AccessToken)
+			case o.status == http.StatusBadRequest && o.body.Error == "invalid_grant":
+			default:
+				t.Errorf("poll %d: status %d error %q, want 200 or 400 invalid_grant", i, o.status, o.body.Error)
+			}
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("successful polls = %d, want exactly 1", len(tokens))
+		}
+
+		authStore := &dbauth.Store{DB: env.DB}
+		userID, _, _, _, _, err := authStore.ValidateAPIKey(env.Ctx, auth.HashAPIKey(tokens[0]))
+		if err != nil {
+			t.Fatalf("the returned access token must remain valid: %v", err)
+		}
+		if userID != user.ID {
+			t.Errorf("user_id = %d, want %d", userID, user.ID)
+		}
+	})
+
+	t.Run("returns invalid_grant when an already-exchanged code is polled again", func(t *testing.T) {
+		env.CleanDB(t)
+
+		user := testutil.CreateTestUser(t, env, "replay@example.com", "Replay User")
+		deviceCode := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+		testutil.CreateTestDeviceCode(t, env, deviceCode, "RPLY-1234", "Replay Key", time.Now().UTC().Add(15*time.Minute))
+		testutil.AuthorizeTestDeviceCode(t, env, "RPLY-1234", user.ID)
+
+		ts := setupDeviceCodeTestServer(t, env)
+		client := testutil.NewTestClient(t, ts)
+
+		first, err := client.Post("/auth/device/token", auth.DeviceTokenRequest{DeviceCode: deviceCode})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, first, http.StatusOK)
+		first.Body.Close()
+
+		second, err := client.Post("/auth/device/token", auth.DeviceTokenRequest{DeviceCode: deviceCode})
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		testutil.RequireStatus(t, second, http.StatusBadRequest)
+		var result auth.DeviceTokenResponse
+		testutil.ParseJSON(t, second, &result)
+		if result.Error != "invalid_grant" {
+			t.Errorf("expected 'invalid_grant', got %s", result.Error)
 		}
 	})
 

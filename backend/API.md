@@ -1173,6 +1173,19 @@ When `email` is provided:
 
 `/auth/device/code` and `/auth/device/token` responses (including errors) carry `Cache-Control: no-store`.
 
+`POST /auth/device/token` (body `{"device_code": "..."}`) responses:
+
+| Status | Body | When |
+|--------|------|------|
+| 200 | `{"access_token": "cfb_...", "token_type": "Bearer"}` | Code authorized; the code is consumed and the key issued in one transaction |
+| 400 | `{"error": "authorization_pending"}` | Code not yet authorized; keep polling |
+| 400 | `{"error": "expired_token"}` | Code expired |
+| 400 | `{"error": "invalid_grant"}` | Unknown code, or already exchanged (a code is single-use: of several concurrent polls exactly one gets the 200, the rest get `invalid_grant`) |
+| 400 | `{"error": "invalid_request"}` | Malformed body or empty `device_code` |
+| 403 | `{"error": "access_denied"}` | Authorizing user's email domain not allowed |
+| 409 | `{"error": "api_key_limit_exceeded"}` | User is at the API key limit; the code is **not** consumed, so it can be retried until it expires |
+| 500 | `{"error": "server_error"}` | Internal error |
+
 ---
 
 ## Admin Endpoints (Super Admin Only)
