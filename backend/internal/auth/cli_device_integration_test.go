@@ -13,12 +13,24 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
 func countAPIKeys(t *testing.T, env *testutil.TestEnvironment, userID int64) int {
 	t.Helper()
 	return countRows(t, env, `SELECT count(*) FROM api_keys WHERE user_id = $1`, userID)
+}
+
+// setUserAccountState overwrites a user's status and read_only flag, simulating
+// an admin deactivation or read-only transition after a session or device
+// authorization already exists.
+func setUserAccountState(t *testing.T, env *testutil.TestEnvironment, userID int64, status models.UserStatus, readOnly bool) {
+	t.Helper()
+	if _, err := env.DB.Conn().ExecContext(context.Background(),
+		`UPDATE users SET status = $1, read_only = $2 WHERE id = $3`, status, readOnly, userID); err != nil {
+		t.Fatalf("set user account state: %v", err)
+	}
 }
 
 // seedAPIKeysToLimit inserts MaxAPIKeysPerUser keys for userID in one statement.
@@ -74,7 +86,7 @@ func TestHandleCLIAuthorize_Integration(t *testing.T) {
 	defer env.Cleanup(t)
 	t.Setenv("FRONTEND_URL", callbackFrontendURL)
 
-	handler := auth.HandleCLIAuthorize(env.DB)
+	handler := auth.HandleCLIAuthorize(env.DB, nil)
 	const query = "callback=http%3A%2F%2Flocalhost%3A9876%2Fcb&name=laptop"
 
 	newUserSession := func(t *testing.T, email string) (int64, string) {
@@ -123,6 +135,57 @@ func TestHandleCLIAuthorize_Integration(t *testing.T) {
 		}
 		if n := countAPIKeys(t, env, demoID); n != 0 {
 			t.Errorf("read-only user got %d API keys, want 0", n)
+		}
+	})
+
+	t.Run("inactive user with a live session is treated as logged out and mints no key", func(t *testing.T) {
+		userID, sid := newUserSession(t, "inactive-cli@example.com")
+		setUserAccountState(t, env, userID, models.UserStatusInactive, false)
+
+		confirmedQuery := query + "&confirmed=1"
+		rec := serveCLIAuthorize(handler, confirmedQuery, sid)
+
+		assertCLIRedirectToLogin(t, rec, confirmedQuery)
+		if c := findCookie(rec, auth.SessionCookieName); c == nil || c.MaxAge != -1 {
+			t.Errorf("inactive user's session cookie must be cleared (MaxAge=-1), got %+v", c)
+		}
+		if n := countAPIKeys(t, env, userID); n != 0 {
+			t.Errorf("inactive user got %d API keys, want 0", n)
+		}
+	})
+
+	t.Run("user outside allowed domains is denied with access_denied and mints no key", func(t *testing.T) {
+		userID, sid := newUserSession(t, "outsider-cli@example.com")
+		domainHandler := auth.HandleCLIAuthorize(env.DB, []string{"corp.test"})
+
+		rec := serveCLIAuthorize(domainHandler, query+"&confirmed=1", sid)
+
+		q := parseLoginRedirect(t, rec)
+		if got := q.Get("error"); got != "access_denied" {
+			t.Errorf("error = %q, want access_denied", got)
+		}
+		if got := q.Get("error_description"); !strings.Contains(got, "email domain is not permitted") {
+			t.Errorf("error_description = %q, want the domain-not-permitted copy", got)
+		}
+		if c := findCookie(rec, auth.SessionCookieName); c == nil || c.MaxAge != -1 {
+			t.Errorf("disallowed-domain session cookie must be cleared, got %+v", c)
+		}
+		if n := countAPIKeys(t, env, userID); n != 0 {
+			t.Errorf("disallowed-domain user got %d API keys, want 0", n)
+		}
+	})
+
+	t.Run("user inside allowed domains mints a key", func(t *testing.T) {
+		userID, sid := newUserSession(t, "insider-cli@corp.test")
+		domainHandler := auth.HandleCLIAuthorize(env.DB, []string{"corp.test"})
+
+		rec := serveCLIAuthorize(domainHandler, query+"&confirmed=1", sid)
+
+		if key := assertRedirect(t, rec, http.StatusTemporaryRedirect, "http://localhost:9876/cb").Get("key"); !strings.HasPrefix(key, "cfb_") {
+			t.Fatalf("callback key = %q, want cfb_ prefix", key)
+		}
+		if n := countAPIKeys(t, env, userID); n != 1 {
+			t.Errorf("key count = %d, want 1", n)
 		}
 	})
 
@@ -254,6 +317,22 @@ func TestHandleDevicePage_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("inactive user with a live session is treated as logged out", func(t *testing.T) {
+		env.CleanDB(t)
+		user := testutil.CreateTestUser(t, env, "inactive-device-page@example.com", "Inactive")
+		testutil.CreateTestWebSession(t, env, "inactive-device-page-session", user.ID, time.Now().UTC().Add(time.Hour))
+		setUserAccountState(t, env, user.ID, models.UserStatusInactive, false)
+
+		req := httptest.NewRequest(http.MethodGet, "/auth/device?code=ABCD-2345", nil)
+		req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: "inactive-device-page-session"})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		want := "/login?redirect=" + url.QueryEscape("/auth/device?code=ABCD-2345")
+		if rec.Code != http.StatusTemporaryRedirect || rec.Header().Get("Location") != want {
+			t.Errorf("status=%d Location=%q, want 307 to %q", rec.Code, rec.Header().Get("Location"), want)
+		}
+	})
+
 	t.Run("logged in renders the form with the code HTML-escaped", func(t *testing.T) {
 		env.CleanDB(t)
 		user := testutil.CreateTestUser(t, env, "device-page@example.com", "Device")
@@ -352,6 +431,37 @@ func TestHandleDeviceToken_RemainingBranches(t *testing.T) {
 			t.Error("device code must be single-use (deleted after token exchange)")
 		}
 	})
+
+	// The authorizing user's account changes between verify and poll; the token
+	// exchange must recheck eligibility even with no domain allow-list configured.
+	for _, tc := range []struct {
+		name     string
+		status   models.UserStatus
+		readOnly bool
+	}{
+		{"user deactivated after authorization", models.UserStatusInactive, false},
+		{"user made read-only after authorization", models.UserStatusActive, true},
+	} {
+		t.Run(tc.name+" is denied and the code consumed", func(t *testing.T) {
+			userID, code := authorizedCode(t, "changed-"+string(tc.status)+"@example.com")
+			setUserAccountState(t, env, userID, tc.status, tc.readOnly)
+
+			rec, resp := postDeviceToken(auth.HandleDeviceToken(env.DB, nil), body(code))
+
+			if rec.Code != http.StatusForbidden || resp.Error != "access_denied" {
+				t.Errorf("status=%d error=%q, want 403 access_denied", rec.Code, resp.Error)
+			}
+			if resp.AccessToken != "" {
+				t.Error("access token issued to an ineligible user")
+			}
+			if n := countAPIKeys(t, env, userID); n != 0 {
+				t.Errorf("minted %d keys for an ineligible user", n)
+			}
+			if deviceCodeExists(t, code) {
+				t.Error("denied device code must be deleted so it cannot be retried")
+			}
+		})
+	}
 
 	t.Run("API key limit returns 409 api_key_limit_exceeded", func(t *testing.T) {
 		userID, code := authorizedCode(t, "full-device@example.com")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db/dbauth"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
@@ -101,5 +102,38 @@ func TestHandleDeviceVerify_SuccessAuthorizesAndIsNotThrottled(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(rec.Body.String()), "authorized") {
 		t.Errorf("expected authorized success page, got %q", rec.Body.String())
+	}
+}
+
+// TestHandleDeviceVerify_InactiveUserTreatedAsLoggedOut asserts a deactivated
+// account holding a still-live session cannot authorize a device code (dxys):
+// the verify handler sends it to login exactly as if it had no session.
+func TestHandleDeviceVerify_InactiveUserTreatedAsLoggedOut(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	env := testutil.SetupTestEnvironment(t)
+	defer env.Cleanup(t)
+	ctx := context.Background()
+
+	user := testutil.CreateTestUser(t, env, "inactive-verifier@example.com", "Inactive Verifier")
+	sessionID := "web-session-inactive-verify"
+	testutil.CreateTestWebSession(t, env, sessionID, user.ID, time.Now().UTC().Add(time.Hour))
+	setUserAccountState(t, env, user.ID, models.UserStatusInactive, false)
+
+	const userCode = "ABCD-2345"
+	if err := (&dbauth.Store{DB: env.DB}).CreateDeviceCode(ctx, "device-code-inactive", userCode, "test-cli", time.Now().UTC().Add(5*time.Minute)); err != nil {
+		t.Fatalf("CreateDeviceCode: %v", err)
+	}
+
+	rec := postDeviceVerify(t, auth.HandleDeviceVerify(env.DB, nil), sessionID, userCode)
+
+	want := "/login?redirect=" + url.QueryEscape("/auth/device?code="+userCode)
+	if rec.Code != http.StatusTemporaryRedirect || rec.Header().Get("Location") != want {
+		t.Fatalf("status=%d Location=%q, want 307 to %q", rec.Code, rec.Header().Get("Location"), want)
+	}
+	if n := countRows(t, env, `SELECT count(*) FROM device_codes WHERE user_code = $1 AND authorized_at IS NOT NULL`, userCode); n != 0 {
+		t.Error("inactive user authorized a device code")
 	}
 }

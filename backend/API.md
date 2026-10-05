@@ -1143,7 +1143,7 @@ These endpoints handle browser and CLI login. Provider login/callback routes are
 | `GET /auth/oidc/login` | Initiate generic OIDC OAuth (Okta, Auth0, Azure AD, Keycloak, etc.) |
 | `GET /auth/oidc/callback` | Generic OIDC OAuth callback |
 | `GET /auth/logout` | Logout (clears session). Optional `?redirect=` follows the same relative-path rules as the login `redirect` parameter; otherwise redirects to `FRONTEND_URL`. |
-| `GET /auth/cli/authorize` | CLI login. Requires a web session (otherwise redirects to `/login`), then creates or replaces an API key named by `name` and redirects to the localhost `callback` URL with `?key=`. Non-localhost callbacks get `400`. |
+| `GET /auth/cli/authorize` | CLI login. Requires a web session for an active account (a missing, expired or inactive session redirects to `/login`), then creates or replaces an API key named by `name` and redirects to the localhost `callback` URL with `?key=`. Read-only identities, and users outside `ALLOWED_EMAIL_DOMAINS`, are redirected to `/login?error=access_denied` with no key. Non-localhost callbacks get `400`. |
 
 All three login endpoints use **OAuth 2.0 PKCE (S256)**: the login handler generates a `code_verifier` (32 random bytes, base64url) stored in an HttpOnly `oauth_verifier` cookie (alongside `oauth_state`, `MaxAge` 300), and sends `code_challenge=base64url(SHA256(verifier))` + `code_challenge_method=S256` on the authorize URL. The callback reads + clears the single-use verifier cookie (rejecting with `400` if absent, same shape as an invalid `state`) and includes `code_verifier` in the token-exchange POST. No client action required.
 
@@ -1182,7 +1182,7 @@ When `email` is provided:
 | 400 | `{"error": "expired_token"}` | Code expired |
 | 400 | `{"error": "invalid_grant"}` | Unknown code, or already exchanged (a code is single-use: of several concurrent polls exactly one gets the 200, the rest get `invalid_grant`) |
 | 400 | `{"error": "invalid_request"}` | Malformed body or empty `device_code` |
-| 403 | `{"error": "access_denied"}` | Authorizing user's email domain not allowed |
+| 403 | `{"error": "access_denied"}` | The authorizing user is no longer eligible: deactivated, made read-only, deleted, or outside `ALLOWED_EMAIL_DOMAINS` (rechecked at poll time). The code is deleted, so further polls get `invalid_grant` |
 | 409 | `{"error": "api_key_limit_exceeded"}` | User is at the API key limit; the code is **not** consumed, so it can be retried until it expires |
 | 500 | `{"error": "server_error"}` | Internal error |
 
@@ -1802,6 +1802,7 @@ When `ALLOWED_EMAIL_DOMAINS` is set (comma-separated list of domains), only user
 | Password login | Redirect to `/login?error=Your email domain is not permitted...` |
 | API key requests | `403 Forbidden` with body `"Email domain not permitted"` |
 | Session-authenticated requests | `403 Forbidden` with body `"Email domain not permitted"` |
+| CLI authorize (`/auth/cli/authorize`) | Redirect to `/login?error=access_denied&error_description=Your email domain is not permitted...` (session cookie cleared, no key minted) |
 | Device code verification | `403 Forbidden` with HTML error `"Your email domain is not permitted"` |
 | Device code token exchange | `403 Forbidden` with JSON `{"error": "access_denied"}` |
 | Optional auth endpoints (session detail, analytics, sync file, GitHub links list) | `401 Unauthorized` with `"Authentication required"` (anonymous access blocked) |
