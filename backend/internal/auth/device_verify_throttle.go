@@ -13,9 +13,12 @@ const (
 	deviceVerifyMaxFailures = 5
 	deviceVerifyLockout     = 15 * time.Minute
 
-	// maxAttemptKeys bounds the limiter's memory against a flood of distinct
-	// keys. Far above any legitimate concurrent-verifier count; when exceeded,
-	// expired/unlocked entries are swept.
+	// maxAttemptKeys is a soft bound on the limiter's map, far above any
+	// legitimate concurrent-verifier count. When a new key arrives with the map
+	// at or above this size, unlocked and expired entries are reclaimed (see
+	// sweepLocked). Live lockouts are never evicted, so the map can exceed the
+	// bound by the number of simultaneously locked keys. Keys are authenticated
+	// user IDs, so that overshoot is bounded by the account population.
 	maxAttemptKeys = 10000
 )
 
@@ -93,10 +96,14 @@ func (l *attemptLimiter) Reset(key string) {
 	delete(l.states, key)
 }
 
-// sweepLocked drops unlocked / expired entries when the map grows past
-// maxAttemptKeys, bounding memory under a flood of distinct keys. A dropped
-// key with pending (non-locking) failures simply restarts its count, which is
-// acceptable under memory pressure. Caller must hold l.mu.
+// sweepLocked enforces the maxAttemptKeys soft bound: once the map has reached
+// it, every unlocked or expired entry is dropped. A dropped key with pending
+// (below-threshold) failures simply restarts its count, which is acceptable
+// under memory pressure. Live lockouts are never evicted: evicting one would
+// let an attacker clear their own lockout by flooding new keys. While live
+// locks alone hold the map at or above the bound, the sweep drops nothing, the
+// caller still inserts its key, and each further new key rescans the map under
+// the mutex until enough locks expire. Caller must hold l.mu.
 func (l *attemptLimiter) sweepLocked() {
 	if len(l.states) < maxAttemptKeys {
 		return
