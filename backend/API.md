@@ -1135,7 +1135,7 @@ These endpoints handle browser and CLI login. Provider login/callback routes are
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /auth/password/login` | Password login (form fields `email`, `password`). Sets the session cookie and redirects. Registered only when password auth is enabled. |
+| `POST /auth/password/login` | Password login (form fields `email`, `password`). Sets the session cookie and redirects. A password over 72 bytes redirects to `/login?error=Password is too long` without counting as a failed attempt. Registered only when password auth is enabled. |
 | `GET /auth/github/login` | Initiate GitHub OAuth |
 | `GET /auth/github/callback` | GitHub OAuth callback |
 | `GET /auth/google/login` | Initiate Google OAuth |
@@ -1218,7 +1218,8 @@ POST /api/v1/admin/users
 ```
 **Request:** `{ "email": "new@example.com", "password": "securepass123" }`
 **Response:** `{ "id": 2, "email": "new@example.com" }`
-**Errors:** 400 (validation), 409 (duplicate email)
+**Validation:** `password` must be 8–72 bytes (bytes, not characters; 72 is bcrypt's input limit). Over-long passwords are rejected, never truncated.
+**Errors:** 400 (validation, e.g. `"Password must be at least 8 characters"` or `"Password must be at most 72 bytes"`; no user is created), 409 (duplicate email)
 
 ### Deactivate User
 ```

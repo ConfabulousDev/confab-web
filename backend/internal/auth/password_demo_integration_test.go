@@ -85,8 +85,8 @@ func TestHandlePasswordLogin_RemainingBranches(t *testing.T) {
 		assertNoSessionMinted(t, env, rec)
 	})
 
-	t.Run("password over 1024 bytes is rejected", func(t *testing.T) {
-		q := loginErrorRedirect(t, postPasswordLogin(plain, creds("user@example.com", strings.Repeat("x", 1025))))
+	t.Run("password over MaxPasswordBytes is rejected", func(t *testing.T) {
+		q := loginErrorRedirect(t, postPasswordLogin(plain, creds("user@example.com", strings.Repeat("x", auth.MaxPasswordBytes+1))))
 		if got := q.Get("error"); got != "Password is too long" {
 			t.Errorf("error = %q, want Password is too long", got)
 		}

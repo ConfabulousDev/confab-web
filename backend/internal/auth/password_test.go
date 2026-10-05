@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -101,6 +102,51 @@ func TestHashPassword(t *testing.T) {
 			t.Error("CheckPassword should return true for 72-byte password")
 		}
 	})
+}
+
+// TestValidatePasswordLength pins the shared password length policy: 8–72
+// bytes (bcrypt's input limit), measured in bytes rather than characters.
+func TestValidatePasswordLength(t *testing.T) {
+	if auth.MinPasswordBytes != 8 {
+		t.Errorf("MinPasswordBytes = %d, want 8", auth.MinPasswordBytes)
+	}
+	if auth.MaxPasswordBytes != 72 {
+		t.Errorf("MaxPasswordBytes = %d, want 72 (bcrypt input limit)", auth.MaxPasswordBytes)
+	}
+
+	tests := []struct {
+		name     string
+		password string
+		wantErr  error
+	}{
+		{"empty is too short", "", auth.ErrPasswordTooShort},
+		{"7 bytes is too short", strings.Repeat("a", 7), auth.ErrPasswordTooShort},
+		{"8 bytes is accepted", strings.Repeat("a", 8), nil},
+		{"72 bytes is accepted", strings.Repeat("a", 72), nil},
+		{"73 bytes is too long", strings.Repeat("a", 73), auth.ErrPasswordTooLong},
+		{"1024 bytes is too long", strings.Repeat("a", 1024), auth.ErrPasswordTooLong},
+		{"18 four-byte runes (72 bytes) is accepted", strings.Repeat("🔥", 18), nil},
+		{"19 four-byte runes (76 bytes) is too long", strings.Repeat("🔥", 19), auth.ErrPasswordTooLong},
+		{"36 two-byte runes (72 bytes) is accepted", strings.Repeat("é", 36), nil},
+		{"2 four-byte runes (8 bytes) is accepted", strings.Repeat("🔥", 2), nil},
+		{"3 two-byte runes (6 bytes) is too short", strings.Repeat("é", 3), auth.ErrPasswordTooShort},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := auth.ValidatePasswordLength(tt.password)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ValidatePasswordLength(%d bytes) = %v, want %v", len(tt.password), err, tt.wantErr)
+			}
+			// Every accepted password must also be hashable: the policy
+			// exists so validation never passes what bcrypt rejects.
+			if tt.wantErr == nil {
+				if _, err := auth.HashPassword(tt.password); err != nil {
+					t.Fatalf("accepted %d-byte password failed to hash: %v", len(tt.password), err)
+				}
+			}
+		})
+	}
 }
 
 // TestCheckPassword tests password verification
@@ -309,6 +355,71 @@ func TestHandlePasswordLogin(t *testing.T) {
 			t.Errorf("expected successful login with uppercase email, got status %d", rec.Code)
 		}
 	})
+
+	// bcrypt compares only the first 72 bytes, so without a 72-byte login cap
+	// "<72-byte password>+anything" would authenticate. Login must reject it.
+	maxEmail := "maxlen@example.com"
+	maxPassword := strings.Repeat("p", auth.MaxPasswordBytes)
+	maxHash, err := auth.HashPassword(maxPassword)
+	if err != nil {
+		t.Fatalf("HashPassword failed: %v", err)
+	}
+	if _, err := authStore.CreatePasswordUser(ctx, maxEmail, maxHash, false); err != nil {
+		t.Fatalf("CreatePasswordUser failed: %v", err)
+	}
+
+	failedAttempts := func(t *testing.T, email string) int {
+		t.Helper()
+		var n int
+		err := env.DB.Conn().QueryRowContext(ctx, `
+			SELECT p.failed_attempts
+			FROM user_identities i
+			JOIN identity_passwords p ON i.id = p.identity_id
+			WHERE i.provider = 'password' AND i.provider_id = $1`, email).Scan(&n)
+		if err != nil {
+			t.Fatalf("read failed_attempts: %v", err)
+		}
+		return n
+	}
+
+	postLogin := func(email, pw string) *httptest.ResponseRecorder {
+		return postPasswordLogin(handler, url.Values{"email": {email}, "password": {pw}})
+	}
+
+	hasSessionCookie := func(rec *httptest.ResponseRecorder) bool {
+		c := findCookie(rec, auth.SessionCookieName)
+		return c != nil && c.Value != ""
+	}
+
+	t.Run("rejects 73-byte password as too long without counting a failed attempt", func(t *testing.T) {
+		before := failedAttempts(t, maxEmail)
+
+		// The 72-byte prefix is the correct password: bcrypt alone would accept it.
+		rec := postLogin(maxEmail, maxPassword+"x")
+
+		if got := loginErrorRedirect(t, rec).Get("error"); got != "Password is too long" {
+			t.Errorf("expected error %q, got %q", "Password is too long", got)
+		}
+		if hasSessionCookie(rec) {
+			t.Error("73-byte password must not create a session")
+		}
+		if after := failedAttempts(t, maxEmail); after != before {
+			t.Errorf("failed_attempts changed from %d to %d; over-long passwords must not count", before, after)
+		}
+	})
+
+	t.Run("72-byte correct password still logs in", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "http://localhost:3000")
+
+		rec := postLogin(maxEmail, maxPassword)
+
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("expected redirect status, got %d", rec.Code)
+		}
+		if !hasSessionCookie(rec) {
+			t.Errorf("expected session cookie for 72-byte password, Location=%q", rec.Header().Get("Location"))
+		}
+	})
 }
 
 // TestBootstrapAdmin tests the admin bootstrap functionality
@@ -459,6 +570,35 @@ func TestBootstrapAdmin(t *testing.T) {
 		err := auth.BootstrapAdmin(ctx, env.DB, nil)
 		if err == nil {
 			t.Error("BootstrapAdmin should fail with short password")
+		}
+	})
+
+	t.Run("fails with descriptive error for 73-byte password and creates no user", func(t *testing.T) {
+		env := testutil.SetupTestEnvironment(t)
+		defer env.Cleanup(t)
+		userStore := &user.Store{DB: env.DB}
+
+		ctx := context.Background()
+
+		os.Setenv("ADMIN_BOOTSTRAP_EMAIL", "admin@example.com")
+		os.Setenv("ADMIN_BOOTSTRAP_PASSWORD", strings.Repeat("a", 73))
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_EMAIL")
+		defer os.Unsetenv("ADMIN_BOOTSTRAP_PASSWORD")
+
+		err := auth.BootstrapAdmin(ctx, env.DB, nil)
+		if err == nil {
+			t.Fatal("BootstrapAdmin should fail with a 73-byte password")
+		}
+		if want := "ADMIN_BOOTSTRAP_PASSWORD must be at most 72 bytes"; err.Error() != want {
+			t.Errorf("expected error %q, got %q", want, err.Error())
+		}
+
+		count, err := userStore.CountUsers(ctx)
+		if err != nil {
+			t.Fatalf("CountUsers failed: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("expected no users after rejected bootstrap, got %d", count)
 		}
 	})
 

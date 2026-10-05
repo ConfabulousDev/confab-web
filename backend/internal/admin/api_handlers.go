@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ConfabulousDev/confab-web/internal/analytics"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
@@ -200,19 +200,19 @@ func (h *Handlers) HandleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(req.Password) < 8 {
-		httputil.RespondError(w, http.StatusBadRequest, "Password must be at least 8 characters")
+	switch err := auth.ValidatePasswordLength(req.Password); {
+	case errors.Is(err, auth.ErrPasswordTooShort):
+		httputil.RespondError(w, http.StatusBadRequest, fmt.Sprintf("Password must be at least %d characters", auth.MinPasswordBytes))
 		return
-	}
-	if len(req.Password) > 1024 {
-		httputil.RespondError(w, http.StatusBadRequest, "Password too long")
+	case errors.Is(err, auth.ErrPasswordTooLong):
+		httputil.RespondError(w, http.StatusBadRequest, fmt.Sprintf("Password must be at most %d bytes", auth.MaxPasswordBytes))
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 	defer cancel()
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), auth.BcryptCost)
+	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		log.Error("Failed to hash password", "error", err)
 		httputil.RespondError(w, http.StatusInternalServerError, "Failed to create user")
@@ -220,7 +220,7 @@ func (h *Handlers) HandleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authStore := &dbauth.Store{DB: h.DB}
-	user, err := authStore.CreatePasswordUser(ctx, email, string(passwordHash), false)
+	user, err := authStore.CreatePasswordUser(ctx, email, passwordHash, false)
 	if err != nil {
 		log.Error("Failed to create user", "error", err, "email", email)
 		if strings.Contains(err.Error(), "already exists") {
