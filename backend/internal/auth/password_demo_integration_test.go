@@ -35,7 +35,8 @@ func loginErrorRedirect(t *testing.T, rec *httptest.ResponseRecorder) url.Values
 // TestHandlePasswordLogin_RemainingBranches covers the password-login branches
 // not exercised by TestHandlePasswordLogin: demo email, domain restriction,
 // oversize password, locked account, inactive user, redirect preservation, and
-// the post-login redirect sequence.
+// the post-login redirect sequence (CLI cookie, then the redirect form field;
+// the post_login_redirect cookie is never honored).
 func TestHandlePasswordLogin_RemainingBranches(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -132,36 +133,109 @@ func TestHandlePasswordLogin_RemainingBranches(t *testing.T) {
 		assertNoSessionMinted(t, env, rec)
 	})
 
-	t.Run("post_login_redirect to a frontend path is honored", func(t *testing.T) {
+	withRedirect := func(email, redirect string) url.Values {
+		form := creds(email, password)
+		form.Set("redirect", redirect)
+		return form
+	}
+
+	t.Run("redirect form field to a frontend path is honored", func(t *testing.T) {
 		newPasswordUser(t, "redir@example.com")
-		rec := postPasswordLogin(plain, creds("redir@example.com", password),
-			&http.Cookie{Name: "post_login_redirect", Value: "/sessions/9"})
+		rec := postPasswordLogin(plain, withRedirect("redir@example.com", "/sessions/7"))
 		if rec.Code != http.StatusSeeOther {
 			t.Fatalf("status = %d, want 303", rec.Code)
 		}
-		if loc := rec.Header().Get("Location"); loc != callbackFrontendURL+"/sessions/9" {
-			t.Errorf("Location = %q, want %s/sessions/9", loc, callbackFrontendURL)
+		if loc := rec.Header().Get("Location"); loc != callbackFrontendURL+"/sessions/7" {
+			t.Errorf("Location = %q, want %s/sessions/7", loc, callbackFrontendURL)
+		}
+	})
+
+	t.Run("redirect form field to the backend device page is not prefixed", func(t *testing.T) {
+		newPasswordUser(t, "device-redir@example.com")
+		rec := postPasswordLogin(plain, withRedirect("device-redir@example.com", "/auth/device?code=ABCD-2345"))
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("status = %d, want 303", rec.Code)
+		}
+		if loc := rec.Header().Get("Location"); loc != "/auth/device?code=ABCD-2345" {
+			t.Errorf("Location = %q, want /auth/device?code=ABCD-2345", loc)
+		}
+	})
+
+	for _, bad := range []string{"//evil.com/phish", "https://evil.com", "/\\evil.com", "/sessions\x00"} {
+		t.Run("unsafe redirect form field "+url.QueryEscape(bad)+" falls back to the frontend root", func(t *testing.T) {
+			newPasswordUser(t, "open-redir@example.com")
+			rec := postPasswordLogin(plain, withRedirect("open-redir@example.com", bad))
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d, want 303", rec.Code)
+			}
+			if loc := rec.Header().Get("Location"); loc != callbackFrontendURL {
+				t.Errorf("Location = %q, want frontend root %q", loc, callbackFrontendURL)
+			}
+		})
+	}
+
+	t.Run("cli_redirect cookie wins over the redirect form field", func(t *testing.T) {
+		newPasswordUser(t, "cli-first@example.com")
+		rec := postPasswordLogin(plain, withRedirect("cli-first@example.com", "/sessions/7"),
+			&http.Cookie{Name: "cli_redirect", Value: "/auth/cli/authorize?callback=x&confirmed=1"})
+		if loc := rec.Header().Get("Location"); loc != "/auth/cli/authorize?callback=x&confirmed=1" {
+			t.Errorf("Location = %q, want the cli_redirect target", loc)
+		}
+	})
+
+	t.Run("stale post_login_redirect cookie is ignored and cleared", func(t *testing.T) {
+		newPasswordUser(t, "stale@example.com")
+		rec := postPasswordLogin(plain, creds("stale@example.com", password),
+			&http.Cookie{Name: "post_login_redirect", Value: "/sessions/9"})
+		if loc := rec.Header().Get("Location"); loc != callbackFrontendURL {
+			t.Errorf("Location = %q, want frontend root %q (cookie must not be honored)", loc, callbackFrontendURL)
 		}
 		if c := findCookie(rec, "post_login_redirect"); c == nil || c.MaxAge != -1 {
 			t.Error("post_login_redirect cookie must be cleared")
 		}
 	})
 
-	t.Run("post_login_redirect to a backend device path is not prefixed", func(t *testing.T) {
-		newPasswordUser(t, "device-redir@example.com")
-		rec := postPasswordLogin(plain, creds("device-redir@example.com", password),
-			&http.Cookie{Name: "post_login_redirect", Value: "/auth/device?code=ABCD-2345"})
-		if loc := rec.Header().Get("Location"); loc != "/auth/device?code=ABCD-2345" {
-			t.Errorf("Location = %q, want /auth/device?code=ABCD-2345", loc)
+	t.Run("redirect form field wins over a stale post_login_redirect cookie", func(t *testing.T) {
+		newPasswordUser(t, "field-wins@example.com")
+		rec := postPasswordLogin(plain, withRedirect("field-wins@example.com", "/sessions/7"),
+			&http.Cookie{Name: "post_login_redirect", Value: "/sessions/9"})
+		if loc := rec.Header().Get("Location"); loc != callbackFrontendURL+"/sessions/7" {
+			t.Errorf("Location = %q, want %s/sessions/7", loc, callbackFrontendURL)
 		}
 	})
 
-	t.Run("protocol-relative post_login_redirect is ignored (no open redirect)", func(t *testing.T) {
-		newPasswordUser(t, "open-redir@example.com")
-		rec := postPasswordLogin(plain, creds("open-redir@example.com", password),
-			&http.Cookie{Name: "post_login_redirect", Value: "//evil.com/phish"})
-		if loc := rec.Header().Get("Location"); loc != callbackFrontendURL {
-			t.Errorf("Location = %q, want frontend root %q", loc, callbackFrontendURL)
+	t.Run("password login from the device page lands back on the device page", func(t *testing.T) {
+		newPasswordUser(t, "device-e2e@example.com")
+		devicePage := auth.HandleDevicePage(env.DB)
+
+		// 1. Unauthenticated device page bounces to the login selector.
+		rec := httptest.NewRecorder()
+		devicePage.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/auth/device?code=ABCD-2345", nil))
+		redirect := assertRedirect(t, rec, http.StatusTemporaryRedirect, "/login").Get("redirect")
+		if redirect != "/auth/device?code=ABCD-2345" {
+			t.Fatalf("login redirect param = %q, want /auth/device?code=ABCD-2345", redirect)
+		}
+
+		// 2. LoginPage posts that value back as the hidden redirect field.
+		rec = postPasswordLogin(plain, withRedirect("device-e2e@example.com", redirect))
+		if loc := rec.Header().Get("Location"); loc != redirect {
+			t.Fatalf("Location = %q, want %q", loc, redirect)
+		}
+		session := findCookie(rec, auth.SessionCookieName)
+		if session == nil || session.Value == "" {
+			t.Fatal("password login must mint a session cookie")
+		}
+
+		// 3. Following the redirect with the new session renders the code form.
+		req := httptest.NewRequest(http.MethodGet, redirect, nil)
+		req.AddCookie(session)
+		rec = httptest.NewRecorder()
+		devicePage.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("device page status = %d, want 200", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "ABCD-2345") {
+			t.Error("device page should prefill the code")
 		}
 	})
 
