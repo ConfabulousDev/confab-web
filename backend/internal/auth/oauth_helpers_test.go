@@ -153,31 +153,62 @@ func TestHandlePostLoginRedirect(t *testing.T) {
 		}
 	})
 
-	t.Run("blocks open redirect via double slash", func(t *testing.T) {
+	// An invalid post_login_redirect falls back to the default frontend URL
+	// (and the cookie is still cleared so it cannot be replayed). Backslash and
+	// control-char cases live in TestResolvePostLoginRedirect: net/http strips
+	// those bytes from cookie values before they reach the handler.
+	for _, bad := range []string{"//evil.com", "https://evil.com/steal"} {
+		t.Run("blocks open redirect "+bad, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/callback", nil)
+			r.AddCookie(&http.Cookie{Name: "post_login_redirect", Value: bad})
+			w := httptest.NewRecorder()
+
+			handlePostLoginRedirect(w, r, "https://app.example.com", "user@test.com", "", false)
+
+			if location := w.Header().Get("Location"); location != "https://app.example.com" {
+				t.Errorf("Location = %q, want default frontend URL", location)
+			}
+			assertCookieCleared(t, w, "post_login_redirect")
+		})
+	}
+
+	t.Run("appends email mismatch params to the default after a blocked redirect", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/callback", nil)
 		r.AddCookie(&http.Cookie{Name: "post_login_redirect", Value: "//evil.com"})
 		w := httptest.NewRecorder()
 
-		handlePostLoginRedirect(w, r, "https://app.example.com", "user@test.com", "", false)
+		handlePostLoginRedirect(w, r, "https://app.example.com", "actual@test.com", "expected@test.com", true)
 
-		location := w.Header().Get("Location")
-		// Should be sanitized to "/"
-		if location != "https://app.example.com/" {
-			t.Errorf("Location = %q, want sanitized redirect", location)
+		want := "https://app.example.com?email_mismatch=1&expected=expected%40test.com&actual=actual%40test.com"
+		if location := w.Header().Get("Location"); location != want {
+			t.Errorf("Location = %q, want %q", location, want)
 		}
 	})
 
-	t.Run("blocks open redirect via absolute URL", func(t *testing.T) {
+	for _, path := range []string{"/authors", "/device"} {
+		t.Run("frontend-prefixes "+path+" (only /auth, /auth/... and /auth?... are backend paths)", func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/callback", nil)
+			r.AddCookie(&http.Cookie{Name: "post_login_redirect", Value: path})
+			w := httptest.NewRecorder()
+
+			handlePostLoginRedirect(w, r, "https://app.example.com", "user@test.com", "", false)
+
+			if location := w.Header().Get("Location"); location != "https://app.example.com"+path {
+				t.Errorf("Location = %q, want frontend URL + %s", location, path)
+			}
+		})
+	}
+
+	t.Run("CLI redirect wins over post_login_redirect", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/callback", nil)
-		r.AddCookie(&http.Cookie{Name: "post_login_redirect", Value: "https://evil.com/steal"})
+		r.AddCookie(&http.Cookie{Name: "cli_redirect", Value: "/auth/cli/authorize?callback=x"})
+		r.AddCookie(&http.Cookie{Name: "post_login_redirect", Value: "/sessions/abc"})
 		w := httptest.NewRecorder()
 
 		handlePostLoginRedirect(w, r, "https://app.example.com", "user@test.com", "", false)
 
-		location := w.Header().Get("Location")
-		// Should be sanitized to "/"
-		if location != "https://app.example.com/" {
-			t.Errorf("Location = %q, want sanitized redirect", location)
+		if location := w.Header().Get("Location"); location != "/auth/cli/authorize?callback=x" {
+			t.Errorf("Location = %q, want the CLI redirect", location)
 		}
 	})
 
@@ -233,4 +264,41 @@ func assertCookieCleared(t *testing.T, w *httptest.ResponseRecorder, name string
 		}
 	}
 	t.Errorf("expected cookie %q to be cleared (MaxAge=-1)", name)
+}
+
+func TestResolvePostLoginRedirect(t *testing.T) {
+	const frontend = "https://app.example.com"
+	tests := []struct {
+		name   string
+		raw    string
+		want   string
+		wantOK bool
+	}{
+		{"empty is no target", "", "", false},
+		{"absolute URL is rejected", "http://evil.com", "", false},
+		{"protocol-relative is rejected", "//evil.com", "", false},
+		{"leading backslash is rejected", "/\\evil.com", "", false},
+		{"backslash anywhere is rejected", "/a\\b", "", false},
+		{"NUL control char is rejected", "/x\x00", "", false},
+		{"newline control char is rejected", "/x\nSet-Cookie:a=b", "", false},
+		{"tab control char is rejected", "/\t/evil.com", "", false},
+		{"DEL control char is rejected", "/x\x7f", "", false},
+		{"no leading slash is rejected", "sessions/9", "", false},
+		{"bare /auth is a backend path", "/auth", "/auth", true},
+		{"/auth/... is a backend path", "/auth/device?code=ABCD-2345", "/auth/device?code=ABCD-2345", true},
+		{"/auth?query is a backend path", "/auth?x=1", "/auth?x=1", true},
+		{"/authors is a frontend path", "/authors", frontend + "/authors", true},
+		{"/device is a frontend path", "/device", frontend + "/device", true},
+		{"frontend path is prefixed", "/sessions/9", frontend + "/sessions/9", true},
+		{"frontend path with query is prefixed", "/login?redirect=%2Fsessions", frontend + "/login?redirect=%2Fsessions", true},
+		{"root is prefixed", "/", frontend + "/", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := resolvePostLoginRedirect(tt.raw, frontend)
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("resolvePostLoginRedirect(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
 }

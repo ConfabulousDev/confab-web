@@ -94,6 +94,33 @@ func handleCLIRedirect(w http.ResponseWriter, r *http.Request, statusCode int) b
 	return false
 }
 
+// resolvePostLoginRedirect validates an explicit post-login (or post-logout)
+// redirect target and returns the absolute-or-backend URL to send the user to.
+// It returns ("", false) for an empty or unsafe value; callers fall back to
+// their default destination.
+//
+// SECURITY: this is the single open-redirect gate for every login/logout
+// redirect. Rules:
+//   - must start with "/" and not "//" (no absolute or protocol-relative URLs);
+//   - no "\" anywhere (browsers normalize "/\evil.com" to "//evil.com");
+//   - no ASCII control characters (< 0x20, 0x7f);
+//   - "/auth", "/auth/..." and "/auth?..." are backend paths, returned as-is;
+//   - every other path is a frontend path, prefixed with frontendURL.
+func resolvePostLoginRedirect(raw, frontendURL string) (string, bool) {
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+		return "", false
+	}
+	for i := 0; i < len(raw); i++ {
+		if c := raw[i]; c == '\\' || c < 0x20 || c == 0x7f {
+			return "", false
+		}
+	}
+	if raw == "/auth" || strings.HasPrefix(raw, "/auth/") || strings.HasPrefix(raw, "/auth?") {
+		return raw, true
+	}
+	return frontendURL + raw, true
+}
+
 // checkExpectedEmailMismatch reads the expected_email cookie and checks if the
 // user's actual email matches. Returns the expected email and whether there was
 // a mismatch. Always clears the cookie.
@@ -124,45 +151,31 @@ func appendEmailMismatchParams(baseURL, expectedEmail, actualEmail string) strin
 }
 
 // handlePostLoginRedirect performs the standard post-login redirect sequence:
-// 1. CLI redirect cookie
-// 2. Post-login redirect cookie (e.g., from /device page)
-// 3. Default: redirect to frontend
+//  1. CLI redirect cookie
+//  2. Post-login redirect cookie (set by the OAuth login start from ?redirect=),
+//     validated by resolvePostLoginRedirect
+//  3. Default: redirect to frontend
 //
 // Handles email mismatch parameters throughout. Returns after writing the redirect.
 func handlePostLoginRedirect(w http.ResponseWriter, r *http.Request, frontendURL, actualEmail, expectedEmail string, emailMismatch bool) {
-	log := logger.Ctx(r.Context())
-
-	// Check if this was a CLI login flow
 	if handleCLIRedirect(w, r, http.StatusTemporaryRedirect) {
 		return
 	}
 
-	// Check if there's a post-login redirect (e.g., from /device page or protected frontend route)
-	if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
+	redirectURL := frontendURL
+	if cookie, err := r.Cookie("post_login_redirect"); err == nil && cookie.Value != "" {
 		clearCookie(w, "post_login_redirect")
-		redirectURL := postLoginRedirect.Value
-		// SECURITY: Only allow relative paths to prevent open redirect attacks
-		if !strings.HasPrefix(redirectURL, "/") || strings.HasPrefix(redirectURL, "//") {
-			log.Warn("Blocked potential open redirect", "redirect_url", redirectURL)
-			redirectURL = "/"
+		if target, ok := resolvePostLoginRedirect(cookie.Value, frontendURL); ok {
+			redirectURL = target
+		} else {
+			logger.Ctx(r.Context()).Warn("Blocked potential open redirect", "redirect_url", cookie.Value)
 		}
-		// If it's a frontend path (not a backend path like /device), prepend frontend URL
-		if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
-			redirectURL = frontendURL + redirectURL
-		}
-		if emailMismatch {
-			redirectURL = appendEmailMismatchParams(redirectURL, expectedEmail, actualEmail)
-		}
-		http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
-		return
 	}
 
-	// Default: redirect to frontend
-	finalURL := frontendURL
 	if emailMismatch {
-		finalURL = appendEmailMismatchParams(finalURL, expectedEmail, actualEmail)
+		redirectURL = appendEmailMismatchParams(redirectURL, expectedEmail, actualEmail)
 	}
-	http.Redirect(w, r, finalURL, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
 // validateOAuthCallback performs the state+PKCE+code validation shared by every
@@ -454,24 +467,17 @@ func HandleLogout(database *db.DB, config *OAuthConfig) http.HandlerFunc {
 		}
 
 		// Check for redirect URL (e.g., for re-login with different account)
-		frontendURL := os.Getenv("FRONTEND_URL")
-		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
-			// SECURITY: Only allow relative paths to prevent open redirect attacks
-			if strings.HasPrefix(redirectAfter, "/") && !strings.HasPrefix(redirectAfter, "//") {
-				// Prepend frontend URL for frontend paths, or use as-is for backend paths
-				if strings.HasPrefix(redirectAfter, "/auth") {
-					http.Redirect(w, r, redirectAfter, http.StatusTemporaryRedirect)
-					return
-				}
-				http.Redirect(w, r, frontendURL+redirectAfter, http.StatusTemporaryRedirect)
-				return
-			}
-			log.Warn("Blocked potential open redirect in logout", "redirect_url", redirectAfter)
-		}
-
-		// Redirect back to frontend
 		// Note: FRONTEND_URL is validated at startup in main.go
-		http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
+		frontendURL := os.Getenv("FRONTEND_URL")
+		redirectURL := frontendURL
+		if redirectAfter := r.URL.Query().Get("redirect"); redirectAfter != "" {
+			if target, ok := resolvePostLoginRedirect(redirectAfter, frontendURL); ok {
+				redirectURL = target
+			} else {
+				log.Warn("Blocked potential open redirect in logout", "redirect_url", redirectAfter)
+			}
+		}
+		http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 	}
 }
 

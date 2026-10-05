@@ -1135,14 +1135,14 @@ These endpoints handle browser and CLI login. Provider login/callback routes are
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /auth/password/login` | Password login (form fields `email`, `password`). Sets the session cookie and redirects. A password over 72 bytes redirects to `/login?error=Password is too long` without counting as a failed attempt. Registered only when password auth is enabled. |
+| `POST /auth/password/login` | Password login (form fields `email`, `password`, optional `redirect`). Sets the session cookie and redirects (303) to the pending CLI authorize flow if a `cli_redirect` cookie is set, else to `redirect` (a relative path: `/auth…` stays a backend path, anything else gets `FRONTEND_URL` prepended; unsafe values are ignored), else to `FRONTEND_URL`. Any `post_login_redirect` cookie is cleared and ignored. A password over 72 bytes redirects to `/login?error=Password is too long` without counting as a failed attempt. Registered only when password auth is enabled. |
 | `GET /auth/github/login` | Initiate GitHub OAuth |
 | `GET /auth/github/callback` | GitHub OAuth callback |
 | `GET /auth/google/login` | Initiate Google OAuth |
 | `GET /auth/google/callback` | Google OAuth callback |
 | `GET /auth/oidc/login` | Initiate generic OIDC OAuth (Okta, Auth0, Azure AD, Keycloak, etc.) |
 | `GET /auth/oidc/callback` | Generic OIDC OAuth callback |
-| `GET /auth/logout` | Logout (clears session) |
+| `GET /auth/logout` | Logout (clears session). Optional `?redirect=` follows the same relative-path rules as the login `redirect` parameter; otherwise redirects to `FRONTEND_URL`. |
 | `GET /auth/cli/authorize` | CLI login. Requires a web session for an active account (a missing, expired or inactive session redirects to `/login`), then creates or replaces an API key named by `name` and redirects to the localhost `callback` URL with `?key=`. Read-only identities, and users outside `ALLOWED_EMAIL_DOMAINS`, are redirected to `/login?error=access_denied` with no key. Non-localhost callbacks get `400`. |
 
 All three login endpoints use **OAuth 2.0 PKCE (S256)**: the login handler generates a `code_verifier` (32 random bytes, base64url) stored in an HttpOnly `oauth_verifier` cookie (alongside `oauth_state`, `MaxAge` 300), and sends `code_challenge=base64url(SHA256(verifier))` + `code_challenge_method=S256` on the authorize URL. The callback reads + clears the single-use verifier cookie (rejecting with `400` if absent, same shape as an invalid `state`) and includes `code_verifier` in the token-exchange POST. No client action required.
@@ -1153,7 +1153,7 @@ The login endpoints accept optional query parameters to support share link flows
 
 | Parameter | Description |
 |-----------|-------------|
-| `redirect` | URL path to redirect to after successful login |
+| `redirect` | Relative URL path to redirect to after successful login (after any pending CLI flow). `/auth…` paths stay backend paths; anything else gets `FRONTEND_URL` prepended. Absolute, protocol-relative (`//`), backslash or control-character values are ignored. |
 | `email` | Expected email address (for share link login hints) |
 
 When `email` is provided:

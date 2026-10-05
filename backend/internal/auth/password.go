@@ -164,30 +164,25 @@ func HandlePasswordLogin(database *db.DB, config *OAuthConfig) http.HandlerFunc 
 			SameSite: http.SameSiteLaxMode,
 		})
 
-		// Handle post-login redirect (same as OAuth)
-		frontendURL := os.Getenv("FRONTEND_URL")
-
-		// Check for post-login redirect cookie
-		if postLoginRedirect, err := r.Cookie("post_login_redirect"); err == nil && postLoginRedirect.Value != "" {
-			clearCookie(w, "post_login_redirect")
-			redirectURL := postLoginRedirect.Value
-			// SECURITY: Only allow relative paths
-			if strings.HasPrefix(redirectURL, "/") && !strings.HasPrefix(redirectURL, "//") {
-				if !strings.HasPrefix(redirectURL, "/auth") && !strings.HasPrefix(redirectURL, "/device") {
-					redirectURL = frontendURL + redirectURL
-				}
-				http.Redirect(w, r, redirectURL, http.StatusSeeOther)
-				return
-			}
-		}
-
-		// CLI login flow
+		// Post-login redirect, same precedence as OAuth: CLI cookie, then the
+		// explicit target, then the frontend. The explicit target is the
+		// redirect form field LoginPage posts. The post_login_redirect cookie
+		// belongs to OAuth login starts, so a stale one left by an abandoned
+		// OAuth click is cleared and never honored here.
+		clearCookie(w, "post_login_redirect")
 		if handleCLIRedirect(w, r, http.StatusSeeOther) {
 			return
 		}
-
-		// Default: redirect to frontend
-		http.Redirect(w, r, frontendURL, http.StatusSeeOther)
+		frontendURL := os.Getenv("FRONTEND_URL")
+		redirectURL := frontendURL
+		if raw := r.FormValue("redirect"); raw != "" {
+			if target, ok := resolvePostLoginRedirect(raw, frontendURL); ok {
+				redirectURL = target
+			} else {
+				log.Warn("Blocked potential open redirect", "redirect_url", raw)
+			}
+		}
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 	}
 }
 
