@@ -4,6 +4,7 @@
     { "provider": "claude-code", "id": "claude-opus-4-5-20251101",  "backend": "opus-4-5",   "frontend": "opus-4-5" },
     { "provider": "claude-code", "id": "claude-sonnet-4-5-20250929", "backend": "sonnet-4-5", "frontend": "sonnet-4-5" },
     { "provider": "claude-code", "id": "claude-haiku-4-5-20251001",  "backend": "haiku-4-5",  "frontend": "haiku-4-5" },
+    { "provider": "claude-code", "id": "claude-haiku-5-5",            "backend": "haiku-5-5",  "frontend": "haiku-5-5" },
     { "provider": "claude-code", "id": "claude-sonnet-4-20250514",   "backend": "sonnet-4",   "frontend": "sonnet-4" },
     { "provider": "claude-code", "id": "claude-sonnet-5-20260701",  "backend": "sonnet-5",   "frontend": "sonnet-5" },
     { "provider": "claude-code", "id": "claude-sonnet-5-5",           "backend": "sonnet-5-5", "frontend": "sonnet-5-5" },

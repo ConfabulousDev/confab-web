@@ -49,9 +49,11 @@ Read these before adding or repricing a row.
   `gemini-3.6/3.7/3.8-flash` ($0.75/$3.75 through Dec 31 2026, reverting to
   $1.50/$7.50 with a $0.15 cache read).
 - **Context-tiered models take the low/short-context tier.** Every Gemini Pro,
-  every Grok model, and the OpenAI long-context tiers bill more above a token
-  threshold (200k for Gemini/Grok, 272k for OpenAI). The family key derives from
-  the model name, so nothing in the compute path could pick a tier per request.
+  every Grok model, the OpenAI long-context tiers, and Claude Haiku 5.5 bill
+  more above a token threshold (200k for Gemini/Grok, 272k for OpenAI, 100k for
+  Haiku 5.5 — where every column is 5x, $0.50/$2.50 against $0.10/$0.50). The
+  family key derives from the model name, so nothing in the compute path could
+  pick a tier per request.
   The ≤200k / short-context rate is stored, which understates requests above the
   threshold — sharpest on `gpt-6-astra`, whose 1.05M context makes >272k requests
   routine and where the long-context tier is 2x input / 1.5x output, with a

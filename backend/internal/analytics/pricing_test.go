@@ -63,6 +63,8 @@ func TestGetModelFamily(t *testing.T) {
 		{"claude-opus-5-5-20260922", "opus-5-5"},
 		{"claude-sonnet-5-5", "sonnet-5-5"},
 		{"claude-sonnet-5-5-20260928", "sonnet-5-5"},
+		{"claude-haiku-5-5", "haiku-5-5"},
+		{"claude-haiku-5-5-20261006", "haiku-5-5"},
 		{"claude-opus-4-8-20260515", "opus-4-8"},
 		{"claude-opus-4-6-20260201", "opus-4-6"},
 		{"claude-opus-4-5-20251101", "opus-4-5"},
@@ -112,6 +114,7 @@ func TestLookupPricing(t *testing.T) {
 		{"claude-fable-5-1", true, 10},
 		{"claude-sonnet-5", true, 2},
 		{"claude-sonnet-5-5", true, 2},
+		{"claude-haiku-5-5", true, 0.10},
 		{"claude-sonnet-4-20241022", true, 3},
 		{"claude-haiku-3-5-20241022", true, 0.80},
 		{"unknown-model", false, 0}, // unknown non-empty model: not found, zero pricing
@@ -571,6 +574,9 @@ func TestEmbeddedRates(t *testing.T) {
 		{"opus-5-5", 4, 20, 5, 8, 0.20},
 		{"sonnet-5-5", 2, 10, 2.5, 4, 0.2}, // standard 0.1x cache read: no exception
 		{"sonnet-5", 2, 10, 2.5, 4, 0.2},
+		// Haiku 5.5 bills prompts over 100k tokens at 5x; the <=100k tier is stored
+		// (see the context-tier convention in pricingsource/README.md).
+		{"haiku-5-5", 0.10, 0.50, 0.125, 0.20, 0.01},
 		{"fable-5-1", 10, 50, 12.5, 20, 0.25},
 		{"mythos-5-1", 10, 50, 12.5, 20, 0.25},
 		{"fable-5", 10, 50, 12.5, 20, 1.0},
