@@ -25,6 +25,7 @@ export const PRICING_FIXTURE: PricingTable = {
     'sonnet-4-5': { input: 3, output: 15, cacheWrite: 3.75, cacheWrite1h: 6, cacheRead: 0.3 },
     'sonnet-4': { input: 3, output: 15, cacheWrite: 3.75, cacheWrite1h: 6, cacheRead: 0.3 },
     'sonnet-3-7': { input: 3, output: 15, cacheWrite: 3.75, cacheWrite1h: 6, cacheRead: 0.3 },
+    'haiku-5-5': { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01 },
     'haiku-4-5': { input: 1, output: 5, cacheWrite: 1.25, cacheWrite1h: 2, cacheRead: 0.1 },
     'haiku-3-5': { input: 0.8, output: 4, cacheWrite: 1.0, cacheWrite1h: 1.6, cacheRead: 0.08 },
     'opus-3': { input: 15, output: 75, cacheWrite: 18.75, cacheWrite1h: 30, cacheRead: 1.5 },
