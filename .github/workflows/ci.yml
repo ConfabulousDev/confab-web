@@ -100,7 +100,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: backend/go.sum
 
       - name: Format check (gofmt + go fix)
@@ -124,7 +124,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: backend/go.sum
 
       - name: Install govulncheck
@@ -151,7 +151,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: backend/go.sum
 
       - name: Discover testable packages
@@ -185,7 +185,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.2"
           cache-dependency-path: backend/go.sum
 
       - name: Integration tests
