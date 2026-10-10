@@ -568,11 +568,12 @@ func TestEmbeddedRates(t *testing.T) {
 		// base input; two deliberate exceptions are pinned here alongside the rows
 		// that keep the norm. The 5.1 generation bills cache hits at 0.025x
 		// ($0.25/MTok against $10 input, against the $1.00 the 5.0 rows below
-		// keep), and Opus 5.5 at 0.05x ($0.20 against $4). "Normalizing" either
-		// would be a silent overcharge — 4x and 2x respectively — on the dominant
-		// token category in agentic sessions.
+		// keep), and Opus 5.5 and Sonnet 5.5 at 0.05x ($0.20 against $4, $0.10
+		// against $2 — Sonnet 5.5 since 2026-10-07, while Sonnet 5 keeps 0.1x).
+		// "Normalizing" either would be a silent overcharge — 4x and 2x
+		// respectively — on the dominant token category in agentic sessions.
 		{"opus-5-5", 4, 20, 5, 8, 0.20},
-		{"sonnet-5-5", 2, 10, 2.5, 4, 0.2}, // standard 0.1x cache read: no exception
+		{"sonnet-5-5", 2, 10, 2.5, 4, 0.10}, // 0.05x cache read since 2026-10-07
 		{"sonnet-5", 2, 10, 2.5, 4, 0.2},
 		// Haiku 5.5 bills prompts over 100k tokens at 5x; the <=100k tier is stored
 		// (see the context-tier convention in pricingsource/README.md).
@@ -667,6 +668,23 @@ func TestOpus55CacheReadException(t *testing.T) {
 	}
 	if want := decimal.NewFromFloat(0.20); !pricing.CacheRead.Equal(want) {
 		t.Errorf("opus-5-5 CacheRead = %s, want %s (0.05x base input, NOT the usual 0.1x = 0.40)", pricing.CacheRead, want)
+	}
+}
+
+// TestSonnet55CacheReadException pins Claude Sonnet 5.5's cache-read rate at
+// 0.05x base input ($0.10 against $2 input). Anthropic halved it from the
+// launch-time $0.20 on 2026-10-07; Sonnet 5 keeps the usual 0.1x ($0.20), so
+// "matching the sibling row" would silently double cache-read cost.
+func TestSonnet55CacheReadException(t *testing.T) {
+	pricing, ok := LookupPricing("claude-sonnet-5-5")
+	if !ok {
+		t.Fatal("sonnet-5-5 not found in embedded pricing")
+	}
+	if want := decimal.NewFromFloat(2); !pricing.Input.Equal(want) {
+		t.Errorf("sonnet-5-5 Input = %s, want %s (the 0.05x cache-read claim is relative to this)", pricing.Input, want)
+	}
+	if want := decimal.NewFromFloat(0.10); !pricing.CacheRead.Equal(want) {
+		t.Errorf("sonnet-5-5 CacheRead = %s, want %s (0.05x base input, NOT the usual 0.1x = sonnet-5's 0.20)", pricing.CacheRead, want)
 	}
 }
 
