@@ -29,6 +29,16 @@ import { reportTranscriptErrors } from './transcriptErrorReporting';
 // nearly every turn), `file-history-delta` (incremental form of
 // `file-history-snapshot`), `cost-state` (running totalCostUSD + per-model usage),
 // and `bridge-session` (Remote Control session binding).
+//
+// q8ah: Claude Code 2.1.300+ writes an API-request ledger that can rebuild each
+// model request exactly — `api-request` (request params, base request id, tail of
+// blob hashes; written just before each model call), `api-request-blob`
+// (content-addressed copy of message content; its `message.role` is not a turn),
+// and `api-request-shape` (system prompt and tool schemas). Other bookkeeping rows
+// skipped alongside: `artifact-autoreact-ledger` and `artifact-comment-monitor`
+// (per-artifact watch state), `frame-link` (artifact frame binding),
+// `agent-setting` ({agentSetting}, sibling of `agent-name`), and `continued-in`
+// ({continuedInSessionId}).
 const SKIPPED_MESSAGE_TYPES = new Set([
   'progress',
   'permission-mode',
@@ -42,6 +52,14 @@ const SKIPPED_MESSAGE_TYPES = new Set([
   'file-history-delta',
   'cost-state',
   'bridge-session',
+  'api-request',
+  'api-request-blob',
+  'api-request-shape',
+  'artifact-autoreact-ledger',
+  'artifact-comment-monitor',
+  'agent-setting',
+  'frame-link',
+  'continued-in',
 ]);
 
 // Track which sessions have already had errors reported (dedup across re-parses)
