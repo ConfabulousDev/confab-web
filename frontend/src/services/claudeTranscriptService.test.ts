@@ -188,6 +188,107 @@ ${createSystemMessage(2)}`;
         ownerOrganizationUuid: 'org-uuid-1',
       },
     },
+    // API-request ledger and other bookkeeping rows Claude Code 2.1.300+ emits
+    // (q8ah). Shapes taken from real session JSONL; values here are fake.
+    {
+      typeName: 'api-request',
+      payload: {
+        type: 'api-request',
+        sessionId: 'abc-123',
+        id: 'req-2',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        version: '2.1.300',
+        querySource: 'repl_main_thread',
+        shapeHash: 'shape-hash-1',
+        params: {
+          model: 'claude-opus-5',
+          betas: ['fake-beta'],
+          max_tokens: 1024,
+          thinking: { type: 'adaptive' },
+          context_management: { edits: [] },
+          safeguards: [],
+          output_config: {},
+        },
+        base: 'req-1',
+        keep: 3,
+        tail: ['blob-hash-1'],
+        cacheControl: [],
+        requestDigest: 'digest-1',
+      },
+    },
+    {
+      typeName: 'api-request-blob',
+      payload: {
+        type: 'api-request-blob',
+        sessionId: 'abc-123',
+        hash: 'blob-hash-1',
+        message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      },
+    },
+    {
+      typeName: 'api-request-shape',
+      payload: {
+        type: 'api-request-shape',
+        sessionId: 'abc-123',
+        shapeHash: 'shape-hash-1',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        version: '2.1.300',
+        shape: { system: [{ type: 'text', text: 'fake system prompt' }], tools: [] },
+      },
+    },
+    {
+      typeName: 'artifact-autoreact-ledger',
+      payload: {
+        type: 'artifact-autoreact-ledger',
+        v: 1,
+        sessionId: 'abc-123',
+        accountUuid: 'account-uuid-1',
+        artifacts: {
+          'artifact-1': {
+            savedAt: 1767225600000,
+            stampHighWater: 0,
+            everBaselined: true,
+            everHadThreads: false,
+            turnTimestamps: [],
+            threads: [],
+          },
+        },
+      },
+    },
+    {
+      typeName: 'artifact-comment-monitor',
+      payload: {
+        type: 'artifact-comment-monitor',
+        v: 1,
+        sessionId: 'abc-123',
+        artifacts: { 'artifact-1': { state: 'watching', writtenAtMs: 1767225600000, title: 'Fake page' } },
+      },
+    },
+    {
+      typeName: 'agent-setting',
+      payload: { type: 'agent-setting', agentSetting: 'general-purpose', sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'frame-link',
+      payload: {
+        type: 'frame-link',
+        sessionId: 'abc-123',
+        path: '/tmp/fake/page.html',
+        frameUrl: 'https://example.com/frame/fake',
+        title: 'Fake page',
+        artifactCount: 1,
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+    },
+    {
+      typeName: 'continued-in',
+      payload: {
+        type: 'continued-in',
+        sessionId: 'abc-123',
+        continuedInSessionId: 'def-456',
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+    },
   ])('skips $typeName messages silently', ({ payload }) => {
     const skippedLine = JSON.stringify(payload);
 
