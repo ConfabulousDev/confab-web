@@ -70,8 +70,10 @@ primary_region = 'sjc'
   SMART_RECAP_MAX_TRANSCRIPT_TOKENS = "50000"
 
   # Worker Configuration (background analytics precompute)
-  WORKER_POLL_INTERVAL = "3m"
-  WORKER_MAX_SESSIONS = "20"  # Required: max sessions per iteration
+  # 30m (> Neon's 5-min autosuspend delay) so the worker alone doesn't keep
+  # compute awake 24/7; 50 per cycle keeps backlog drain at ~100/hr.
+  WORKER_POLL_INTERVAL = "30m"
+  WORKER_MAX_SESSIONS = "50"  # Required: max sessions per iteration
   WORKER_DRY_RUN = "false"
   WORKER_RECAP_BASE_MIN_LINES = "150"
   WORKER_RECAP_BASE_MIN_TIME = "30m"
