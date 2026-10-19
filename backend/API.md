@@ -1578,6 +1578,81 @@ An empty `models` array means every model family in stored session data is price
 
 ---
 
+### List Precompute Failures
+```
+GET /api/v1/admin/precompute-failures
+```
+
+Returns every (session, bucket) the background worker has quarantined after `5` consecutive failed precompute attempts in that bucket (6kbe). A quarantined session is excluded from that bucket's stale-session query, so it stops using worker cycles and `WORKER_MAX_SESSIONS` slots. An attempt that crashes the worker process counts as a failure (`last_error` is then `worker exited during attempt`); a smart-recap quota skip or a shutdown does not. `bucket` is one of `regular_cards`, `smart_recap`, `search_index`, `session_title`. `provider` is the canonical session provider. `last_error` is the most recent error, truncated to 1 KB. Rows are ordered by `quarantined_at` descending.
+
+**Response:**
+```json
+{
+  "failures": [
+    {
+      "session_id": "2a6f42e3-0000-4000-8000-000000000001",
+      "user_id": 1,
+      "external_id": "019e3bb1-e75b-7423-b373-f8b8d573b237",
+      "provider": "codex",
+      "bucket": "regular_cards",
+      "attempts": 5,
+      "last_error": "parse rollout: token too long",
+      "quarantined_at": "2026-10-19T12:00:00Z"
+    }
+  ]
+}
+```
+
+An empty `failures` array means nothing is quarantined.
+
+**Auth:** super-admin only.
+
+---
+
+### Release a Precompute Failure
+```
+POST /api/v1/admin/precompute-failures/release
+```
+
+Releases one quarantine: deletes the (session, bucket) row so the worker retries the session on its next cycle with a fresh attempt count. Releasing a row that is not quarantined is a no-op (`released: 0`). Logged as an `ADMIN_AUDIT` line with action `precompute.release`.
+
+A successful on-view compute releases the matching quarantine too: `GET /api/v1/sessions/{id}/analytics` clears `regular_cards` after it computes and stores cards, and `smart_recap` after it generates a recap.
+
+**Request:**
+```json
+{
+  "session_id": "2a6f42e3-0000-4000-8000-000000000001",
+  "bucket": "regular_cards"
+}
+```
+
+**Response:**
+```json
+{ "released": 1 }
+```
+
+**Errors:** `400` if the body is not JSON, `session_id` is not a UUID, or `bucket` is not one of the four buckets.
+
+**Auth:** super-admin only.
+
+---
+
+### Release All Precompute Failures
+```
+POST /api/v1/admin/precompute-failures/release-all
+```
+
+Releases every quarantine at once, for recovery after an outage (storage, database or LLM down for longer than about five worker cycles) quarantined many sessions. Rows still counting toward quarantine are kept. No request body. Logged as an `ADMIN_AUDIT` line with action `precompute.release_all` and the `released` count.
+
+**Response:**
+```json
+{ "released": 12 }
+```
+
+**Auth:** super-admin only.
+
+---
+
 ## Public API Endpoints (No Auth)
 
 ### Auth Config

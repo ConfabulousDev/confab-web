@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -604,9 +605,14 @@ func TestLoadStalenessThresholds_SilentlyKeepsDefaultForGarbageString(t *testing
 // ---------- Worker.processSessions ----------
 
 func newTestWorker(fp *fakePrecomputer, cfg WorkerConfig) *Worker {
+	return newTestWorkerWithFailures(fp, &fakeFailureTracker{}, cfg)
+}
+
+func newTestWorkerWithFailures(fp *fakePrecomputer, ft *fakeFailureTracker, cfg WorkerConfig) *Worker {
 	// Disabled source (empty URL) → runOnce primes from the embedded table, no network.
 	return &Worker{
 		precomputer:   fp,
+		failures:      ft,
 		config:        cfg,
 		pricingSource: pricingsource.NewSource(pricingsource.Embedded(), "", time.Hour),
 	}
@@ -619,7 +625,7 @@ func sess(id string) analytics.StaleSession {
 func TestWorkerProcessSessions_EmptyInputReturnsZeroCounts(t *testing.T) {
 	w := newTestWorker(&fakePrecomputer{}, WorkerConfig{MaxSessions: 10})
 	called := false
-	processed, errs := w.processSessions(context.Background(), nil, "test",
+	processed, errs := w.processSessions(context.Background(), nil, analytics.BucketRegularCards, "test",
 		func(context.Context, analytics.StaleSession) error { called = true; return nil }, 0)
 	if processed != 0 || errs != 0 {
 		t.Errorf("counts: processed=%d errors=%d, want 0/0", processed, errs)
@@ -633,7 +639,7 @@ func TestWorkerProcessSessions_CountsSuccessesAndErrorsSeparately(t *testing.T) 
 	w := newTestWorker(&fakePrecomputer{}, WorkerConfig{MaxSessions: 10})
 	sessions := []analytics.StaleSession{sess("a"), sess("b"), sess("c"), sess("d")}
 
-	processed, errs := w.processSessions(context.Background(), sessions, "test",
+	processed, errs := w.processSessions(context.Background(), sessions, analytics.BucketRegularCards, "test",
 		func(_ context.Context, s analytics.StaleSession) error {
 			if s.SessionID == "b" || s.SessionID == "d" {
 				return errors.New("boom")
@@ -653,7 +659,7 @@ func TestWorkerProcessSessions_TreatsQuotaExceededAsErrorCount(t *testing.T) {
 	w := newTestWorker(&fakePrecomputer{}, WorkerConfig{MaxSessions: 10})
 	sessions := []analytics.StaleSession{sess("a"), sess("b")}
 
-	processed, errs := w.processSessions(context.Background(), sessions, "test",
+	processed, errs := w.processSessions(context.Background(), sessions, analytics.BucketRegularCards, "test",
 		func(context.Context, analytics.StaleSession) error { return analytics.ErrQuotaExceeded }, 0)
 
 	if processed != 0 {
@@ -670,7 +676,7 @@ func TestWorkerProcessSessions_ContextCancelBeforeFirstSessionReturnsImmediately
 	cancel()
 
 	called := false
-	processed, errs := w.processSessions(ctx, []analytics.StaleSession{sess("a"), sess("b")}, "test",
+	processed, errs := w.processSessions(ctx, []analytics.StaleSession{sess("a"), sess("b")}, analytics.BucketRegularCards, "test",
 		func(context.Context, analytics.StaleSession) error { called = true; return nil }, 0)
 
 	if called {
@@ -686,7 +692,7 @@ func TestWorkerProcessSessions_ContextCancelMidLoopStopsProcessing(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var calls int32
-	processed, _ := w.processSessions(ctx, []analytics.StaleSession{sess("a"), sess("b"), sess("c")}, "test",
+	processed, _ := w.processSessions(ctx, []analytics.StaleSession{sess("a"), sess("b"), sess("c")}, analytics.BucketRegularCards, "test",
 		func(context.Context, analytics.StaleSession) error {
 			atomic.AddInt32(&calls, 1)
 			if atomic.LoadInt32(&calls) == 1 {
@@ -711,7 +717,7 @@ func TestWorkerProcessSessions_NoPacingAfterLastSession(t *testing.T) {
 	pacing := 2 * time.Second
 	start := time.Now()
 	processed, _ := w.processSessions(context.Background(),
-		[]analytics.StaleSession{sess("a")}, "test",
+		[]analytics.StaleSession{sess("a")}, analytics.BucketRegularCards, "test",
 		func(context.Context, analytics.StaleSession) error { return nil },
 		pacing)
 	elapsed := time.Since(start)
@@ -1012,5 +1018,212 @@ func TestWorkerRun_TickerFiresSubsequentCycles(t *testing.T) {
 
 	if got := cycles.Load(); got < 2 {
 		t.Errorf("cycles: want >= 2 with 10ms ticker over 80ms, got %d", got)
+	}
+}
+
+// ---------- precompute failure tracking (6kbe) ----------
+
+func TestWorkerProcessSessions_ClaimsThenRecordsSuccess(t *testing.T) {
+	ft := &fakeFailureTracker{}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+
+	var claimedBeforeProcess bool
+	w.processSessions(context.Background(), []analytics.StaleSession{sess("a")}, analytics.BucketSmartRecap, "test",
+		func(context.Context, analytics.StaleSession) error {
+			claimedBeforeProcess = len(ft.calls) == 1 && ft.calls[0].op == "claim"
+			return nil
+		}, 0)
+
+	if !claimedBeforeProcess {
+		t.Error("ClaimAttempt must run before process")
+	}
+	if got := strings.Join(ft.ops("a"), ","); got != "claim,success" {
+		t.Fatalf("ops = %s, want claim,success", got)
+	}
+	for _, c := range ft.calls {
+		if c.bucket != analytics.BucketSmartRecap {
+			t.Errorf("%s bucket = %q, want %q", c.op, c.bucket, analytics.BucketSmartRecap)
+		}
+	}
+}
+
+func TestWorkerProcessSessions_ErrorRecordsFailureWithMessage(t *testing.T) {
+	ft := &fakeFailureTracker{}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+
+	_, errs := w.processSessions(context.Background(), []analytics.StaleSession{sess("a")}, analytics.BucketRegularCards, "test",
+		func(context.Context, analytics.StaleSession) error { return errors.New("parse exploded") }, 0)
+
+	if errs != 1 {
+		t.Errorf("errors = %d, want 1", errs)
+	}
+	if got := strings.Join(ft.ops("a"), ","); got != "claim,failure" {
+		t.Fatalf("ops = %s, want claim,failure", got)
+	}
+	if ft.calls[1].errMsg != "parse exploded" {
+		t.Errorf("RecordFailure errMsg = %q, want the process error", ft.calls[1].errMsg)
+	}
+}
+
+func TestWorkerProcessSessions_QuotaExceededReleasesAttemptWithoutCountingFailure(t *testing.T) {
+	ft := &fakeFailureTracker{}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+
+	w.processSessions(context.Background(), []analytics.StaleSession{sess("a")}, analytics.BucketSmartRecap, "test",
+		func(context.Context, analytics.StaleSession) error {
+			return fmt.Errorf("wrapped: %w", analytics.ErrQuotaExceeded)
+		}, 0)
+
+	if got := strings.Join(ft.ops("a"), ","); got != "claim,release" {
+		t.Fatalf("ops = %s, want claim,release (quota is not a failure)", got)
+	}
+}
+
+func TestWorkerProcessSessions_CanceledContextReleasesAttempt(t *testing.T) {
+	ft := &fakeFailureTracker{}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w.processSessions(ctx, []analytics.StaleSession{sess("a"), sess("b")}, analytics.BucketRegularCards, "test",
+		func(ctx context.Context, _ analytics.StaleSession) error {
+			cancel()
+			return ctx.Err()
+		}, 0)
+
+	if got := strings.Join(ft.ops(""), ","); got != "claim,release" {
+		t.Fatalf("ops = %s, want claim,release (shutdown is not a failure; b never claimed)", got)
+	}
+	if err := ft.calls[1].ctxErr; err != nil {
+		t.Errorf("ReleaseAttempt ran on a canceled ctx (%v); bookkeeping must outlive shutdown", err)
+	}
+}
+
+func TestWorkerProcessSessions_ErrorAfterShutdownReleasesAttempt(t *testing.T) {
+	// A process that surfaces a wrapped/unrelated error because the ctx was
+	// canceled (e.g. an S3 read aborted by SIGTERM) must not count as a failure.
+	ft := &fakeFailureTracker{}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w.processSessions(ctx, []analytics.StaleSession{sess("a")}, analytics.BucketRegularCards, "test",
+		func(context.Context, analytics.StaleSession) error {
+			cancel()
+			return errors.New("read chunk: connection reset")
+		}, 0)
+
+	if got := strings.Join(ft.ops("a"), ","); got != "claim,release" {
+		t.Fatalf("ops = %s, want claim,release", got)
+	}
+}
+
+func TestWorkerProcessSessions_ClaimFailureStillProcesses(t *testing.T) {
+	ft := &fakeFailureTracker{claimErr: errors.New("db blip")}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+
+	processed, _ := w.processSessions(context.Background(), []analytics.StaleSession{sess("a")}, analytics.BucketRegularCards, "test",
+		func(context.Context, analytics.StaleSession) error { return nil }, 0)
+
+	if processed != 1 {
+		t.Errorf("processed = %d, want 1 (bookkeeping is best-effort)", processed)
+	}
+}
+
+func TestWorkerProcessSessions_BookkeepingErrorDoesNotAbortCycle(t *testing.T) {
+	ft := &fakeFailureTracker{
+		recordFailureFn: func(string, string, string) (int, bool, error) { return 0, false, errors.New("db down") },
+	}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+
+	processed, errs := w.processSessions(context.Background(), []analytics.StaleSession{sess("a"), sess("b")}, analytics.BucketRegularCards, "test",
+		func(_ context.Context, s analytics.StaleSession) error {
+			if s.SessionID == "a" {
+				return errors.New("boom")
+			}
+			return nil
+		}, 0)
+
+	if processed != 1 || errs != 1 {
+		t.Errorf("processed=%d errors=%d, want 1/1 (b must still run)", processed, errs)
+	}
+}
+
+func TestWorkerProcessSessions_QuarantineIsReported(t *testing.T) {
+	// The fake reports the 5th failure as quarantining; the worker must keep
+	// going and count it as an ordinary error.
+	ft := &fakeFailureTracker{
+		recordFailureFn: func(string, string, string) (int, bool, error) {
+			return analytics.QuarantineAfterAttempts, true, nil
+		},
+	}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+
+	_, errs := w.processSessions(context.Background(), []analytics.StaleSession{sess("a")}, analytics.BucketSearchIndex, "test",
+		func(context.Context, analytics.StaleSession) error { return errors.New("boom") }, 0)
+	if errs != 1 {
+		t.Errorf("errors = %d, want 1", errs)
+	}
+}
+
+func TestWorkerBucketWrappers_TrackFailuresUnderTheirBucket(t *testing.T) {
+	cases := []struct {
+		name   string
+		run    func(w *Worker) (int, int)
+		bucket string
+	}{
+		{"regular", func(w *Worker) (int, int) {
+			return w.processRegularSessions(context.Background(), []analytics.StaleSession{sess("a")})
+		}, analytics.BucketRegularCards},
+		{"smart recap", func(w *Worker) (int, int) {
+			return w.processSmartRecapSessions(context.Background(), []analytics.StaleSession{sess("a")})
+		}, analytics.BucketSmartRecap},
+		{"search index", func(w *Worker) (int, int) {
+			return w.processSearchIndexSessions(context.Background(), []analytics.StaleSession{sess("a")})
+		}, analytics.BucketSearchIndex},
+		{"session title", func(w *Worker) (int, int) {
+			return w.processTitleRecomputeSessions(context.Background(), []analytics.StaleSession{sess("a")})
+		}, analytics.BucketSessionTitle},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ft := &fakeFailureTracker{}
+			w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+			tc.run(w)
+			if len(ft.calls) != 2 || ft.calls[0].bucket != tc.bucket || ft.calls[1].bucket != tc.bucket {
+				t.Errorf("calls = %+v, want claim+success under %q", ft.calls, tc.bucket)
+			}
+		})
+	}
+}
+
+func TestWorkerRunOnce_DryRunWritesNoClaims(t *testing.T) {
+	fp := &fakePrecomputer{
+		findStaleFn: func(context.Context, int) ([]analytics.StaleSession, error) {
+			return []analytics.StaleSession{sess("a")}, nil
+		},
+	}
+	ft := &fakeFailureTracker{}
+	w := newTestWorkerWithFailures(fp, ft, WorkerConfig{MaxSessions: 10, MaxSearchIndexSessions: 10, DryRun: true})
+	w.runOnce(context.Background())
+
+	if len(ft.calls) != 0 {
+		t.Errorf("dry-run must not touch failure tracking; got %+v", ft.calls)
+	}
+}
+
+func TestWorkerSweepCrashedAttempts_RunsSweepAndToleratesErrors(t *testing.T) {
+	ft := &fakeFailureTracker{sweepFn: func() (int, error) { return 3, nil }}
+	w := newTestWorkerWithFailures(&fakePrecomputer{}, ft, WorkerConfig{MaxSessions: 10})
+	w.sweepCrashedAttempts(context.Background())
+	if got := strings.Join(ft.ops(""), ","); got != "sweep" {
+		t.Errorf("ops = %s, want sweep", got)
+	}
+
+	failing := &fakeFailureTracker{sweepFn: func() (int, error) { return 0, errors.New("db down") }}
+	w = newTestWorkerWithFailures(&fakePrecomputer{}, failing, WorkerConfig{MaxSessions: 10})
+	w.sweepCrashedAttempts(context.Background()) // must not panic or fatal
+	if len(failing.calls) != 1 {
+		t.Errorf("sweep calls = %d, want 1", len(failing.calls))
 	}
 }

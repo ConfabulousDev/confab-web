@@ -901,6 +901,31 @@ export const UnpricedModelsResponseSchema = z.object({
 });
 export type UnpricedModelsResponse = z.infer<typeof UnpricedModelsResponseSchema>;
 
+// Precompute failures (6kbe): GET /admin/precompute-failures. Sessions the
+// worker quarantined from one precompute bucket after repeated failures.
+const PrecomputeFailureRowSchema = z.object({
+  session_id: z.string(),
+  user_id: z.number(),
+  external_id: z.string(),
+  provider: z.string(),
+  bucket: z.string(),
+  attempts: z.number(),
+  last_error: z.string(),
+  quarantined_at: z.string(),
+});
+export type PrecomputeFailureRow = z.infer<typeof PrecomputeFailureRowSchema>;
+
+export const PrecomputeFailuresResponseSchema = z.object({
+  failures: z.array(PrecomputeFailureRowSchema),
+});
+export type PrecomputeFailuresResponse = z.infer<typeof PrecomputeFailuresResponseSchema>;
+
+// POST /admin/precompute-failures/release and /release-all.
+export const ReleasePrecomputeFailuresResponseSchema = z.object({
+  released: z.number(),
+});
+export type ReleasePrecomputeFailuresResponse = z.infer<typeof ReleasePrecomputeFailuresResponseSchema>;
+
 // ============================================================================
 // Validation Functions
 // ============================================================================

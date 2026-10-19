@@ -438,8 +438,20 @@ func (c *analyticsComputer) compute(ctx context.Context, sessionID string, lineC
 	defer upsertCancel()
 	if err := c.analyticsStore.UpsertCards(upsertCtx, cards); err != nil {
 		log.Error("Failed to cache cards", "error", err)
+	} else {
+		releasePrecomputeQuarantine(upsertCtx, c.analyticsStore, sessionID, analytics.BucketRegularCards, log)
 	}
 	return &computedCards{cards: cards, validationErrorCount: computed.ValidationErrorCount}, nil
+}
+
+// releasePrecomputeQuarantine clears the worker's failure tracking for one
+// bucket after an on-view compute for it succeeded (6kbe), so a session the
+// worker quarantined resumes background refreshes. Best-effort: an error is
+// logged and never fails the request.
+func releasePrecomputeQuarantine(ctx context.Context, store *analytics.Store, sessionID, bucket string, log *slog.Logger) {
+	if err := store.RecordSuccess(ctx, sessionID, bucket); err != nil {
+		log.Warn("Failed to release precompute quarantine", "error", err, "session_id", sessionID, "bucket", bucket)
+	}
 }
 
 // smartRecapContext groups the parameters needed for smart recap attachment/generation.
@@ -562,6 +574,9 @@ func attachOrGenerateSmartRecap(ctx context.Context, sc *smartRecapContext) {
 	if genResult.Skipped {
 		return
 	}
+	releaseCtx, releaseCancel := context.WithTimeout(context.WithoutCancel(ctx), DatabaseTimeout)
+	releasePrecomputeQuarantine(releaseCtx, sc.analyticsStore, sc.sessionID, analytics.BucketSmartRecap, sc.log)
+	releaseCancel()
 	addSmartRecapToResponse(sc.response, genResult.Card)
 	if genResult.SuggestedTitle != "" {
 		sc.response.SuggestedSessionTitle = &genResult.SuggestedTitle

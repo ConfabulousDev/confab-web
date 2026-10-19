@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -44,6 +45,7 @@ type Worker struct {
 	db            *db.DB
 	store         *storage.S3Storage
 	precomputer   precomputerAPI
+	failures      precomputeFailureTracker
 	config        WorkerConfig
 	pricingSource *pricingsource.Source // refreshes the active price table each cycle
 }
@@ -107,6 +109,7 @@ func runWorker() {
 		db:            database,
 		store:         store,
 		precomputer:   precomputer,
+		failures:      analyticsStore,
 		config:        workerConfig,
 		pricingSource: pricingsource.NewFromEnv(os.Getenv("ENABLE_SAAS_FOOTER") == "true"),
 	}
@@ -123,6 +126,13 @@ func runWorker() {
 		logger.Info("shutdown signal received, stopping worker")
 		cancel()
 	}()
+
+	// Count attempts a previous process left unsettled (crash, OOM, hard kill)
+	// before the first cycle can pick the same sessions again. Skipped in
+	// dry-run, which never claims attempts.
+	if !workerConfig.DryRun {
+		worker.sweepCrashedAttempts(ctx)
+	}
 
 	// Run the worker
 	worker.Run(ctx)
@@ -287,34 +297,38 @@ func (w *Worker) runOnce(ctx context.Context) {
 
 // processRegularSessions processes sessions with stale regular cards.
 func (w *Worker) processRegularSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "session", w.precomputer.PrecomputeRegularCards, 500*time.Millisecond)
+	return w.processSessions(ctx, sessions, analytics.BucketRegularCards, "session", w.precomputer.PrecomputeRegularCards, 500*time.Millisecond)
 }
 
 // processSmartRecapSessions processes sessions with only stale smart recap.
 func (w *Worker) processSmartRecapSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "smart recap", w.precomputer.PrecomputeSmartRecapOnly, 500*time.Millisecond)
+	return w.processSessions(ctx, sessions, analytics.BucketSmartRecap, "smart recap", w.precomputer.PrecomputeSmartRecapOnly, 500*time.Millisecond)
 }
 
 // processSearchIndexSessions processes sessions with stale search index.
 func (w *Worker) processSearchIndexSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "search index", w.precomputer.BuildSearchIndexOnly, 50*time.Millisecond)
+	return w.processSessions(ctx, sessions, analytics.BucketSearchIndex, "search index", w.precomputer.BuildSearchIndexOnly, 50*time.Millisecond)
 }
 
 // processTitleRecomputeSessions re-derives first_user_message for sessions marked
 // by a session_title invalidation.
 func (w *Worker) processTitleRecomputeSessions(ctx context.Context, sessions []analytics.StaleSession) (processed, errors int) {
-	return w.processSessions(ctx, sessions, "session title", w.precomputer.RecomputeSessionTitle, 50*time.Millisecond)
+	return w.processSessions(ctx, sessions, analytics.BucketSessionTitle, "session title", w.precomputer.RecomputeSessionTitle, 50*time.Millisecond)
 }
 
 // processSessions is a generic loop that processes a list of stale sessions with pacing.
-// The label parameter is used for log messages (e.g., "session" or "smart recap").
+// bucket keys the per-session failure tracking (6kbe); label is used for log
+// messages (e.g., "session" or "smart recap"). Every attempt is claimed before
+// it runs and settled after, so repeated failures quarantine the session from
+// this bucket and a crash mid-attempt is counted by the startup sweep.
 func (w *Worker) processSessions(
 	ctx context.Context,
 	sessions []analytics.StaleSession,
+	bucket string,
 	label string,
 	process func(context.Context, analytics.StaleSession) error,
 	pacing time.Duration,
-) (processed, errors int) {
+) (processed, errCount int) {
 	for i, session := range sessions {
 		select {
 		case <-ctx.Done():
@@ -323,23 +337,11 @@ func (w *Worker) processSessions(
 		default:
 		}
 
+		w.claimAttempt(ctx, session, bucket)
 		err := process(ctx, session)
+		w.settleAttempt(ctx, session, bucket, label, err)
 		if err != nil {
-			if err == analytics.ErrQuotaExceeded {
-				logger.Warn("skipped precompute "+label+": quota exceeded",
-					"session_id", session.SessionID,
-					"user_id", session.UserID,
-				)
-			} else {
-				logger.Error("failed to precompute "+label,
-					"session_id", session.SessionID,
-					"user_id", session.UserID,
-					"external_id", session.ExternalID,
-					"total_lines", session.TotalLines,
-					"error", err,
-				)
-			}
-			errors++
+			errCount++
 		} else {
 			logger.Info("precomputed "+label,
 				"session_id", session.SessionID,
@@ -360,6 +362,101 @@ func (w *Worker) processSessions(
 		}
 	}
 	return
+}
+
+// precomputeFailureTracker is the failure-tracking surface the worker uses.
+// *analytics.Store satisfies it in production; tests pass a fake.
+type precomputeFailureTracker interface {
+	ClaimAttempt(ctx context.Context, sessionID, bucket string) error
+	RecordSuccess(ctx context.Context, sessionID, bucket string) error
+	RecordFailure(ctx context.Context, sessionID, bucket, errMsg string) (attempts int, quarantined bool, err error)
+	ReleaseAttempt(ctx context.Context, sessionID, bucket string) error
+	SweepCrashedAttempts(ctx context.Context) (int, error)
+}
+
+// bookkeepingTimeout bounds each failure-tracking write.
+const bookkeepingTimeout = 5 * time.Second
+
+// bookkeepingCtx returns a context for a failure-tracking write that survives
+// shutdown: the attempt has to be settled even when ctx was just canceled.
+func bookkeepingCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
+}
+
+// claimAttempt marks the attempt in progress. Best-effort: a failure is logged
+// and the session is still processed.
+func (w *Worker) claimAttempt(ctx context.Context, session analytics.StaleSession, bucket string) {
+	bctx, cancel := bookkeepingCtx(ctx)
+	defer cancel()
+	if err := w.failures.ClaimAttempt(bctx, session.SessionID, bucket); err != nil {
+		logger.Error("failed to claim precompute attempt",
+			"session_id", session.SessionID, "bucket", bucket, "error", err)
+	}
+}
+
+// settleAttempt records the outcome of one attempt and logs it. Quota exceeded
+// and shutdown release the claim without counting a failure. Bookkeeping
+// errors are logged and never abort the cycle.
+func (w *Worker) settleAttempt(ctx context.Context, session analytics.StaleSession, bucket, label string, procErr error) {
+	bctx, cancel := bookkeepingCtx(ctx)
+	defer cancel()
+
+	var err error
+	switch {
+	case procErr == nil:
+		err = w.failures.RecordSuccess(bctx, session.SessionID, bucket)
+	case errors.Is(procErr, analytics.ErrQuotaExceeded):
+		logger.Warn("skipped precompute "+label+": quota exceeded",
+			"session_id", session.SessionID,
+			"user_id", session.UserID,
+		)
+		err = w.failures.ReleaseAttempt(bctx, session.SessionID, bucket)
+	case ctx.Err() != nil || errors.Is(procErr, context.Canceled):
+		logger.Info("precompute "+label+" interrupted by shutdown",
+			"session_id", session.SessionID,
+			"error", procErr,
+		)
+		err = w.failures.ReleaseAttempt(bctx, session.SessionID, bucket)
+	default:
+		attempts, quarantined, recErr := w.failures.RecordFailure(bctx, session.SessionID, bucket, procErr.Error())
+		err = recErr
+		logger.Error("failed to precompute "+label,
+			"session_id", session.SessionID,
+			"user_id", session.UserID,
+			"external_id", session.ExternalID,
+			"total_lines", session.TotalLines,
+			"attempts", attempts,
+			"error", procErr,
+		)
+		if recErr == nil && quarantined {
+			logger.Warn("session quarantined from precompute",
+				"session_id", session.SessionID,
+				"bucket", bucket,
+				"attempts", attempts,
+				"last_error", procErr.Error(),
+			)
+		}
+	}
+	if err != nil {
+		logger.Error("failed to record precompute attempt outcome",
+			"session_id", session.SessionID, "bucket", bucket, "error", err)
+	}
+}
+
+// sweepCrashedAttempts counts attempts a previous worker process never settled
+// (it crashed or was killed mid-attempt) as failures. It must run before the
+// first cycle and relies on the worker being a single process (fly.toml runs
+// one worker machine): with two workers, one's in-flight claims would be
+// counted as the other's crashes. Best-effort; a failure is logged.
+func (w *Worker) sweepCrashedAttempts(ctx context.Context) {
+	n, err := w.failures.SweepCrashedAttempts(ctx)
+	if err != nil {
+		logger.Error("failed to sweep crashed precompute attempts", "error", err)
+		return
+	}
+	if n > 0 {
+		logger.Warn("counted crashed precompute attempts as failures", "count", n)
+	}
 }
 
 // loadWorkerConfig loads worker configuration from environment variables.

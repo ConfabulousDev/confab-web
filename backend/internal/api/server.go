@@ -455,6 +455,12 @@ func (s *Server) SetupRoutes() http.Handler {
 				// active pricing table — surfaces a newly-released unpriced model
 				// without grepping the "unknown model for pricing" WARN logs.
 				r.Get("/unpriced-models", withMaxBody(MaxBodyXS, adminHandlers.HandleUnpricedModels))
+
+				// 6kbe: sessions the worker quarantined after repeated precompute
+				// failures, with per-row and bulk release.
+				r.Get("/precompute-failures", withMaxBody(MaxBodyXS, adminHandlers.HandleListPrecomputeFailures))
+				r.Post("/precompute-failures/release", withMaxBody(MaxBodyXS, adminHandlers.HandleReleasePrecomputeFailure))
+				r.Post("/precompute-failures/release-all", withMaxBody(MaxBodyXS, adminHandlers.HandleReleaseAllPrecomputeFailures))
 			})
 		})
 
