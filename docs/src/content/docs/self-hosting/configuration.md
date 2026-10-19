@@ -191,6 +191,12 @@ Precomputes analytics and smart recaps in the background.
 | `WORKER_MAX_SEARCH_INDEX_SESSIONS` | `200` | No | Maximum sessions to (re)build the search index for per cycle (search indexing is cheap, so this is higher than `WORKER_MAX_SESSIONS`) |
 | `WORKER_DRY_RUN` | `false` | No | Log what would be done without actually processing |
 
+### Sessions that keep failing
+
+If a session fails the same kind of background work (analytics cards, smart recap, search index or title repair) 5 times in a row, the worker quarantines it for that work and stops retrying, so other sessions keep getting processed. A worker crash during an attempt counts as a failure; a smart recap quota skip doesn't. Super-admins can see quarantined sessions, with their last error, under **Admin → Precompute Failures**, and release one or all of them once the cause is fixed. Viewing a session also releases its analytics and smart recap quarantines when the on-view compute succeeds. After an outage (database, storage or LLM provider down for a few hours), use **Release all**.
+
+Run one worker process. On startup the worker counts any attempt left unfinished as a crash, so a second concurrent worker would count the first one's work as failures.
+
 ### Staleness thresholds (advanced)
 
 Controls when sessions need recomputation. `WORKER_REGULAR_*` = analytics cards, `WORKER_RECAP_*` = smart recaps.

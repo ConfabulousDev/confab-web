@@ -33,6 +33,8 @@ import {
   CardInvalidationsListResponseSchema,
   CardTypesResponseSchema,
   UnpricedModelsResponseSchema,
+  PrecomputeFailuresResponseSchema,
+  ReleasePrecomputeFailuresResponseSchema,
   validateResponse,
   APIValidationError,
   type SessionDetail,
@@ -65,6 +67,8 @@ import {
   type InvalidateCardsResponse,
   type CardInvalidationsListResponse,
   type UnpricedModelsResponse,
+  type PrecomputeFailuresResponse,
+  type ReleasePrecomputeFailuresResponse,
 } from '@/schemas/api';
 
 // Re-export types for consumers
@@ -789,4 +793,14 @@ export const adminAPI = {
   // table — surfaces a newly-released unpriced model without grepping WARN logs.
   getUnpricedModels: (): Promise<UnpricedModelsResponse> =>
     api.getValidated('/admin/unpriced-models', UnpricedModelsResponseSchema),
+
+  // 6kbe: sessions the worker quarantined after repeated precompute failures.
+  listPrecomputeFailures: (): Promise<PrecomputeFailuresResponse> =>
+    api.getValidated('/admin/precompute-failures', PrecomputeFailuresResponseSchema),
+
+  releasePrecomputeFailure: (data: { session_id: string; bucket: string }): Promise<ReleasePrecomputeFailuresResponse> =>
+    api.postValidated('/admin/precompute-failures/release', ReleasePrecomputeFailuresResponseSchema, data),
+
+  releaseAllPrecomputeFailures: (): Promise<ReleasePrecomputeFailuresResponse> =>
+    api.postValidated('/admin/precompute-failures/release-all', ReleasePrecomputeFailuresResponseSchema),
 };

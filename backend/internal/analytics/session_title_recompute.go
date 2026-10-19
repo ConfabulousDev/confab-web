@@ -61,6 +61,7 @@ func (p *Precomputer) FindTitleRecomputeSessions(ctx context.Context, limit int)
 		FROM sessions
 		WHERE title_recompute_requested_at IS NOT NULL
 		  AND session_type = ANY($1)
+		  AND `+notQuarantinedClause("sessions.id", BucketSessionTitle)+`
 		ORDER BY title_recompute_requested_at
 		LIMIT $2
 	`, pq.Array(models.AllowedProviders), limit)

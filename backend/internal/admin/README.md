@@ -17,17 +17,20 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `card_invalidations_test.go` | Integration tests for the card invalidation handlers (incl. `session_title` + provider filter, unknown/legacy provider → 400) |
 | `unpriced_models.go` | `HandleUnpricedModels` (`GET /admin/unpriced-models`) — thin read-only handler over `analytics.Store.UnpricedModels`. Lists model families seen in stored session data but absent from the active pricing table (provider, family, distinct-session count, last-seen proxy), so a newly-released unpriced model is visible without grepping the `unknown model for pricing` WARN logs (axk2). |
 | `unpriced_models_test.go` | Integration tests for the unpriced-models handler (auth 401/403, gap content, empty-when-all-priced) |
+| `precompute_failures.go` | Worker quarantine surface (6kbe): `HandleListPrecomputeFailures` (`GET /admin/precompute-failures`), `HandleReleasePrecomputeFailure` (`POST /admin/precompute-failures/release`, body `{session_id, bucket}`; `session_id` must be a UUID and `bucket` an `analytics.IsPrecomputeBucket` value, else 400), `HandleReleaseAllPrecomputeFailures` (`POST /admin/precompute-failures/release-all`). Thin handlers over `analytics.Store` `ListQuarantined` / `ReleaseQuarantined` / `ReleaseAllQuarantined`; both releases are audited. |
+| `precompute_failures_test.go` | Integration tests for the precompute-failures handlers (auth 401/403, list wire shape, empty array, release scope + audit, input validation, release-all + audit) |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v). Logs every access decision: `log.Warn("Admin access denied", reason=not_admin, …)` on the 403 and `log.Info("Admin access granted", …)` on the pass, each with `user_id`, `email`, `client_ip`, `method`, `path` (xr71). |
 
 ## Key Types
 
 - **`Handlers`** -- Dependency holder (DB, Storage, config flags) for all admin HTTP handlers.
-- **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`, `setting.update`, `setting.reset`, `smart_recap.regenerate_all`, `cards.invalidate`) used as audit log keys.
+- **`AdminAction`** -- String enum (`user.create`, `user.deactivate`, `user.activate`, `user.delete`, `system_share.create`, `setting.update`, `setting.reset`, `smart_recap.regenerate_all`, `cards.invalidate`, `precompute.release`, `precompute.release_all`) used as audit log keys.
 - **`AdminUserListResponse`**, **`AdminUserJSON`**, **`AdminTotals`** -- JSON response types for the user list endpoint.
 - **`SystemSharesResponse`**, **`SystemShareJSON`** -- JSON response types for system shares. `SystemShareJSON.Provider` is the canonical session provider (`"claude-code"` / `"codex"`), normalized at the DB boundary so the admin UI can render a brand chip without re-normalizing (CF-370).
 - **`SmartRecapPromptResponse`**, **`SetSmartRecapPromptRequest`**, **`SetSmartRecapPromptResponse`**, **`DeleteSmartRecapPromptResponse`** -- JSON request/response types for smart recap prompt settings.
 - **`InvalidateCardsRequest`**, **`InvalidateCardsResponse`**, **`CardInvalidationRow`**, **`CardInvalidationsListResponse`** -- JSON request/response types for card invalidations (CF-343).
+- **`PrecomputeFailuresResponse`**, **`PrecomputeFailureJSON`**, **`ReleasePrecomputeFailureRequest`**, **`ReleasePrecomputeFailuresResponse`** -- JSON types for the precompute-failures surface (6kbe). `PrecomputeFailureJSON.Provider` is canonical; `QuarantinedAt` is RFC3339 UTC.
 - **`UnpricedModelsResponse`**, **`UnpricedModelJSON`** -- JSON response types for the unpriced-models surface (axk2). `LastSeen` is RFC3339; it is the most recent analytics recompute time, a proxy for "last seen" rather than a true ingestion time.
 
 ## Key API
@@ -59,6 +62,9 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleListCardInvalidations` | `GET /api/v1/admin/cards/invalidations` | Returns up to 500 recent audit rows; `?correlation_id=` filters to one run |
 | `HandleGetCardTypes` | `GET /api/v1/admin/cards/types` | Serves `analytics.AllCardTableNames` — the source of truth for the invalidation UI's card-type checkboxes, so the frontend list can't drift (vd31). The same list backs the inbound `card_types` validation |
 | `HandleUnpricedModels` | `GET /api/v1/admin/unpriced-models` | Lists model families seen in stored session data but missing from the active pricing table (provider, family, distinct-session count, last-seen recompute-time proxy), via `analytics.Store.UnpricedModels`. Read-only; surfaces a newly-released unpriced model without grepping the `unknown model for pricing` WARN logs (axk2) |
+| `HandleListPrecomputeFailures` | `GET /api/v1/admin/precompute-failures` | Lists sessions the worker quarantined from a precompute bucket (6kbe), newest first |
+| `HandleReleasePrecomputeFailure` | `POST /api/v1/admin/precompute-failures/release` | Deletes one quarantined (session, bucket) row so the worker retries it; audited as `precompute.release` |
+| `HandleReleaseAllPrecomputeFailures` | `POST /api/v1/admin/precompute-failures/release-all` | Deletes every quarantined row (outage recovery); audited as `precompute.release_all` |
 
 ## How to Extend
 

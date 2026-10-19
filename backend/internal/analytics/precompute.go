@@ -218,6 +218,7 @@ func (p *Precomputer) FindStaleSessions(ctx context.Context, limit int) ([]Stale
 			-- rationale; TestRegistryCoversAllowedProviders is the guard
 			-- against drift between this list and the analytics registry.
 			WHERE s.session_type = ANY($14)
+				AND ` + notQuarantinedClause("sl.session_id", BucketRegularCards) + `
 		),
 		stale_sessions AS (
 			SELECT
@@ -512,6 +513,7 @@ func (p *Precomputer) FindStaleSmartRecapSessions(ctx context.Context, limit int
 			-- internal/models/provider.go for the OSS self-hosted aliasing
 			-- rationale.
 			WHERE s.session_type = ANY($16)
+				AND ` + notQuarantinedClause("sl.session_id", BucketSmartRecap) + `
 				-- Quota check: skip for category 4 (global admin regen) and for
 				-- per-session admin invalidations (CF-343). Bypass clauses OR together.
 				AND (
@@ -634,6 +636,7 @@ func (p *Precomputer) FindStaleSearchIndexSessions(ctx context.Context, limit in
 		-- internal/models/provider.go for the OSS self-hosted aliasing
 		-- rationale.
 		WHERE s.session_type = ANY($10)
+		  AND ` + notQuarantinedClause("sl.session_id", BucketSearchIndex) + `
 		  AND (
 			-- 1. Never indexed
 			si.session_id IS NULL
