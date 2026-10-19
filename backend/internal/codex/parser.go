@@ -1,11 +1,9 @@
 package codex
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"regexp"
 	"sort"
 	"strconv"
@@ -13,9 +11,12 @@ import (
 	"time"
 )
 
-// maxLineBytes is the bufio.Scanner buffer cap. Codex assistant outputs and
-// patch payloads occasionally run into the hundreds of KB.
-const maxLineBytes = 4 * 1024 * 1024
+// maxLineBytes is the longest rollout line ParseRollout decodes; a longer line
+// is skipped with a ValidationError instead of aborting the parse. Command
+// output is inlined into its line, so real lines reach several MB. The cap
+// sits above the 16 MB upload body bound (api.MaxBodyXL) on purpose: it never
+// drops uploaded data and only guards inputs that came another way.
+const maxLineBytes = 32 * 1024 * 1024
 
 // envContextPattern strips the <environment_context>…</environment_context>
 // preamble Codex injects on the first user message. Matches greedily across
@@ -75,27 +76,35 @@ type payloadType struct {
 	Type string `json:"type"`
 }
 
-// ParseRollout streams a Codex JSONL file and returns a normalized rollout.
-// See package documentation for the parsing contract.
-func ParseRollout(r io.Reader) (*ParsedRollout, error) {
+// ParseRollout parses a Codex JSONL file and returns a normalized rollout.
+// See package documentation for the parsing contract. The error return is kept
+// for API stability; ParseRollout always returns a nil error.
+func ParseRollout(raw []byte) (*ParsedRollout, error) {
 	rollout := &ParsedRollout{
 		GitInfo: map[string]any{},
 	}
 	p := &parser{out: rollout}
 
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 64*1024), maxLineBytes)
-
 	lineNum := 0
-	for scanner.Scan() {
+	for data := range bytes.Lines(raw) {
 		lineNum++
-		if len(bytes.TrimSpace(scanner.Bytes())) == 0 {
+		// Drop "\n" then one "\r", as bufio.ScanLines does.
+		data = bytes.TrimSuffix(bytes.TrimSuffix(data, []byte("\n")), []byte("\r"))
+		if len(bytes.TrimSpace(data)) == 0 {
 			continue
 		}
 		rollout.TotalLines++
 
+		if len(data) > maxLineBytes {
+			rollout.ValidationErrors = append(rollout.ValidationErrors, ValidationError{
+				Line:   lineNum,
+				Reason: fmt.Sprintf("line exceeds %d MiB cap (%d bytes); skipped", maxLineBytes>>20, len(data)),
+			})
+			continue
+		}
+
 		var line rawLine
-		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
+		if err := json.Unmarshal(data, &line); err != nil {
 			rollout.ValidationErrors = append(rollout.ValidationErrors, ValidationError{
 				Line:   lineNum,
 				Reason: "JSON decode: " + err.Error(),
@@ -105,9 +114,6 @@ func ParseRollout(r io.Reader) (*ParsedRollout, error) {
 
 		ts, _ := time.Parse(time.RFC3339Nano, line.Timestamp)
 		p.dispatch(line.Type, ts, line.Payload, lineNum)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan rollout: %w", err)
 	}
 
 	p.closeOpenTurn()

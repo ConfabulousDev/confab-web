@@ -42,7 +42,7 @@ func truncateBeforeLastTaskComplete(t *testing.T, raw []byte) []byte {
 }
 
 func TestParseRollout_HappyPath(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixture(t)))
+	rollout, err := ParseRollout(loadFixture(t))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestParseRollout_HappyPath(t *testing.T) {
 
 func TestParseRollout_MidTurnTruncation(t *testing.T) {
 	raw := truncateBeforeLastTaskComplete(t, loadFixture(t))
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestParseRollout_BadJSONLine(t *testing.T) {
 this is not json
 {"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1}}`)
 
-	rollout, err := ParseRollout(bytes.NewReader(bad))
+	rollout, err := ParseRollout(bad)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -215,7 +215,7 @@ this is not json
 }
 
 func TestParseRollout_EmptyInput(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(nil))
+	rollout, err := ParseRollout(nil)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestParseRollout_EmptyInput(t *testing.T) {
 
 func TestParseRollout_NullTokenCountInfo(t *testing.T) {
 	null := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":null}}`)
-	rollout, err := ParseRollout(bytes.NewReader(null))
+	rollout, err := ParseRollout(null)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestParseRollout_NullTokenCountInfo(t *testing.T) {
 func TestParseRollout_ExecExitNonZero(t *testing.T) {
 	failExec := []byte(`{"timestamp":"2026-05-13T01:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{}","call_id":"c1"}}
 {"timestamp":"2026-05-13T01:00:03.100Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"Chunk ID: 1\nWall time: 0.1 seconds\nProcess exited with code 1\nOriginal token count: 1\nOutput:\nerror\n"}}`)
-	rollout, err := ParseRollout(bytes.NewReader(failExec))
+	rollout, err := ParseRollout(failExec)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestParseRollout_ExecExitNonZero(t *testing.T) {
 
 func TestParseRollout_EnvironmentContextStripped(t *testing.T) {
 	envOnly := []byte(`{"timestamp":"2026-05-13T01:00:00.500Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\n<cwd>/x</cwd>\n</environment_context>"}]}}`)
-	rollout, err := ParseRollout(bytes.NewReader(envOnly))
+	rollout, err := ParseRollout(envOnly)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestParseRollout_EnvironmentContextStripped(t *testing.T) {
 }
 
 func TestParseRollout_CompactionPreservesPriorTurns(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixture(t)))
+	rollout, err := ParseRollout(loadFixture(t))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestParseRollout_CompactionPreservesPriorTurns(t *testing.T) {
 }
 
 func TestParseRollout_OrphanFunctionCallOutput(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixture(t)))
+	rollout, err := ParseRollout(loadFixture(t))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestParseRollout_CustomToolCallFailedStatus(t *testing.T) {
 		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"custom_tool_call","status":"failed","call_id":"c1","name":"apply_patch","input":"*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch"}}`,
 		`{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestParseRollout_CustomToolCallCompletedStatus(t *testing.T) {
 		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"custom_tool_call","status":"completed","call_id":"c1","name":"apply_patch","input":"*** Begin Patch\n*** Add File: x.txt\n+hi\n*** End Patch"}}`,
 		`{"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestParseRollout_CustomToolCallCompletedStatus(t *testing.T) {
 func TestParseRollout_ImplicitTurn(t *testing.T) {
 	// A response_item before any task_started should create an implicit turn.
 	implicit := []byte(`{"timestamp":"2026-05-13T01:00:00.500Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`)
-	rollout, err := ParseRollout(bytes.NewReader(implicit))
+	rollout, err := ParseRollout(implicit)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestParseRollout_ModelFromTurnContext(t *testing.T) {
 {"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}
 {"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`)
 
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestParseRollout_TaskStartedModelWinsOverTurnContext(t *testing.T) {
 {"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}
 {"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`)
 
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestParseRollout_TaskStartedModelWinsOverTurnContext(t *testing.T) {
 // CLIVersion.
 func TestParseRollout_SessionMetaCLI_NoSubagent(t *testing.T) {
 	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-p","cli_version":"0.130.0","source":"cli","thread_source":"user","model":"gpt-5","model_provider":"openai"}}`)
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestParseRollout_SessionMetaCLI_NoSubagent(t *testing.T) {
 // every field in source.sub_agent.thread_spawn.
 func TestParseRollout_SessionMetaSubAgent_ThreadSpawn(t *testing.T) {
 	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-c","cli_version":"0.130.0","source":{"sub_agent":{"thread_spawn":{"parent_thread_id":"019e-p","depth":1,"agent_path":"root/r1","agent_nickname":"Nash","agent_role":"default"}}},"thread_source":"subagent","agent_nickname":"Nash","agent_role":"default","model":"gpt-5","model_provider":"openai"}}`)
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestParseRollout_SessionMetaSubAgent_ThreadSpawn(t *testing.T) {
 // is absent.
 func TestParseRollout_SessionMetaAgentTypeLegacyAlias_MapsToAgentRole(t *testing.T) {
 	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-c","cli_version":"0.120.0","source":{"sub_agent":{"thread_spawn":{"parent_thread_id":"019e-p","depth":1,"agent_type":"explorer"}}},"thread_source":"subagent","agent_type":"explorer"}}`)
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -521,7 +521,7 @@ func TestParseRollout_SessionMetaSourceUnknownVariants_NoSubagent(t *testing.T) 
 	}
 	for _, v := range variants {
 		raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.130.0","source":` + v + `}}`)
-		rollout, err := ParseRollout(bytes.NewReader(raw))
+		rollout, err := ParseRollout(raw)
 		if err != nil {
 			t.Errorf("source=%s: ParseRollout returned error: %v", v, err)
 			continue
@@ -539,7 +539,7 @@ func TestParseRollout_SessionMetaSourceUnknownVariants_NoSubagent(t *testing.T) 
 // verifies that the <skills_instructions> block in the first developer
 // message is parsed into AvailableSkills.
 func TestParseRollout_DeveloperMessage_SkillsInstructions_PopulatesCatalog(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_with_skill_invocation.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_with_skill_invocation.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestParseRollout_DeveloperMessage_SecondSkillsInstructions_Ignored(t *testi
 		`{"timestamp":"2026-05-13T01:00:00.100Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"<skills_instructions>\n### Available skills\n- skill-a: First. (file: /a/SKILL.md)\n</skills_instructions>"}]}}`,
 		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"<skills_instructions>\n### Available skills\n- skill-b: Second. (file: /b/SKILL.md)\n</skills_instructions>"}]}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -591,7 +591,7 @@ func TestParseRollout_UserMessage_SkillBlock_ExtractedAndStripped(t *testing.T) 
 		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hey, run this:\n<skill>\n<name>audit-documentation</name>\n<path>/a/SKILL.md</path>\n---\nname: audit-documentation\n---\nbody text\n</skill>\nthanks"}]}}`,
 		`{"timestamp":"2026-05-13T01:00:02.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":1900}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -629,7 +629,7 @@ func TestParseRollout_UserMessage_OnlySkillBlock_MessageDropped(t *testing.T) {
 		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<skill>\n<name>s1</name>\n<path>/x/SKILL.md</path>\n---\nbody\n</skill>"}]}}`,
 		`{"timestamp":"2026-05-13T01:00:02.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":1900}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -656,7 +656,7 @@ func TestParseRollout_TwoSkillInvocations_BothCounted(t *testing.T) {
 		`{"timestamp":"2026-05-13T01:00:03.100Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<skill>\n<name>s2</name>\n<path>/b/SKILL.md</path>\n---\nbody2\n</skill>"}]}}`,
 		`{"timestamp":"2026-05-13T01:00:04.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t2","completed_at":4,"duration_ms":900}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -673,7 +673,7 @@ func TestParseRollout_TwoSkillInvocations_BothCounted(t *testing.T) {
 // wait_agent pair where the child completed produces a SubagentSpawn with
 // Completed=true and the right metadata.
 func TestParseRollout_SpawnWaitPair_Completed(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -718,7 +718,7 @@ func TestParseRollout_SpawnWaitPair_Completed(t *testing.T) {
 // TestParseRollout_SpawnWaitPair_Failed verifies a wait_agent reporting
 // "failed" sets Completed=false but keeps the status text.
 func TestParseRollout_SpawnWaitPair_Failed(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -753,7 +753,7 @@ func TestParseRollout_SpawnWaitPair_Failed(t *testing.T) {
 // two targets, one completed + one failed). This test asserts both updates
 // happened in a single pass.
 func TestParseRollout_WaitMultipleTargets_AllUpdated(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -774,7 +774,7 @@ func TestParseRollout_WaitMultipleTargets_AllUpdated(t *testing.T) {
 // TestParseRollout_SpawnAgent_NotInTurnToolCalls verifies spawn_agent is
 // excluded from Turn.ToolCalls (routed to SubagentSpawns instead).
 func TestParseRollout_SpawnAgent_NotInTurnToolCalls(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -790,7 +790,7 @@ func TestParseRollout_SpawnAgent_NotInTurnToolCalls(t *testing.T) {
 // TestParseRollout_WaitAgent_NotInTurnToolCalls verifies wait_agent is
 // likewise excluded from Turn.ToolCalls.
 func TestParseRollout_WaitAgent_NotInTurnToolCalls(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -813,7 +813,7 @@ func TestParseRollout_OrphanSpawn_NoWait_CompletedFalse(t *testing.T) {
 		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"function_call","name":"spawn_agent","arguments":"{\"agent_type\":\"default\",\"message\":\"go\"}","call_id":"spawn1"}}`,
 		`{"timestamp":"2026-05-13T01:00:00.300Z","type":"response_item","payload":{"type":"function_call_output","call_id":"spawn1","output":"{\"agent_id\":\"child\",\"nickname\":\"Bacon\"}"}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -832,7 +832,7 @@ func TestParseRollout_OrphanSpawn_NoWait_CompletedFalse(t *testing.T) {
 // parent-side <subagent_notification> wrapper is stripped from Message.Text
 // (data is sourced from wait_agent, not the user message).
 func TestParseRollout_SubagentNotification_StrippedFromMessageText(t *testing.T) {
-	rollout, err := ParseRollout(bytes.NewReader(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl")))
+	rollout, err := ParseRollout(loadFixtureNamed(t, "sample_rollout_parent_with_spawns.jsonl"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -851,7 +851,7 @@ func TestParseRollout_SubagentNotification_StrippedFromMessageText(t *testing.T)
 // out of scope for the current corpus but must not crash the parser.
 func TestParseRollout_Depth2_ParsesWithoutCrash(t *testing.T) {
 	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-gc","cli_version":"0.130.0","source":{"sub_agent":{"thread_spawn":{"parent_thread_id":"019e-c","depth":2,"agent_path":"root/r1/r2","agent_nickname":"Turing","agent_role":"default"}}},"thread_source":"subagent"}}`)
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -875,7 +875,7 @@ func TestParseRollout_LongCompletionText_TruncatedAt1000(t *testing.T) {
 		`{"timestamp":"2026-05-13T01:00:01.000Z","type":"response_item","payload":{"type":"function_call","name":"wait_agent","arguments":"{\"targets\":[\"child\"]}","call_id":"wait1"}}`,
 		`{"timestamp":"2026-05-13T01:00:02.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"wait1","output":"{\"status\":{\"child\":{\"completed\":\"` + long + `\"}},\"timed_out\":false}"}}`,
 	}, "\n")
-	rollout, err := ParseRollout(bytes.NewReader([]byte(jsonl)))
+	rollout, err := ParseRollout([]byte(jsonl))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -913,7 +913,7 @@ func TestParseRollout_SessionMetaModelWinsOverTurnContext(t *testing.T) {
 {"timestamp":"2026-05-13T01:00:00.100Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.5"}}
 {"timestamp":"2026-05-13T01:00:01.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":900}}`)
 
-	rollout, err := ParseRollout(bytes.NewReader(raw))
+	rollout, err := ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}

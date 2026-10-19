@@ -3,12 +3,13 @@
 //
 // The on-disk format is the Codex CLI's rollout — one JSON object per line —
 // with five top-level types: session_meta, turn_context, response_item,
-// event_msg, and compacted. ParseRollout consumes a Reader and returns a
-// ParsedRollout aggregating turns, token usage, model info, and compactions.
+// event_msg, and compacted. ParseRollout consumes the rollout bytes and returns
+// a ParsedRollout aggregating turns, token usage, model info, and compactions.
 //
 // The parser is permissive: unknown line types are skipped silently (forward
-// compatibility), JSON-decode failures are recorded as ValidationErrors but do
-// not abort the parse, and files that end mid-turn leave the last turn open.
+// compatibility), JSON-decode failures and lines over the 32 MiB cap are
+// recorded as ValidationErrors but do not abort the parse, and files that end
+// mid-turn leave the last turn open.
 package codex
 
 import "time"

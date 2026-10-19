@@ -22,12 +22,13 @@ backend pipelines.
 
 | File | Role |
 |------|------|
-| `parser.go` | `ParseRollout(io.Reader) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, skill / `<skills_instructions>` / `<subagent_notification>` extraction, and the >=0.149.1 `item_completed` item dispatch (`handleItemCompleted`). |
+| `parser.go` | `ParseRollout([]byte) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, skill / `<skills_instructions>` / `<subagent_notification>` extraction, and the >=0.149.1 `item_completed` item dispatch (`handleItemCompleted`). |
 | `types.go` | `ParsedRollout`, `Turn`, `Message`, `ToolCall`, `TokenUsage`, `CompactionEvent`, `ValidationError`, plus `SubagentSource`, `SkillInvocation`, `SubagentSpawn`, `SkillAvailable` (CF-443) and `FileEdit` (m2ky). Pure data types — no imports beyond `time`. |
 | `firstuser.go` | `EventMsgUserText(json.RawMessage) string` and `UserMessageFromLine(string) string` — extract the human-typed prompt from an `event_msg` line across both wire eras (`user_message` on <=0.130.0, `item_completed` → `UserMessage` on >=0.149.1). Reads the event_msg stream only; the user-role `response_item` stream is injected context (`<environment_context>`, AGENTS.md), never the prompt. Returns `""` for anything underivable. |
 | `firstuser_test.go` | Unit tests for the two extractors against wire shapes captured from real rollouts: both eras, mixed `text`/`skill` content parts, and the response_item / non-UserMessage lines that must yield `""`. |
 | `itemcompleted_test.go` | Unit tests for the >=0.149.1 `item_completed` dispatch (m2ky): FileChange → sorted `FileEdits`, CommandExecution → `ParsedCommandKinds`, Extension `web.search` → synthesized tool call, unobserved Extension kinds and unhandled item types skipped, UserMessage/AgentMessage deliberately not double-recorded, a mixed-era rollout, and malformed items. Fixture lines reproduce real captured wire shapes. |
 | `parser_test.go` | Unit tests against the fixtures below. Covers the legacy parser scenarios plus CF-443 (session_meta source variants, `<skills_instructions>` catalog, `<skill>` invocation extraction + stripping, `spawn_agent` / `wait_agent` routing, `<subagent_notification>` stripping, depth>1, completion-text truncation). |
+| `parser_lines_test.go` | Unit tests for line splitting and the 32 MiB line cap (e9qd): a 5 MiB tool output parses in full, a line one byte over the cap is skipped as one `ValidationError` while later lines still parse, a line exactly at the cap is kept, and CRLF / no-trailing-newline / blank-line / empty inputs keep the old scanner's counts and line numbers. |
 | `testdata/sample_rollout.jsonl` | Legacy fixture: session_meta, three completed turns (turn 3 carries an inline-failed `custom_tool_call` per CF-438), function_call + custom_tool_call, web_search_call, encrypted reasoning, non-null `token_count.info`, a compacted line, an unknown top-level type (forward-compat), and a trailing orphan `function_call_output`. |
 | `testdata/sample_rollout_with_skill_invocation.jsonl` | CF-443: developer message with `<skills_instructions>` catalog plus a user message wrapping a single `<skill>` invocation. |
 | `testdata/sample_rollout_parent_with_spawns.jsonl` | CF-443: parent-side rollout with two `spawn_agent` calls (one completed, one failed) and a `wait_agent` reporting both outcomes, plus a `<subagent_notification>` user-message artifact. |
@@ -35,12 +36,16 @@ backend pipelines.
 
 ## Parser contract
 
-`ParseRollout` consumes a Reader, scans line-by-line with a 4 MB token cap,
-and applies the following rules:
+`ParseRollout` consumes the rollout bytes, splits lines with no buffering
+limit, skips lines over 32 MiB as `ValidationError`s, and applies the
+following rules:
 
-1. **JSON-decode failures**: skip the line, record a `ValidationError`,
-   continue. ParseRollout never returns an error for malformed individual
-   lines — only for stream-level errors.
+1. **Unreadable lines**: a JSON-decode failure, or a line over the 32 MiB
+   `maxLineBytes` cap, skips the line, records a `ValidationError` (with
+   `Line` set and `Type` empty) and continues. ParseRollout never fails the
+   whole rollout because of one line; its error return is always nil. The cap
+   is twice the 16 MB upload body bound, so it only guards input from other
+   paths.
 2. **Top-level types**: `session_meta`, `turn_context`, `response_item`,
    `event_msg`, `compacted`. Unknown top-level types are skipped silently
    (forward-compat); they are NOT recorded as errors. `turn_context` is
@@ -198,7 +203,7 @@ is unverified.
 
 | Dependency | Purpose |
 |------------|---------|
-| stdlib only (`bufio`, `bytes`, `encoding/json`, `regexp`, `sort`, `strconv`, `strings`, `time`, `io`, `fmt`) | The parser intentionally avoids project imports so it can be used as a leaf package by `analytics` without cycles. |
+| stdlib only (`bytes`, `encoding/json`, `regexp`, `sort`, `strconv`, `strings`, `time`, `fmt`) | The parser intentionally avoids project imports so it can be used as a leaf package by `analytics` without cycles. |
 
 ## Consumers
 
