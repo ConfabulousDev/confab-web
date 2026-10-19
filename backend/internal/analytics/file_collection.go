@@ -1,9 +1,9 @@
 package analytics
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -114,24 +114,41 @@ func (fc *FileCollection) ValidationErrorCount() int {
 	return count
 }
 
+// maxLineBytes is the longest transcript line parseTranscriptFile decodes; a
+// longer line is skipped as a LineValidationError instead of aborting the
+// parse. The cap sits above the 16 MB upload body bound (api.MaxBodyXL) on
+// purpose: it never drops uploaded data and only guards inputs that came
+// another way.
+const maxLineBytes = 32 * 1024 * 1024
+
 // parseTranscriptFile parses raw JSONL content into a TranscriptFile.
-// It validates each line and collects validation errors.
+// It validates each line and collects validation errors. A malformed or
+// oversized line never fails the file; the error return is always nil.
 func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error) {
 	var lines []*TranscriptLine
 	var validationErrors []LineValidationError
 	var redactionCounts map[string]int
 	lineNumber := 0
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	// Increase buffer size for large lines (some assistant messages can be huge)
-	const maxLineSize = 10 * 1024 * 1024 // 10MB
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, maxLineSize)
-
-	for scanner.Scan() {
+	for lineData := range bytes.Lines(content) {
 		lineNumber++
-		lineData := scanner.Bytes()
+		// Drop "\n" then one "\r", as bufio.ScanLines does.
+		lineData = bytes.TrimSuffix(bytes.TrimSuffix(lineData, []byte("\n")), []byte("\r"))
 		if len(bytes.TrimSpace(lineData)) == 0 {
+			continue
+		}
+
+		if len(lineData) > maxLineBytes {
+			// RawJSON slices before converting: same result as truncating
+			// the whole line, without copying it into a string.
+			validationErrors = append(validationErrors, LineValidationError{
+				Line:    lineNumber,
+				RawJSON: truncateJSON(string(lineData[:201]), 200),
+				Errors: []ValidationError{{
+					Path:    "(root)",
+					Message: fmt.Sprintf("line exceeds %d MiB cap (%d bytes); skipped", maxLineBytes>>20, len(lineData)),
+				}},
+			})
 			continue
 		}
 
@@ -182,10 +199,6 @@ func parseTranscriptFile(content []byte, agentID string) (*TranscriptFile, error
 		// Count redaction markers from the validation map while it is still
 		// live, so no generic copy of the line outlives this iteration.
 		countRedactionsInValue(rawMap, &redactionCounts)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 
 	return &TranscriptFile{

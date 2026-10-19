@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -20,7 +19,7 @@ func loadCodexRollout(t *testing.T, name string) *codex.ParsedRollout {
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}
-	r, err := codex.ParseRollout(bytes.NewReader(raw))
+	r, err := codex.ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout(%s): %v", name, err)
 	}
@@ -195,7 +194,7 @@ func TestCodexCodeActivity_TrivialModernSessionProducesZerosNotErrors(t *testing
 		`{"timestamp":"2026-08-25T17:59:14.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"01a03a13-t1","completed_at":1787682002,"duration_ms":2000}}`,
 	}, "\n") + "\n"
 
-	r, err := codex.ParseRollout(bytes.NewReader([]byte(lines)))
+	r, err := codex.ParseRollout([]byte(lines))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}

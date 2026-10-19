@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"sync/atomic"
@@ -33,7 +32,7 @@ func minimalCodexJSONL(turnID string) []byte {
 // while the assertion expects agentCount.
 func TestCodexRollout_SubagentsCachedAcrossComputeAndPrepareTranscript(t *testing.T) {
 	mainBytes := minimalCodexJSONL("t-main")
-	main, err := codex.ParseRollout(bytes.NewReader(mainBytes))
+	main, err := codex.ParseRollout(mainBytes)
 	if err != nil {
 		t.Fatalf("parse main: %v", err)
 	}
@@ -74,7 +73,7 @@ func TestCodexRollout_SubagentsCachedAcrossComputeAndPrepareTranscript(t *testin
 // message never contributes to the analytics result.
 func TestCodexRollout_AggregatesSubagentsIntoSlice(t *testing.T) {
 	mainBytes := minimalCodexJSONL("t-main")
-	main, err := codex.ParseRollout(bytes.NewReader(mainBytes))
+	main, err := codex.ParseRollout(mainBytes)
 	if err != nil {
 		t.Fatalf("parse main: %v", err)
 	}

@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"bufio"
 	"path/filepath"
 	"strings"
 
@@ -90,12 +89,12 @@ func countFileEditLines(edit codex.FileEdit) (added, removed int) {
 // parseApplyPatch parses a Codex apply_patch envelope, returning the number
 // of files touched (any of Add/Update/Delete) and the cumulative +/- line
 // counts. If langs is non-nil it's updated with file-extension language counts.
+// The envelope has no per-line cap: it arrived inside a rollout line that
+// already passed codex's line-size check.
 func parseApplyPatch(envelope string, langs map[string]int) (files, added, removed int) {
-	scanner := bufio.NewScanner(strings.NewReader(envelope))
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	inFile := false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for line := range strings.SplitSeq(envelope, "\n") {
+		line = strings.TrimSuffix(line, "\r")
 		switch {
 		case strings.HasPrefix(line, "*** Add File: "),
 			strings.HasPrefix(line, "*** Update File: "),

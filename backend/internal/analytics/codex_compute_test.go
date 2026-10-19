@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -507,7 +506,7 @@ func TestComputeFromCodexRollout_ParentFixture_PopulatesAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	rollout, err := codex.ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -535,7 +534,7 @@ func TestComputeFromCodexRollout_SkillFixture_PopulatesSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	rollout, err := codex.ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -557,7 +556,7 @@ func TestComputeFromCodexRollout_NoSpawnAgentInTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	rollout, err := codex.ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -575,7 +574,7 @@ func TestComputeFromCodexRollout_NoWaitAgentInTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	rollout, err := codex.ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -595,7 +594,7 @@ func TestComputeFromCodexRollout_ConversationTimingUnchanged_NoSpawnFixture(t *t
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	rollout, err := codex.ParseRollout(bytes.NewReader(raw))
+	rollout, err := codex.ParseRollout(raw)
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}

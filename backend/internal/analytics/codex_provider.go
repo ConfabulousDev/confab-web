@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -111,7 +110,7 @@ func (r *codexRollout) loadSubagent(ctx context.Context, fileName string) (*code
 		slog.WarnContext(ctx, "codex subagent download failed", "file", fileName, "error", err)
 		return nil, fmt.Errorf("download failed: %w", err)
 	}
-	parsed, err := codex.ParseRollout(bytes.NewReader(raw))
+	parsed, err := codex.ParseRollout(raw)
 	if err != nil {
 		slog.WarnContext(ctx, "codex subagent parse failed", "file", fileName, "error", err)
 		return nil, fmt.Errorf("parse failed: %w", err)
@@ -171,7 +170,7 @@ func loadCodexMainAndListAgents(ctx context.Context, input ParseInput) (*codex.P
 	if err != nil || raw == nil {
 		return nil, nil, err
 	}
-	main, err := codex.ParseRollout(bytes.NewReader(raw))
+	main, err := codex.ParseRollout(raw)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse codex rollout: %w", err)
 	}

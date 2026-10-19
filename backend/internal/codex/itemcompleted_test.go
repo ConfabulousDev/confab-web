@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
@@ -43,7 +42,7 @@ const (
 
 func parseLines(t *testing.T, lines ...string) *ParsedRollout {
 	t.Helper()
-	r, err := ParseRollout(bytes.NewReader([]byte(strings.Join(lines, "\n") + "\n")))
+	r, err := ParseRollout([]byte(strings.Join(lines, "\n") + "\n"))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -157,7 +156,7 @@ func TestItemCompleted_UnhandledItemTypesAreSkippedSilently(t *testing.T) {
 func TestItemCompleted_UserMessageIsNotDuplicatedFromTheEventStream(t *testing.T) {
 	// Modern rollouts carry the human prompt in BOTH streams. The parser reads
 	// response_item; recording the event copy too would double every count.
-	r, err := ParseRollout(bytes.NewReader(loadModernFixture(t)))
+	r, err := ParseRollout(loadModernFixture(t))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -198,7 +197,7 @@ func TestItemCompleted_MixedEraRolloutHandlesBothShapes(t *testing.T) {
 }
 
 func TestItemCompleted_OldEraRolloutGainsNoItemState(t *testing.T) {
-	r, err := ParseRollout(bytes.NewReader(loadFixture(t)))
+	r, err := ParseRollout(loadFixture(t))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
@@ -222,7 +221,7 @@ func TestItemCompleted_MalformedItemDoesNotPanicOrEmit(t *testing.T) {
 		"blank cmd kind": `{"timestamp":"2026-09-10T21:44:22.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","id":"exec-9497","parsed_cmd":[{"cmd":"pwd"}]}}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			r, err := ParseRollout(bytes.NewReader([]byte(modernTaskStartedLine + "\n" + line + "\n" + modernTaskCompleteLine + "\n")))
+			r, err := ParseRollout([]byte(modernTaskStartedLine + "\n" + line + "\n" + modernTaskCompleteLine + "\n"))
 			if err != nil {
 				t.Fatalf("ParseRollout: %v", err)
 			}
@@ -236,7 +235,7 @@ func TestItemCompleted_MalformedItemDoesNotPanicOrEmit(t *testing.T) {
 }
 
 func TestParseRollout_ModernFixtureShape(t *testing.T) {
-	r, err := ParseRollout(bytes.NewReader(loadModernFixture(t)))
+	r, err := ParseRollout(loadModernFixture(t))
 	if err != nil {
 		t.Fatalf("ParseRollout: %v", err)
 	}
