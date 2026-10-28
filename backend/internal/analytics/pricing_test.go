@@ -86,6 +86,9 @@ func TestGetModelFamily(t *testing.T) {
 		{"o3", "o3"},
 		{"o4-mini", "o4-mini"},
 		{"gpt-4o", "gpt-4o"},
+		{"gpt-4.1-mini", "gpt-4.1-mini"},
+		{"o1-pro", "o1-pro"},
+		{"o3-pro", "o3-pro"},
 	}
 
 	for _, tt := range tests {
@@ -134,6 +137,7 @@ func TestLookupPricing(t *testing.T) {
 		{"gpt-5.6-luna", true, 0.20},
 		{"gpt-6-astra", true, 10.00},
 		{"gpt-6.1-sol", true, 2.00},
+		{"gpt-6.1-terra", true, 1.00},
 		{"gpt-6-sol", true, 2.00},
 		{"gpt-6-luna", true, 0.10},
 		{"gpt-5-pro", true, 15.00},
@@ -142,6 +146,9 @@ func TestLookupPricing(t *testing.T) {
 		{"gpt-4o-mini", true, 0.15},
 		{"o1", true, 15.00},
 		{"o3-mini", true, 1.10},
+		{"gpt-4.1", true, 2.00},
+		{"o1-pro", true, 150.00},
+		{"o3-pro", true, 20.00},
 	}
 
 	for _, tt := range tests {
@@ -595,14 +602,20 @@ func TestEmbeddedRates(t *testing.T) {
 		{"gpt-5.6-luna", 0.2, 1.2, 0.25, 0, 0.02},
 		{"gpt-5.6-cyber", 12.5, 75.0, 15.625, 0, 1.25},
 		{"gpt-6-astra", 10.0, 50.0, 12.5, 0, 1.0},
-		{"gpt-6.1-sol", 2.0, 10.0, 2.5, 0, 0.10}, // 0.05x cache read: documented exception
+		{"gpt-6.1-sol", 2.0, 10.0, 2.5, 0, 0.10},   // 0.05x cache read: documented exception
+		{"gpt-6.1-terra", 1.0, 5.0, 1.25, 0, 0.05}, // 0.05x cache read: documented exception
 		{"gpt-6-sol", 2.0, 10.0, 2.5, 0, 0.20},
 		{"gpt-6-luna", 0.10, 0.50, 0.125, 0, 0.01},
 		// The pro models offer no caching at all (both columns are dashes on the
 		// vendor page), so cacheWrite and cacheRead are both 0.
 		{"gpt-5-pro", 15.0, 120.0, 0, 0, 0},
 		{"gpt-5.2-pro", 21.0, 168.0, 0, 0, 0},
+		{"o1-pro", 150.0, 600.0, 0, 0, 0},
+		{"o3-pro", 20.0, 80.0, 0, 0, 0},
 		{"chat-latest", 5.0, 30.0, 0, 0, 0.5},
+		{"gpt-4.1", 2.0, 8.0, 0, 0, 0.5},
+		{"gpt-4.1-mini", 0.4, 1.6, 0, 0, 0.1},
+		{"gpt-4.1-nano", 0.1, 0.4, 0, 0, 0.025},
 
 		// opencode — Gemini corrections and additions.
 		{"gemini-2.5-pro", 1.25, 10.0, 0, 0, 0.125},
@@ -702,6 +715,23 @@ func TestGPT61SolCacheReadException(t *testing.T) {
 	}
 	if want := decimal.NewFromFloat(0.10); !pricing.CacheRead.Equal(want) {
 		t.Errorf("gpt-6.1-sol CacheRead = %s, want %s (0.05x input, NOT the usual 0.1x = gpt-6-sol's 0.20)", pricing.CacheRead, want)
+	}
+}
+
+// TestGPT61TerraCacheReadException pins GPT-6.1 Terra's cache-read rate at
+// 0.05x input ($0.05 against $1 input), the same deliberate exception as
+// gpt-6.1-sol. Normalizing to the usual 0.1x would silently double cache-read
+// cost.
+func TestGPT61TerraCacheReadException(t *testing.T) {
+	pricing, ok := LookupPricing("gpt-6.1-terra")
+	if !ok {
+		t.Fatal("gpt-6.1-terra not found in embedded pricing")
+	}
+	if want := decimal.NewFromFloat(1); !pricing.Input.Equal(want) {
+		t.Errorf("gpt-6.1-terra Input = %s, want %s (the 0.05x cache-read claim is relative to this)", pricing.Input, want)
+	}
+	if want := decimal.NewFromFloat(0.05); !pricing.CacheRead.Equal(want) {
+		t.Errorf("gpt-6.1-terra CacheRead = %s, want %s (0.05x input, NOT the usual 0.1x)", pricing.CacheRead, want)
 	}
 }
 
