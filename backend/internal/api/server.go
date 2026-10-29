@@ -840,10 +840,10 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 				// - style-src 'self' 'unsafe-inline': Allow inline styles
 				if saasTermlyEnabled {
 					w.Header().Set("Content-Security-Policy",
-						"default-src 'self'; script-src 'self' 'unsafe-inline' https://app.termly.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.termly.io; frame-src https://app.termly.io; frame-ancestors 'none'")
+						"default-src 'self'; script-src 'self' 'unsafe-inline' https://app.termly.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://*.termly.io; frame-src https://app.termly.io; frame-ancestors 'none'")
 				} else {
 					w.Header().Set("Content-Security-Policy",
-						"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'")
+						"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
 				}
 			} else {
 				// Strict CSP for API-only mode

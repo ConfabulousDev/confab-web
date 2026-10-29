@@ -16,10 +16,6 @@ const head = [
     content: `try { if (localStorage.getItem('starlight-theme') === null) localStorage.setItem('starlight-theme', 'dark'); } catch {}`,
   },
 
-  // Preconnect to Google Fonts for the Lobster wordmark.
-  { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
-  { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },
-
   // Default Open Graph / Twitter card. Per-page frontmatter can override.
   { tag: 'meta', attrs: { property: 'og:image', content: OG_IMAGE } },
   { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
@@ -48,7 +44,8 @@ export default defineConfig({
     starlight({
       title: 'Confabulous',
       description: 'Open-source analytics for your Claude Code, Codex, and OpenCode sessions — managed or self-hosted.',
-      customCss: ['./src/styles/custom.css'],
+      // Self-hosted Lobster for the wordmark (no third-party font requests).
+      customCss: ['@fontsource/lobster/400.css', './src/styles/custom.css'],
       head,
       social: [
         {

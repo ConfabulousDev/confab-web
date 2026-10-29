@@ -117,6 +117,12 @@ components/     →  renders typed SessionDetail
 - Colors and spacing use CSS custom properties from `styles/variables.css`.
 - The `[data-theme="dark"]` selector drives dark mode. Never hardcode colors.
 
+### Browser storage and third-party requests
+
+- The app keeps only strictly-necessary client storage: `localStorage['confab-theme']` (`index.html`, `contexts/ThemeContext.tsx`), `localStorage['quickstart-cta-dismissed']` (`components/QuickstartCTA.tsx`) and `sessionStorage['chunk_reload_attempted:<path>']` (`components/ErrorBoundary.tsx`). That, plus the auth-only cookies in `backend/internal/auth`, is why there is no consent banner (5z5r).
+- Adding or changing a storage key means updating the Cookie Policy (`frontend/src/legal/cookies.md`).
+- Nothing loads from a third-party origin at page load. The Lobster wordmark font is self-hosted via `@fontsource/lobster` (imported in `main.tsx` and `.storybook/preview.tsx`), and the CSP in `backend/internal/api/server.go` allows only `'self'` for fonts and styles. Don't add CDN fonts, scripts or trackers without revisiting the policies and the CSP.
+
 ### Storybook
 
 - Stories live alongside components (`Component.stories.tsx` next to
