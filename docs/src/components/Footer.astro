@@ -1,0 +1,36 @@
+---
+// Starlight Footer override: renders the default footer, then links to the
+// legal pages on the main site. The Cookie Policy covers this site's
+// Cloudflare Web Analytics beacon and browser storage.
+import Default from '@astrojs/starlight/components/Footer.astro';
+
+const links = [
+  { label: 'Privacy', href: 'https://confabulous.dev/privacy' },
+  { label: 'Terms', href: 'https://confabulous.dev/terms' },
+  { label: 'Cookies', href: 'https://confabulous.dev/cookies' },
+];
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<nav class="legal-links" aria-label="Legal">
+  {links.map(({ label, href }) => <a href={href}>{label}</a>)}
+</nav>
+
+<style>
+  .legal-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.5rem;
+    margin-top: 1.5rem;
+    font-size: var(--sl-text-xs);
+  }
+  .legal-links a {
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+  }
+  .legal-links a:hover {
+    color: var(--sl-color-white);
+  }
+</style>

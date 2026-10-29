@@ -47,6 +47,10 @@ export default defineConfig({
       // Self-hosted Lobster for the wordmark (no third-party font requests).
       customCss: ['@fontsource/lobster/400.css', './src/styles/custom.css'],
       head,
+      components: {
+        // Default footer plus Privacy / Terms / Cookies links to the main site.
+        Footer: './src/components/Footer.astro',
+      },
       social: [
         {
           icon: 'github',
