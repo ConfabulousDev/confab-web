@@ -9,7 +9,6 @@ import type { AdminSystemSharesResponse } from '@/schemas/api';
 const appConfig: AppConfig = {
   sharesEnabled: true,
   saasFooterEnabled: false,
-  saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
   passwordAuthEnabled: false,
   smartRecapEnabled: false,

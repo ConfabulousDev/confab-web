@@ -1690,7 +1690,9 @@ Returns the list of enabled authentication providers. No authentication required
   "features": {
     "shares_enabled": true,
     "saas_footer_enabled": false,
-    "saas_termly_enabled": false,
+    "org_analytics_enabled": false,
+    "password_auth_enabled": true,
+    "smart_recap_enabled": false,
     "support_email": "support@example.com"
   },
   "version": {
@@ -1712,9 +1714,9 @@ Returns the list of enabled authentication providers. No authentication required
 | `providers[].login_url` | string | Path to initiate login with this provider |
 | `features.shares_enabled` | bool | Whether share creation is enabled (`true` when `ENABLE_SHARE_CREATION=true`) |
 | `features.saas_footer_enabled` | bool | Whether the SaaS footer is shown (`true` when `ENABLE_SAAS_FOOTER=true`) |
-| `features.saas_termly_enabled` | bool | Whether Termly cookie consent is enabled (`true` when `ENABLE_SAAS_TERMLY=true`) |
 | `features.org_analytics_enabled` | bool | Whether org-wide analytics is enabled (`true` when `ENABLE_ORG_ANALYTICS=true`). See [Organization Analytics](#organization-analytics) for privacy implications |
 | `features.password_auth_enabled` | bool | Whether password-based authentication is enabled |
+| `features.smart_recap_enabled` | bool | Whether smart recap generation is active (`true` when `SMART_RECAP_ENABLED=true`) |
 | `features.support_email` | string | Support contact email address (from `SUPPORT_EMAIL` env var, defaults to `"support@example.com"`) |
 | `version.current` | string | Running backend build tag (e.g., `"v0.4.1"`). Empty in local dev (`go run` without ldflags). |
 | `version.latest` | string | Latest stable release tag on GitHub. Omitted when the check is disabled or the GitHub fetch failed. |

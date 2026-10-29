@@ -16,7 +16,6 @@ export interface VersionInfo {
 export interface AppConfig {
   sharesEnabled: boolean;
   saasFooterEnabled: boolean;
-  saasTermlyEnabled: boolean;
   orgAnalyticsEnabled: boolean;
   passwordAuthEnabled: boolean;
   smartRecapEnabled: boolean;

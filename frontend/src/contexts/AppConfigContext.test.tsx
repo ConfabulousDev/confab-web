@@ -109,45 +109,6 @@ describe('AppConfigContext', () => {
     expect(result.current.saasFooterEnabled).toBe(false);
   });
 
-  it('defaults saasTermlyEnabled to false before fetch resolves', () => {
-    vi.spyOn(global, 'fetch').mockImplementation(() => new Promise(() => {}));
-
-    const { result } = renderHook(() => useAppConfig(), {
-      wrapper: createWrapper(),
-    });
-
-    expect(result.current.saasTermlyEnabled).toBe(false);
-  });
-
-  it('sets saasTermlyEnabled to true when server reports enabled', async () => {
-    mockFetchResponse(true, {
-      providers: [],
-      features: { shares_enabled: true, saas_termly_enabled: true },
-    });
-
-    const { result } = renderHook(() => useAppConfig(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.saasTermlyEnabled).toBe(true);
-    });
-  });
-
-  it('defaults saasTermlyEnabled to false when features field is missing', async () => {
-    mockFetchResponse(true, { providers: [] });
-
-    const { result } = renderHook(() => useAppConfig(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalled();
-    });
-
-    expect(result.current.saasTermlyEnabled).toBe(false);
-  });
-
   it('reads supportEmail from server response', async () => {
     mockFetchResponse(true, {
       providers: [],
@@ -213,7 +174,6 @@ describe('fetchConfigWithRetry', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(result.saasFooterEnabled).toBe(false);
-    expect(result.saasTermlyEnabled).toBe(false);
     expect(result.sharesEnabled).toBe(false);
   });
 
@@ -230,7 +190,24 @@ describe('fetchConfigWithRetry', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(result.saasFooterEnabled).toBe(false);
-    expect(result.saasTermlyEnabled).toBe(false);
+  });
+
+  it('maps the server response to exactly the AppConfig fields', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      makeFakeResponse(true, { providers: [], features: { saas_footer_enabled: true } }),
+    );
+
+    const result = await fetchConfigWithRetry();
+
+    expect(Object.keys(result).sort()).toEqual([
+      'orgAnalyticsEnabled',
+      'passwordAuthEnabled',
+      'saasFooterEnabled',
+      'sharesEnabled',
+      'smartRecapEnabled',
+      'supportEmail',
+      'version',
+    ]);
   });
 
   it('succeeds on retry after initial failure', async () => {
@@ -241,7 +218,7 @@ describe('fetchConfigWithRetry', () => {
       .mockResolvedValueOnce(
         makeFakeResponse(true, {
           providers: [],
-          features: { shares_enabled: true, saas_footer_enabled: true, saas_termly_enabled: true },
+          features: { shares_enabled: true, saas_footer_enabled: true },
         }),
       );
 
@@ -254,6 +231,5 @@ describe('fetchConfigWithRetry', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(result.saasFooterEnabled).toBe(true);
-    expect(result.saasTermlyEnabled).toBe(true);
   });
 });

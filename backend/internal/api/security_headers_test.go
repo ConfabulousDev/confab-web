@@ -7,10 +7,9 @@ import (
 	"testing"
 )
 
-func cspFor(t *testing.T, staticDir, termly string) string {
+func cspFor(t *testing.T, staticDir string) string {
 	t.Helper()
 	t.Setenv("STATIC_FILES_DIR", staticDir)
-	t.Setenv("ENABLE_SAAS_TERMLY", termly)
 	h := securityHeadersMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -35,15 +34,14 @@ func cspDirective(csp, name string) string {
 // The Lobster wordmark font is self-hosted, so no CSP mode may allow Google Fonts.
 func TestCSPAllowsNoThirdPartyFonts(t *testing.T) {
 	modes := []struct {
-		name, staticDir, termly string
+		name, staticDir string
 	}{
-		{"static SPA", "/srv/static", "false"},
-		{"static SPA with Termly", "/srv/static", "true"},
-		{"API only", "", "false"},
+		{"static SPA", "/srv/static"},
+		{"API only", ""},
 	}
 	for _, m := range modes {
 		t.Run(m.name, func(t *testing.T) {
-			csp := cspFor(t, m.staticDir, m.termly)
+			csp := cspFor(t, m.staticDir)
 			for _, origin := range []string{"fonts.googleapis.com", "fonts.gstatic.com"} {
 				if strings.Contains(csp, origin) {
 					t.Errorf("CSP must not allow %s (Lobster is self-hosted); got %q", origin, csp)
@@ -59,14 +57,27 @@ func TestCSPAllowsNoThirdPartyFonts(t *testing.T) {
 	}
 }
 
-// Removing Google Fonts must not drop the Termly origins; jks2 removes those separately.
-func TestCSPTermlyBranchKeepsTermlyOrigins(t *testing.T) {
-	termlyCSP := cspFor(t, "/srv/static", "true")
-	if !strings.Contains(cspDirective(termlyCSP, "script-src"), "https://app.termly.io") {
-		t.Errorf("Termly CSP must still allow app.termly.io scripts; got %q", termlyCSP)
+// Each mode has exactly one CSP and it allows no third-party origin: the
+// only non-'self' sources are inline script/style and data:/https: images.
+// A new third-party embed must update this test deliberately.
+func TestCSPIsExactlySelfOnlyPerMode(t *testing.T) {
+	modes := []struct {
+		name, staticDir, want string
+	}{
+		{"static SPA", "/srv/static",
+			"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"},
+		{"API only", "",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"},
 	}
-	plainCSP := cspFor(t, "/srv/static", "false")
-	if strings.Contains(plainCSP, "termly") {
-		t.Errorf("non-Termly CSP must not mention termly; got %q", plainCSP)
+	for _, m := range modes {
+		t.Run(m.name, func(t *testing.T) {
+			csp := cspFor(t, m.staticDir)
+			if csp != m.want {
+				t.Errorf("CSP = %q, want %q", csp, m.want)
+			}
+			if got := cspDirective(csp, "frame-src"); got != "" {
+				t.Errorf("CSP must not set frame-src (no third-party frames); got %q", got)
+			}
+		})
 	}
 }

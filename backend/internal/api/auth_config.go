@@ -16,7 +16,6 @@ type providerInfo struct {
 type authConfigFeatures struct {
 	SharesEnabled       bool   `json:"shares_enabled"`
 	SaasFooterEnabled   bool   `json:"saas_footer_enabled"`
-	SaasTermlyEnabled   bool   `json:"saas_termly_enabled"`
 	OrgAnalyticsEnabled bool   `json:"org_analytics_enabled"`
 	PasswordAuthEnabled bool   `json:"password_auth_enabled"`
 	SmartRecapEnabled   bool   `json:"smart_recap_enabled"`
@@ -86,7 +85,6 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 		Features: authConfigFeatures{
 			SharesEnabled:       s.sharesEnabled,
 			SaasFooterEnabled:   s.saasFooterEnabled,
-			SaasTermlyEnabled:   s.saasTermlyEnabled,
 			OrgAnalyticsEnabled: s.orgAnalyticsEnabled,
 			PasswordAuthEnabled: s.oauthConfig.PasswordEnabled,
 			SmartRecapEnabled:   s.smartRecapEnabled,

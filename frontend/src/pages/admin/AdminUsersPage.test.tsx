@@ -14,7 +14,6 @@ import type { AdminUserListResponse, User } from '@/schemas/api';
 const appConfig: AppConfig = {
   sharesEnabled: true,
   saasFooterEnabled: false,
-  saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
   passwordAuthEnabled: true,
   smartRecapEnabled: false,

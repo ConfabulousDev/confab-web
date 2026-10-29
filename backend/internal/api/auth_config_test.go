@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -249,40 +251,27 @@ func TestHandleAuthConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("features saas_termly_enabled defaults to false", func(t *testing.T) {
-		s := &Server{
-			oauthConfig: &auth.OAuthConfig{},
-		}
+	t.Run("features exposes exactly the documented keys", func(t *testing.T) {
+		s := &Server{oauthConfig: &auth.OAuthConfig{}}
 		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
 		rr := httptest.NewRecorder()
 
 		s.handleAuthConfig(rr, req)
 
-		var resp authConfigResponse
+		var resp struct {
+			Features map[string]json.RawMessage `json:"features"`
+		}
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if resp.Features.SaasTermlyEnabled {
-			t.Error("expected features.saas_termly_enabled to be false by default")
+		// Keep in sync with the features table in backend/API.md.
+		want := []string{
+			"org_analytics_enabled", "password_auth_enabled", "saas_footer_enabled",
+			"shares_enabled", "smart_recap_enabled", "support_email",
 		}
-	})
-
-	t.Run("features saas_termly_enabled true when enabled", func(t *testing.T) {
-		s := &Server{
-			oauthConfig:       &auth.OAuthConfig{},
-			saasTermlyEnabled: true,
-		}
-		req := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
-		rr := httptest.NewRecorder()
-
-		s.handleAuthConfig(rr, req)
-
-		var resp authConfigResponse
-		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
-		}
-		if !resp.Features.SaasTermlyEnabled {
-			t.Error("expected features.saas_termly_enabled to be true when enabled")
+		got := slices.Sorted(maps.Keys(resp.Features))
+		if !slices.Equal(got, want) {
+			t.Errorf("features keys = %v, want %v", got, want)
 		}
 	})
 

@@ -2,18 +2,8 @@ import { useAppConfig } from '@/hooks/useAppConfig';
 import { DOCS_URL, GITHUB_ISSUES_URL } from '@/utils/externalLinks';
 import styles from './Footer.module.css';
 
-declare global {
-  interface Window {
-    displayPreferenceModal?: () => void;
-  }
-}
-
 function Footer() {
-  const { supportEmail, saasTermlyEnabled } = useAppConfig();
-  const handleCookieSettings = (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.displayPreferenceModal?.();
-  };
+  const { supportEmail } = useAppConfig();
 
   return (
     <footer className={styles.footer}>
@@ -24,9 +14,6 @@ function Footer() {
         <a href={GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer">Report an issue</a>
         <a href={`mailto:${supportEmail}`}>Help</a>
         <a href="/policies">Policies</a>
-        {saasTermlyEnabled && (
-          <a href="#" onClick={handleCookieSettings} className="termly-display-preferences">Cookie Settings</a>
-        )}
       </div>
       <div className={styles.copyright}>
         © {new Date().getFullYear()} Confabulous Software LLC

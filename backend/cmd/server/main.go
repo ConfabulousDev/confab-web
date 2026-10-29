@@ -86,9 +86,6 @@ func main() {
 	if os.Getenv("ENABLE_SAAS_FOOTER") == "true" {
 		logger.Info("SaaS footer enabled: ENABLE_SAAS_FOOTER=true")
 	}
-	if os.Getenv("ENABLE_SAAS_TERMLY") == "true" {
-		logger.Info("SaaS Termly consent enabled: ENABLE_SAAS_TERMLY=true")
-	}
 
 	// Bootstrap admin user if password auth is enabled and no users exist
 	if config.OAuthConfig.PasswordEnabled {

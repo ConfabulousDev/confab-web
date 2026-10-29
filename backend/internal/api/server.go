@@ -68,7 +68,6 @@ type Server struct {
 	sharesEnabled       bool                      // When true, share creation is enabled (ENABLE_SHARE_CREATION=true)
 	shareDailyQuota     int                       // Per-user rolling-24h cap on share creation (SHARE_DAILY_QUOTA, default 100; <=0 disables)
 	saasFooterEnabled   bool                      // When true, SaaS footer is shown (ENABLE_SAAS_FOOTER=true)
-	saasTermlyEnabled   bool                      // When true, Termly cookie consent is enabled (ENABLE_SAAS_TERMLY=true)
 	orgAnalyticsEnabled bool                      // When true, org-wide analytics view is enabled (ENABLE_ORG_ANALYTICS=true)
 	smartRecapEnabled   bool                      // When true, smart recap generation is active (SMART_RECAP_ENABLED=true)
 	globalLimiter       ratelimit.RateLimiter     // Global rate limiter for all requests
@@ -104,7 +103,6 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		sharesEnabled:       os.Getenv("ENABLE_SHARE_CREATION") == "true",
 		shareDailyQuota:     shareDailyQuotaFromEnv(),
 		saasFooterEnabled:   saasFooterEnabled,
-		saasTermlyEnabled:   os.Getenv("ENABLE_SAAS_TERMLY") == "true",
 		orgAnalyticsEnabled: os.Getenv("ENABLE_ORG_ANALYTICS") == "true",
 		smartRecapEnabled:   os.Getenv("SMART_RECAP_ENABLED") == "true",
 		// Global rate limiter: 100 requests per second, burst of 200
@@ -709,29 +707,17 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	// Clean staticDir once during initialization for security check
 	cleanStaticDir := filepath.Clean(staticDir)
 
-	// Pre-process index.html at startup: inject Termly script + demo banner
-	// state hook if enabled. Done once at boot so per-request serving is
-	// just a Write. Both injections land before </head>; we build the
-	// combined block first so we touch the source string at most once.
+	// Pre-process index.html at startup: inject the demo banner state hook
+	// before </head> if enabled. Done once at boot so per-request serving is
+	// just a Write.
 	indexPath := filepath.Join(cleanStaticDir, "index.html")
 	var processedIndex []byte
 	if raw, err := os.ReadFile(indexPath); err == nil {
-		var headInject strings.Builder
-		if s.saasTermlyEnabled {
-			headInject.WriteString(`    <!-- Termly Consent Banner -->
-    <script src="https://app.termly.io/resource-blocker/6f350df0-f6a8-4213-b299-da2516ace3ac?autoBlock=on"></script>
-`)
-		}
+		processed := string(raw)
 		// CF-483: RenderDemoBannerScriptTag returns "" when DemoIdentityEmail
 		// is unset, so this is a no-op in non-demo deployments.
 		if demoScript := auth.RenderDemoBannerScriptTag(s.oauthConfig.DemoIdentityEmail); demoScript != "" {
-			headInject.WriteString("    ")
-			headInject.WriteString(demoScript)
-			headInject.WriteString("\n")
-		}
-		processed := string(raw)
-		if headInject.Len() > 0 {
-			processed = strings.Replace(processed, "</head>", headInject.String()+"  </head>", 1)
+			processed = strings.Replace(processed, "</head>", "    "+demoScript+"\n  </head>", 1)
 		}
 		processedIndex = []byte(processed)
 	}
@@ -776,7 +762,7 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 			// Hashed assets - cache for 1 year (immutable)
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else if requestPath == "/" || requestPath == "/index.html" {
-			// Always serve processed index.html (may have Termly injected)
+			// Always serve processed index.html (may have the demo hook injected)
 			serveIndex(w, r)
 			return
 		}
@@ -828,7 +814,6 @@ func requireUserID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 func securityHeadersMiddleware() func(http.Handler) http.Handler {
 	staticDir := os.Getenv("STATIC_FILES_DIR")
 	servingStatic := staticDir != ""
-	saasTermlyEnabled := os.Getenv("ENABLE_SAAS_TERMLY") == "true"
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -838,13 +823,8 @@ func securityHeadersMiddleware() func(http.Handler) http.Handler {
 				// Relaxed CSP for SPA frontend: allows inline scripts needed for SPA bootstrap
 				// - script-src 'self' 'unsafe-inline': Allow inline scripts (React apps may need this)
 				// - style-src 'self' 'unsafe-inline': Allow inline styles
-				if saasTermlyEnabled {
-					w.Header().Set("Content-Security-Policy",
-						"default-src 'self'; script-src 'self' 'unsafe-inline' https://app.termly.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://*.termly.io; frame-src https://app.termly.io; frame-ancestors 'none'")
-				} else {
-					w.Header().Set("Content-Security-Policy",
-						"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
-				}
+				w.Header().Set("Content-Security-Policy",
+					"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'")
 			} else {
 				// Strict CSP for API-only mode
 				// - script-src 'self': Only execute scripts from same origin
