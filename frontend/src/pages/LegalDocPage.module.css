@@ -1,0 +1,118 @@
+.container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-3xl) var(--spacing-xl);
+}
+
+.content {
+  max-width: 760px;
+  width: 100%;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--font-3xl);
+  font-weight: var(--font-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.updated {
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--spacing-2xl) 0;
+}
+
+/* Long-form reading text: the shared markdown styles (links, code), at body
+   size with paragraph spacing. */
+.body {
+  composes: markdown from '../styles/markdown.module.css';
+  font-size: var(--font-base);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.body :global(p),
+.body :global(ul),
+.body :global(ol) {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.body :global(ul),
+.body :global(ol) {
+  padding-left: var(--spacing-xl);
+}
+
+.body :global(li) {
+  margin-bottom: var(--spacing-xs);
+}
+
+.body :global(h2) {
+  font-size: var(--font-xl);
+  margin: var(--spacing-2xl) 0 var(--spacing-md) 0;
+  scroll-margin-top: var(--spacing-lg);
+}
+
+.body :global(h3) {
+  font-size: var(--font-lg);
+  margin: var(--spacing-xl) 0 var(--spacing-sm) 0;
+  scroll-margin-top: var(--spacing-lg);
+}
+
+.body :global(table) {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-sm);
+}
+
+.body :global(th),
+.body :global(td) {
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  text-align: left;
+  vertical-align: top;
+}
+
+.body :global(th) {
+  background: var(--color-bg-secondary);
+  font-weight: var(--font-semibold);
+}
+
+@media print {
+  .container {
+    overflow: visible;
+    padding: 0;
+  }
+
+  .title,
+  .updated,
+  .body,
+  .body :global(h2),
+  .body :global(h3),
+  .body :global(a) {
+    color: CanvasText;
+  }
+
+  .body :global(th) {
+    background: none;
+  }
+}
+
+/* Print just the document: hide the app chrome while a legal page is shown. */
+@media print {
+  :global(.app-container):has(.container) > :global(header),
+  :global(.app-container):has(.container) > :global(footer) {
+    display: none;
+  }
+
+  :global(.app-container):has(.container) {
+    height: auto;
+    overflow: visible;
+  }
+}

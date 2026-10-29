@@ -1,6 +1,7 @@
-// Shared markdown -> sanitized-HTML renderer.
-// Used by transcript content blocks and attachment components (CF-346).
-import { marked } from 'marked';
+// Shared markdown -> sanitized-HTML renderers.
+// renderMarkdownToHtml: transcript content blocks and attachment components (CF-346).
+// renderLegalMarkdown: the in-repo legal documents (frontend/src/legal/).
+import { marked, Marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { stripAnsi } from './utils';
 
@@ -58,4 +59,56 @@ export function renderMarkdownToHtml(text: string): string {
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ['target'],
   });
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+};
+
+/** Heading text -> URL fragment: lowercase, punctuation dropped, spaces to hyphens. */
+function slugify(html: string): string {
+  const text = html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(?:amp|lt|gt|quot|#39);/g, (e) => HTML_ENTITIES[e] ?? e);
+  const slug = text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+  return slug || 'section';
+}
+
+// Separate instance so the global `marked` config above (breaks: true for
+// transcripts) never leaks into legal rendering, and vice versa.
+const usedHeadingIds = new Set<string>();
+const legalMarked = new Marked({
+  async: false,
+  gfm: true,
+  renderer: {
+    heading({ tokens, depth }) {
+      const inner = this.parser.parseInline(tokens);
+      const base = slugify(inner);
+      let id = base;
+      for (let n = 2; usedHeadingIds.has(id); n++) id = `${base}-${n}`;
+      usedHeadingIds.add(id);
+      return `<h${depth} id="${id}">${inner}</h${depth}>\n`;
+    },
+  },
+});
+
+/**
+ * Render a legal document (trusted, bundled Markdown) to sanitized HTML.
+ * GFM without `breaks`, and every heading gets a slug `id` (duplicates get
+ * `-2`, `-3`, …) so the table of contents and deep links work.
+ */
+export function renderLegalMarkdown(md: string): string {
+  usedHeadingIds.clear();
+  const html = legalMarked.parse(md);
+  if (typeof html !== 'string') return '';
+  return DOMPurify.sanitize(html);
 }

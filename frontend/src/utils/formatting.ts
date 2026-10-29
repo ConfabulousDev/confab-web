@@ -246,3 +246,16 @@ export function formatRepoName(repoUrl: string): string {
   }
   return repoUrl;
 }
+
+/**
+ * Format a calendar date (YYYY-MM-DD) as e.g. "January 9, 2026". Formatted in
+ * UTC so the date never shifts to the previous day in western time zones.
+ */
+export function formatCalendarDate(isoDate: string): string {
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}

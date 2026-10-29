@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { MemoryRouter } from 'react-router-dom';
 import PoliciesPage from './PoliciesPage';
 
 const meta: Meta<typeof PoliciesPage> = {
@@ -7,6 +8,13 @@ const meta: Meta<typeof PoliciesPage> = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [
+    (Story) => (
+      <MemoryRouter initialEntries={['/policies']}>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export default meta;

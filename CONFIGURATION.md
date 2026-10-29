@@ -161,7 +161,7 @@ Sharing behavior and UI customization.
 | `ENABLE_SHARE_CREATION` | `false` | No | Enable share link creation |
 | `SHARE_DAILY_QUOTA` | `100` | No | Per-user cap on shares created in a rolling 24h window; the creation endpoint returns 429 once a user exceeds it. Set to `0` to disable the cap. |
 | `ENABLE_ORG_ANALYTICS` | `false` | No | Expose org-wide per-user analytics (`/admin/...`) to every authenticated user — same visibility model as `SHARE_ALL_SESSIONS_TO_AUTHENTICATED`. See [Organization Analytics in backend/API.md](backend/API.md#organization-analytics) for the privacy implications. |
-| `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright); off by default for self-hosted |
+| `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright) and serve the confabulous.dev legal pages (`/policies`, `/terms`, `/privacy`, `/cookies`, `/disclaimer`, `/acceptable-use`; they 404 when off); off by default for self-hosted |
 | `ENABLE_SAAS_TERMLY` | `false` | No | Enable the Termly cookie-consent banner (SaaS only); off by default for self-hosted |
 | `DISABLE_UPDATE_CHECK` | `false` | No | Suppress the in-product "Update available" badge (skips the periodic GitHub release check). Useful for air-gapped deployments. Implicitly `true` when `ENABLE_SAAS_FOOTER=true`, since SaaS users can't self-upgrade. |
 

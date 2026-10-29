@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDuration, formatRelativeTime, formatModelName, formatModelDisplayName, formatRepoName, formatDateString, formatDateTime } from './formatting';
+import { formatDuration, formatRelativeTime, formatModelName, formatModelDisplayName, formatRepoName, formatDateString, formatDateTime, formatCalendarDate } from './formatting';
 
 describe('formatDuration', () => {
   describe('without decimalSeconds option', () => {
@@ -207,5 +207,16 @@ describe('formatModelDisplayName', () => {
     ['', ''],
   ])('formats %s -> %s', (input, expected) => {
     expect(formatModelDisplayName(input)).toBe(expected);
+  });
+});
+
+describe('formatCalendarDate', () => {
+  it('formats an ISO date as a long US date', () => {
+    expect(formatCalendarDate('2026-01-09')).toBe('January 9, 2026');
+    expect(formatCalendarDate('2026-12-31')).toBe('December 31, 2026');
+  });
+
+  it('does not shift the first day of a year into the previous year', () => {
+    expect(formatCalendarDate('2027-01-01')).toBe('January 1, 2027');
   });
 });

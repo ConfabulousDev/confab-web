@@ -1,9 +1,10 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useParams, type RouteObject } from 'react-router-dom';
 import App from './App';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAppConfig } from '@/hooks/useAppConfig';
 import { useAuth } from '@/hooks/useAuth';
+import { LEGAL_DOCS } from '@/legal/docs';
 
 // Lazy load pages for code splitting
 const HomePage = lazy(() => import('@/pages/HomePage'));
@@ -17,6 +18,7 @@ const AdminPage = lazy(() => import('@/pages/admin/AdminPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const PoliciesPage = lazy(() => import('@/pages/PoliciesPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const LegalDocPage = lazy(() => import('@/pages/LegalDocPage'));
 
 /** Redirect old /sessions/:id/shared/:token URLs to canonical /sessions/:id (CF-132) */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -25,22 +27,6 @@ function RedirectToCanonicalSession() {
   // Preserve query params (e.g., ?email=...) for login flow
   const search = window.location.search;
   return <Navigate to={`/sessions/${sessionId}${search}`} replace />;
-}
-
-/** Redirect to external Termly-hosted Terms of Service */
-// eslint-disable-next-line react-refresh/only-export-components
-function RedirectToTerms() {
-  window.location.href =
-    'https://app.termly.io/policy-viewer/policy.html?policyUUID=69001385-5934-4a9f-9ade-ca93873b3e6c';
-  return null;
-}
-
-/** Redirect to external Termly-hosted Privacy Notice */
-// eslint-disable-next-line react-refresh/only-export-components
-function RedirectToPrivacy() {
-  window.location.href =
-    'https://app.termly.io/policy-viewer/policy.html?policyUUID=7366762a-c58a-4a7a-9cf0-f39620707a60';
-  return null;
 }
 
 /** Gate SaaS-only routes — renders children when SaaS footer is enabled, NotFound otherwise */
@@ -80,7 +66,12 @@ function page(component: ReactNode, isProtected = false) {
   return <Suspense fallback={null}>{wrapped}</Suspense>;
 }
 
-export const router = createBrowserRouter([
+/** Wrap a SaaS-only page (404 on self-hosted instances) with Suspense */
+function saasPage(component: ReactNode) {
+  return <Suspense fallback={null}><SaasRoute>{component}</SaasRoute></Suspense>;
+}
+
+export const routes: RouteObject[] = [
   {
     path: '/',
     element: <App />,
@@ -93,12 +84,15 @@ export const router = createBrowserRouter([
       { path: 'sessions/:sessionId/shared/:token', element: <RedirectToCanonicalSession /> },
       { path: 'keys', element: page(<APIKeysPage />, true) },
       { path: 'shares', element: page(<ShareLinksPage />, true) },
-      { path: 'terms', element: <Suspense fallback={null}><SaasRoute><RedirectToTerms /></SaasRoute></Suspense> },
-      { path: 'privacy', element: <Suspense fallback={null}><SaasRoute><RedirectToPrivacy /></SaasRoute></Suspense> },
+      // Legal documents (SaaS only): /terms, /privacy, /cookies, … from the registry.
+      // /terms and /privacy are linked from OAuth consent screens; keep them stable.
+      ...LEGAL_DOCS.map((d) => ({ path: d.slug, element: saasPage(<LegalDocPage slug={d.slug} />) })),
       { path: 'login', element: page(<LoginPage />) },
-      { path: 'policies', element: <Suspense fallback={null}><SaasRoute><PoliciesPage /></SaasRoute></Suspense> },
+      { path: 'policies', element: saasPage(<PoliciesPage />) },
       { path: 'admin/*', element: page(<AdminRoute><AdminPage /></AdminRoute>, true) },
       { path: '*', element: page(<NotFoundPage />) },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);
