@@ -99,6 +99,7 @@ If the new mode is neither API key nor session cookie, add a new `Try*Auth` func
 ## Invariants
 
 - **Session cookies are always HttpOnly, SameSite=Lax.** The `Secure` flag is on by default and only disabled when `INSECURE_DEV_MODE=true`.
+- **Every cookie is strictly necessary and listed in the Cookie Policy.** All cookies are set in this package (`confab_session`, `oauth_state`, `oauth_verifier`, `post_login_redirect`, `expected_email`, `cli_redirect`); none are analytics or third-party, which is why the site has no consent banner (5z5r). Adding or changing a cookie means updating the Cookie Policy (`frontend/src/legal/cookies.md`); a non-essential cookie would also need a consent mechanism.
 - **OAuth state is validated via cookie, not database.** The `oauth_state` cookie is set on login initiation and checked on callback. This prevents CSRF attacks on the OAuth flow without database roundtrips.
 - **Only verified emails are accepted.** GitHub requires primary+verified email from the `/user/emails` API. Google requires `verified_email=true`. OIDC requires `email_verified=true` (handles both bool and string representations). Missing `email_verified` is treated as unverified.
 - **Emails are always normalized to lowercase** before storage or comparison (RFC 5321 convention).

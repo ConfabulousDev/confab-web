@@ -14,6 +14,7 @@ React + TypeScript single-page application for the Confab dashboard. For an arch
 - **CSS Modules** — scoped component styling, theme-aware variables in `src/styles/variables.css`
 - **Storybook** — component stories alongside components
 - **Vitest** — unit tests
+- **@fontsource/lobster** — self-hosted Lobster wordmark font (no Google Fonts request)
 
 ## Project Layout
 

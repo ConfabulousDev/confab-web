@@ -70,7 +70,7 @@ Config changes (`astro.config.mjs`, `src/content.config.ts`, `src/styles/custom.
 
 ## Brand and styling
 
-- Wordmark uses the **Lobster** Google Font (matches the main app's `Header.module.css`). Applied in `src/styles/custom.css` to `.site-title` and `.hero h1`.
+- Wordmark uses the **Lobster** font, self-hosted via `@fontsource/lobster` (first entry in Starlight's `customCss` in `astro.config.mjs`; no Google Fonts request). It matches the main app's `Header.module.css` and is applied in `src/styles/custom.css` to `.site-title` and `.hero h1`. The only third-party request at page load is the cookieless Cloudflare Web Analytics beacon.
 - **The site is themed to match the main app** (`frontend/src/styles/variables.css`, the "dive watch" aesthetic) in both light and dark — accent, neutrals, surfaces, and text colors. `src/styles/custom.css` overrides Starlight's CSS custom properties to do this; **keep those values in sync with `frontend/src/styles/variables.css`**, which is the source of truth.
   - The mechanism: Starlight derives almost every surface from a grayscale ramp (`--sl-color-white` = foreground … `--sl-color-black` = page bg, `--sl-color-gray-1..7` between) plus an accent triple (`--sl-color-accent-low` / `--sl-color-accent` / `--sl-color-accent-high`). We override the ramp + accent and only the few derived surfaces whose default doesn't match the app (`--sl-color-bg-nav`, `--sl-color-bg-sidebar`, `--sl-color-bg-inline-code`, dark-mode `--sl-color-text-accent`). `--sl-color-text`, hairlines, etc. resolve from the ramp automatically — don't pin them.
   - Stay variable-only: prefer overriding `--sl-color-*` over per-component CSS so Starlight upgrades don't break the theme. Fenced code blocks (Expressive Code) inherit the gray ramp.

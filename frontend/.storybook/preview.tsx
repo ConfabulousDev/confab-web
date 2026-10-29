@@ -7,6 +7,7 @@ import { PRICING_FIXTURE } from '../src/test/pricingFixture'
 // Import global styles so components render correctly
 import '../src/styles/variables.css'
 import '../src/index.css'
+import '@fontsource/lobster/400.css'
 
 // The frontend bundles no price data (CF-515); install a frozen table so
 // cost-bearing stories render real numbers without a backend fetch.

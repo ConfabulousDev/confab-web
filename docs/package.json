@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "latest",
+    "@fontsource/lobster": "^5.3.0",
     "astro": "latest",
     "sharp": "latest"
   }
