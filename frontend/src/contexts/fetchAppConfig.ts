@@ -13,7 +13,6 @@ export async function fetchConfigWithRetry(): Promise<AppConfig> {
       return {
         sharesEnabled: data.features?.shares_enabled ?? false,
         saasFooterEnabled: data.features?.saas_footer_enabled ?? false,
-        saasTermlyEnabled: data.features?.saas_termly_enabled ?? false,
         orgAnalyticsEnabled: data.features?.org_analytics_enabled ?? false,
         passwordAuthEnabled: data.features?.password_auth_enabled ?? false,
         smartRecapEnabled: data.features?.smart_recap_enabled ?? false,

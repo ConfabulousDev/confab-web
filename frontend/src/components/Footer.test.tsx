@@ -6,7 +6,7 @@ const DOCS_URL = 'https://docs.confabulous.dev';
 const GITHUB_ISSUES_URL = 'https://github.com/ConfabulousDev/confab-web/issues';
 
 vi.mock('@/hooks/useAppConfig', () => ({
-  useAppConfig: () => ({ supportEmail: 'support@example.com', saasTermlyEnabled: false }),
+  useAppConfig: () => ({ supportEmail: 'support@example.com' }),
 }));
 
 // CF-571: the SaaS footer surfaces docs and a "Report an issue" link in
@@ -31,5 +31,14 @@ describe('Footer docs & issue links (CF-571)', () => {
   it('keeps the existing GitHub link', () => {
     render(<Footer />);
     expect(screen.getByRole('link', { name: 'GitHub' })).toBeInTheDocument();
+  });
+});
+
+describe('Footer link row', () => {
+  it('renders exactly the documented links, with no Cookie Settings link', () => {
+    render(<Footer />);
+    const names = screen.getAllByRole('link').map((a) => a.textContent);
+    expect(names).toEqual(['Docs', 'GitHub', 'Discord', 'Report an issue', 'Help', 'Policies']);
+    expect(screen.queryByText('Cookie Settings')).not.toBeInTheDocument();
   });
 });

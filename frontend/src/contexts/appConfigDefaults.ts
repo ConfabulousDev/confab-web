@@ -10,7 +10,6 @@ export const defaultVersionInfo: VersionInfo = {
 export const defaultAppConfig: AppConfig = {
   sharesEnabled: false,
   saasFooterEnabled: false,
-  saasTermlyEnabled: false,
   orgAnalyticsEnabled: false,
   passwordAuthEnabled: false,
   smartRecapEnabled: false,

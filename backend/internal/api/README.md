@@ -91,7 +91,7 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
 
 ## Testing
 
-- **Unit tests** -- `*_test.go` files in this package for pure logic (compression, CSRF, auth config, body size limits, GitHub URL parsing, transcript helpers, etc.). These tests need access to unexported helpers (`extractPRLinkFromLine`, `extractRepoName`, `sanitizeContentDispositionFilename`, `truncateTranscriptFromStart`, `decompressMiddleware`, …).
+- **Unit tests** -- `*_test.go` files in this package for pure logic (compression, CSRF, auth config, SPA index injection, CSP headers, body size limits, GitHub URL parsing, transcript helpers, etc.). These tests need access to unexported helpers (`extractPRLinkFromLine`, `extractRepoName`, `sanitizeContentDispositionFilename`, `truncateTranscriptFromStart`, `decompressMiddleware`, …).
 - **Integration tests** -- HTTP integration tests live in per-feature sibling packages under `internal/api/` (one CI shard each — `list-test-packages.sh` discovers them automatically). Each sub-package uses `package <feature>_test` and exercises the router via the shared helper in `apitest`:
   - `apitest/` — exported `apitest.NewServer(t, env, apitest.Options{...})` builds a real test server (production router, DB, MinIO). Replaces a dozen near-identical `setupXxxTestServer` helpers that used to live in this package.
   - `sessionaccess/` — canonical session URL access (CF-132) tests against `api.HandleGetSession`.

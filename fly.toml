@@ -53,7 +53,6 @@ primary_region = 'sjc'
   # SaaS features (off by default for self-hosted)
   ENABLE_SHARE_CREATION = "true"
   ENABLE_SAAS_FOOTER = "true"
-  ENABLE_SAAS_TERMLY = "true"
 
   # Admin Configuration
   SUPER_ADMIN_EMAILS = "swe@confabulous.dev"

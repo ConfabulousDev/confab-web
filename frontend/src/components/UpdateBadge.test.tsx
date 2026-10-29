@@ -14,7 +14,6 @@ function withConfig(version: Partial<VersionInfo>): (props: { children: ReactNod
   const cfg: AppConfig = {
     sharesEnabled: false,
     saasFooterEnabled: false,
-    saasTermlyEnabled: false,
     orgAnalyticsEnabled: false,
     passwordAuthEnabled: false,
     smartRecapEnabled: false,
