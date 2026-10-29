@@ -17,6 +17,7 @@ with Storybook.
 | `config/` | App configuration constants (polling intervals) | Changing polling behavior, adding feature flags |
 | `contexts/` | React contexts: ThemeContext, AppConfigContext, KeyboardShortcutContext | Adding app-wide state, changing context providers |
 | `hooks/` | Custom React hooks: data fetching, polling, auth, UI state | Adding data-fetching logic, changing state management |
+| `legal/` | The SaaS legal documents as Markdown (`terms`, `privacy`, `cookies`, `disclaimer`, `acceptable-use`), the `docs.ts` registry (slug, title, description, `lastUpdated`) and `content.ts` (Markdown map, lazy-loaded). See `legal/README.md` | Editing a policy; adding a cookie or storage key (update `cookies.md`); adding a policy |
 | `pages/` | Route-level page components (SessionsPage, TrendsPage, LoginPage, etc.) | Adding new pages/routes, changing page layout |
 | `providers/` | Per-provider transcript adapters: `ProviderAdapter` interface, `getAdapter()` registry, `useTranscriptData` shared hooks, per-provider `calculateMessageCost` / `extendCostTooltip` (CF-418). SessionViewer dispatches through this layer instead of branching on `session.provider` (CF-417) | Adding a new provider's transcript pipeline; changing how SessionViewer fetches / filters / renders per provider |
 | `schemas/` | Zod schemas for API response validation and transcript parsing | Changing API contracts, adding new response types |

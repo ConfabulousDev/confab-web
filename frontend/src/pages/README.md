@@ -13,7 +13,8 @@ Page-level components corresponding to routes. All pages are lazy-loaded for cod
 | `OrgPage.tsx` | Organization-level analytics with per-user table |
 | `APIKeysPage.tsx` | API key management (create, list, delete) |
 | `LoginPage.tsx` | OAuth login page with provider selection. Carries understated "Docs" (`DOCS_URL`) and "Report an issue" (`GITHUB_ISSUES_URL`) links below the auth options (CF-571); these only render when the form is shown (not during single-provider auto-redirect). |
-| `PoliciesPage.tsx` | Legal policies page (SaaS mode only) |
+| `PoliciesPage.tsx` | Legal policies index (SaaS mode only). Cards rendered from the `legal/docs.ts` registry as internal links |
+| `LegalDocPage.tsx` | One legal document by `slug` (SaaS mode only): title, "Last updated" from the registry, and the Markdown body via `renderLegalMarkdown` (heading ids for the in-doc table of contents). Scrolls to `location.hash` after mount (deep links), routes `/…` links in the body client-side, and hides the app header/footer when printing. The Markdown map (`legal/content.ts`) is imported only here, so the policy text stays in this lazy chunk |
 | `NotFoundPage.tsx` | 404 page |
 | `pageLayout.module.css` | Shared page layout styles (layout, page title, refresh button, toolbar actions, filter bar) |
 
@@ -38,9 +39,14 @@ const SessionsPage = lazy(() => import('@/pages/SessionsPage'));
 | `/shares` | `ShareLinksPage` | Yes | Protected route |
 | `/login` | `LoginPage` | No | |
 | `/policies` | `PoliciesPage` | No | SaaS mode only |
-| `/terms` | Redirect | No | External Termly redirect, SaaS only |
-| `/privacy` | Redirect | No | External Termly redirect, SaaS only |
+| `/terms` | `LegalDocPage` | No | Legal doc page (in-repo Markdown), SaaS only. Path must stay stable (OAuth consent screens link here) |
+| `/privacy` | `LegalDocPage` | No | Legal doc page (in-repo Markdown), SaaS only. Path must stay stable (OAuth consent screens link here) |
+| `/cookies` | `LegalDocPage` | No | Legal doc page (in-repo Markdown), SaaS only |
+| `/disclaimer` | `LegalDocPage` | No | Legal doc page (in-repo Markdown), SaaS only |
+| `/acceptable-use` | `LegalDocPage` | No | Legal doc page (in-repo Markdown), SaaS only |
 | `*` | `NotFoundPage` | No | Catch-all |
+
+The legal routes are generated from `LEGAL_DOCS` (`legal/docs.ts`), so adding a policy is a registry change. `router.tsx` also exports the `routes` array, which `router.test.tsx` mounts in a memory router.
 
 ### Access Control
 
@@ -106,10 +112,14 @@ The most complex page. It:
 
 - `SessionDetailPage.test.tsx` -- Session loading, error states, deep linking
 - `LoginPage.test.tsx` -- Login form rendering, OAuth provider display
+- `LegalDocPage.test.tsx` -- Title + Last updated per slug, heading anchors, hash deep-link scroll, client-side cross-policy links
+- `PoliciesPage.test.tsx` -- Five internal policy links (no `target=_blank`)
+- `../router.test.tsx` -- Legal routes and `/policies` render when `saasFooterEnabled`, 404 otherwise
 
 ## Dependencies
 
 - `react-router-dom` (routing, `useParams`, `useSearchParams`, `useNavigate`)
 - `@/hooks/` (useAuth, useSessionsFetch, useSessionFilters, useLoadSession, useTrends, useOrgAnalytics, useDocumentTitle, etc.)
 - `@/services/api` (API client for direct calls in some pages)
+- `@/legal/` (legal document registry and Markdown, for `PoliciesPage` / `LegalDocPage`)
 - `@/components/` (UI components)

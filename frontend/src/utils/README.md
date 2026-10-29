@@ -19,7 +19,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `agentSkillChart.ts` | Shared agent/skill chart constants (`AGENT_SKILL_COLORS`) and the `ChartDataItem` shape |
 | `chartLabels.ts` | `truncateName` — cap long bar-chart axis labels to "prefix...suffix" form. `truncatedYAxisWidth(labels, minChars)` — px-width for a Recharts YAxis sized off the *truncated* form so one long MCP/agent name can't shove bars off-screen. Pairs with `TruncatedYAxisTick` (Agents & Skills, Tools) |
 | `utils.ts` | Low-level utilities: `stripAnsi`, `isRecord` (runtime guard for plain objects, used wherever an `unknown` needs its fields read without an `as` cast), `formatBytes` |
-| `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
+| `markdown.ts` | `renderMarkdownToHtml` — GFM markdown to sanitized HTML via `marked` + `DOMPurify` (global `marked` config with `breaks: true`, ANSI stripped; for transcripts). `renderLegalMarkdown` — the legal documents' renderer: its own `Marked` instance (GFM, no `breaks`), every heading gets a slug `id` from its text (duplicates `-2`, `-3`, …), output through `DOMPurify`; used by `LegalDocPage`. `tryParseAsJson` — if a string is a JSON object/array, return a pretty-printed version (used as the JSON fallback before markdown rendering). Used by `ContentBlock`, the Codex message renderers, `AwaySummary`, and `QueuedCommand` |
 | `providers.ts` | CF-416 — `PROVIDER_METADATA` registry (icon, label, brandDisplayName, brandColor, resumeCommand) keyed by `ProviderId` (`'claude-code' \| 'codex' \| 'opencode' \| 'cursor'`). `getProviderMetadata(id)` strict canonical lookup; `getProviderMetadataOrFallback(value, 'claude' \| 'neutral')` codifies the unknown-provider policy in one place. `PROVIDER_VALUES`, `providerLabel(value)` preserved for back-compat with surfaces that render arbitrary backend values. Used by `providerIcon`, `SessionHeader`, `CopyIdDropdown`, `TrendsTopSessionsCard`, `FilterChipsBar`, `HomePage` |
 | `externalLinks.ts` | CF-571 — canonical external URLs surfaced from inside the app: `DOCS_URL` (docs site) and `GITHUB_ISSUES_URL` (issue tracker). Point at the hosted project on every deployment, including self-hosted. CF-574 adds `buildGitHubIssueUrl(title, body, labels?)` — builds a prefilled `…/issues/new?title=&body=&labels=` URL via `URLSearchParams` (generic plumbing; the redaction layer lives in `reportUnknown.ts`). Used by `Header`, `Footer`, `SessionEmptyState`, `ErrorBoundary`, `LoginPage`, `ReportUnknownButton`. |
 | `reportUnknown.ts` | CF-574 — privacy-conscious "Report bug" plumbing for UNKNOWN transcript rows. `UnknownDescriptor` is a normalized fingerprint (`provider`, `surface`, `type`, optional `reason`, `keyFingerprint`) carrying key *names* and a type string, **never** payload values. `computeKeyFingerprint(obj)` lists top-level key names plus one nesting level (`parent.child`); arrays/non-objects contribute no index spam. `buildUnknownReportIssue(descriptor, appVersion?)` / `buildUnknownReportUrl(...)` render the prefilled issue (Confab version line only when non-empty; no label, no payload). Centralizes the redaction contract for all four unknown surfaces. |
@@ -40,6 +40,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `formatModelName` | `(model: string) => string` | Technical format: "claude-sonnet-4.5" |
 | `formatModelDisplayName` | `(model: string) => string` | User-friendly label ("Opus 4.1", "GPT-5"). Handles full ids and bare tokens_v2 family keys; shared by Session + TokensV2 cards (mp4e) |
 | `formatRepoName` | `(repoUrl: string) => string` | Extract "user/repo" from full URL |
+| `formatCalendarDate` | `(isoDate: string) => string` | `YYYY-MM-DD` → "January 9, 2026", formatted in UTC so it never shifts a day |
 
 ### tokenStats.ts
 
@@ -143,6 +144,7 @@ Edit the single source — `backend/internal/pricingsource/pricing.json` — and
 ## Testing
 
 - `formatting.test.ts` -- Date/time formatting, duration formatting, model name extraction
+- `markdown.test.ts` -- `renderLegalMarkdown` heading ids, tables, no `<br>` on single newlines, sanitizing; `renderMarkdownToHtml` unaffected
 - `tokenStats.test.ts` -- Cost calculation, model family extraction, formatting
 - `sessionMeta.test.ts` -- Duration computation from messages, fallback behavior
 - `compactionStats.test.ts` -- Compaction event counting, average time calculation
@@ -156,5 +158,5 @@ Edit the single source — `backend/internal/pricingsource/pricing.json` — and
 ## Dependencies
 
 - `@/types` (type imports for `TranscriptLine`, `AssistantMessage`, `GitInfo`)
-- `marked` (GFM markdown parser, used by `markdown.ts`)
+- `marked` (GFM markdown parser, used by `markdown.ts`; `renderLegalMarkdown` uses a separate `Marked` instance)
 - `dompurify` (HTML sanitization, used by `markdown.ts`)
