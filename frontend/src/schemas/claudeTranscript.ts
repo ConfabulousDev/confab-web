@@ -168,6 +168,26 @@ export const BashToolResultSchema = z.object({
 
 export type BashToolResult = z.infer<typeof BashToolResultSchema>;
 
+// Artifact tool result (Claude Code's claude.ai Artifact tool). Publish results
+// carry `url`/`title`/`seq` at the top level; `read` results nest them under
+// `read`, and file reads under `file_read`. Failed calls are a plain string
+// (the string branch of ToolUseResultSchema), so they never parse here.
+// All fields optional + `.passthrough()` so new sibling fields keep validating.
+const ArtifactRefSchema = z.object({
+  url: z.string().optional(),
+  title: z.string().optional(),
+  path: z.string().optional(),
+}).passthrough();
+
+export const ArtifactToolResultSchema = ArtifactRefSchema.extend({
+  seq: z.number().optional(),
+  updated: z.boolean().optional(),
+  read: ArtifactRefSchema.optional(),
+  file_read: ArtifactRefSchema.optional(),
+}).passthrough();
+
+export type ArtifactToolResult = z.infer<typeof ArtifactToolResultSchema>;
+
 // ToolUseResult contains tool-specific metadata about what the tool returned.
 // This is highly variable depending on the tool (Bash, Read, Grep, etc.). The
 // typed Bash variant comes FIRST so Bash results parse into a known shape; the

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDuration, formatRelativeTime, formatModelName, formatModelDisplayName, formatRepoName, formatDateString, formatDateTime, formatCalendarDate } from './formatting';
+import { formatDuration, formatRelativeTime, formatModelName, formatModelDisplayName, formatRepoName, formatDateString, formatDateTime, formatCalendarDate, plural } from './formatting';
 
 describe('formatDuration', () => {
   describe('without decimalSeconds option', () => {
@@ -218,5 +218,22 @@ describe('formatCalendarDate', () => {
 
   it('does not shift the first day of a year into the previous year', () => {
     expect(formatCalendarDate('2027-01-01')).toBe('January 1, 2027');
+  });
+});
+
+describe('plural', () => {
+  it('uses the singular for exactly one', () => {
+    expect(plural(1, 'edit')).toBe('1 edit');
+  });
+
+  it('appends "s" by default for zero and many', () => {
+    expect(plural(0, 'edit')).toBe('0 edits');
+    expect(plural(4, 'item')).toBe('4 items');
+  });
+
+  it('uses an explicit plural form when given', () => {
+    expect(plural(2, 'tool use', 'tool uses')).toBe('2 tool uses');
+    expect(plural(3, 'query', 'queries')).toBe('3 queries');
+    expect(plural(1, 'query', 'queries')).toBe('1 query');
   });
 });

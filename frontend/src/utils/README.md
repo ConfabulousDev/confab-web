@@ -6,7 +6,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 
 | File | Role |
 |------|------|
-| `formatting.ts` | Date/time formatting, duration formatting, model name extraction, repo name formatting |
+| `formatting.ts` | Date/time formatting, duration formatting, model name extraction, repo name formatting, count pluralization |
 | `tokenStats.ts` | Token cost calculation, runtime pricing table (installed via `setPricingTable` from the backend), per-message cost computation |
 | `sessionMeta.ts` | Session duration and date computation from transcript timestamps |
 | `compactionStats.ts` | Compaction event counting, average compaction time, and response time formatting |
@@ -41,6 +41,7 @@ Utility functions for formatting, computation, and data transformation. Pure fun
 | `formatModelDisplayName` | `(model: string) => string` | User-friendly label ("Opus 4.1", "GPT-5"). Handles full ids and bare tokens_v2 family keys; shared by Session + TokensV2 cards (mp4e) |
 | `formatRepoName` | `(repoUrl: string) => string` | Extract "user/repo" from full URL |
 | `formatCalendarDate` | `(isoDate: string) => string` | `YYYY-MM-DD` → "January 9, 2026", formatted in UTC so it never shifts a day |
+| `plural` | `(count: number, singular: string, pluralForm?: string) => string` | "1 edit" / "2 edits"; `pluralForm` (default `singular + 's'`) for irregular plurals. Shared by the transcript cards (SubagentCard, ArtifactTool, server-tool badges) |
 
 ### tokenStats.ts
 

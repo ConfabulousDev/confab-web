@@ -119,6 +119,106 @@ export const ToolUseWebFetch: Story = {
   },
 };
 
+// Artifact tool (claude.ai artifacts) — summary card with raw input collapsed
+export const ToolUseArtifactPublish: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_1',
+      name: 'Artifact',
+      input: {
+        file_path: '/Users/santaclaude/dev/resume/resume.html',
+        icon: 'document',
+        description: 'A printable Letter-size resume, with review notes for iterating via comments.',
+        capabilities: { comments: { composer_only: true } },
+      },
+    },
+  },
+};
+
+export const ToolUseArtifactEdits: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_2',
+      name: 'Artifact',
+      input: {
+        file_path: '/Users/santaclaude/dev/resume/resume.html',
+        edits: [
+          { old_str: '<h1>Old</h1>', new_str: '<h1>New</h1>' },
+          { old_str: 'foo', new_str: 'bar' },
+        ],
+      },
+    },
+  },
+};
+
+export const ToolUseArtifactRead: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_3',
+      name: 'Artifact',
+      input: {
+        action: 'read',
+        url: 'https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH',
+        path: 'index.html',
+      },
+    },
+  },
+};
+
+// Sibling artifact tools — same card shape: tool label + action, URL link,
+// remaining fields as rows, objects/arrays as count chips.
+export const ToolUseArtifactCommentsResolve: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_c1',
+      name: 'ArtifactComments',
+      input: {
+        action: 'resolve',
+        url: 'https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH',
+        thread_id: 'th_8f2c41',
+      },
+    },
+  },
+};
+
+export const ToolUseArtifactDataList: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_d1',
+      name: 'ArtifactData',
+      input: {
+        action: 'list',
+        url: 'https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH',
+        collection: 'signups',
+        query: { limit: 500 },
+      },
+    },
+  },
+};
+
+export const ToolResultArtifactPublished: Story = {
+  args: {
+    block: {
+      type: 'tool_result',
+      tool_use_id: 'tool_art_1',
+      content: 'Published /Users/santaclaude/dev/resume/resume.html at https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH (Version 24, version id 1793731106-e249)\n\nLive subscription: already connected from earlier in this session.\n\nTo update: publish the same file path here (keeps this URL).',
+    },
+    toolName: 'Artifact',
+    artifactToolUseResult: {
+      url: 'https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH',
+      path: '/Users/santaclaude/dev/resume/resume.html',
+      title: 'Santa Claude Resume',
+      updated: true,
+      seq: 24,
+    },
+  },
+};
+
 // Tool result blocks
 export const ToolResultSuccess: Story = {
   args: {
