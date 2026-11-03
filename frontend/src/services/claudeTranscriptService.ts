@@ -39,6 +39,12 @@ import { reportTranscriptErrors } from './transcriptErrorReporting';
 // (per-artifact watch state), `frame-link` (artifact frame binding),
 // `agent-setting` ({agentSetting}, sibling of `agent-name`), and `continued-in`
 // ({continuedInSessionId}).
+//
+// 7ybs: Claude Code 2.1.317 bookkeeping rows we also skip — `session-owner`
+// ({accountUuid, organizationUuid}; the account/org that owns the session),
+// `tools-used` ({tools[]}; running list of tool names), and `fork-context-ref`
+// ({agentId, parentSessionId, parentLastUuid, contextLength}; subagent files only,
+// links a forked subagent to its parent context).
 const SKIPPED_MESSAGE_TYPES = new Set([
   'progress',
   'permission-mode',
@@ -60,6 +66,9 @@ const SKIPPED_MESSAGE_TYPES = new Set([
   'agent-setting',
   'frame-link',
   'continued-in',
+  'session-owner',
+  'tools-used',
+  'fork-context-ref',
 ]);
 
 // Track which sessions have already had errors reported (dedup across re-parses)
