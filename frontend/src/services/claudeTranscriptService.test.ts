@@ -289,6 +289,31 @@ ${createSystemMessage(2)}`;
         timestamp: '2026-01-01T00:00:00.000Z',
       },
     },
+    // Bookkeeping rows Claude Code 2.1.317 emits (7ybs). Shapes taken from real
+    // session JSONL; values here are fake.
+    {
+      typeName: 'session-owner',
+      payload: {
+        type: 'session-owner',
+        accountUuid: '00000000-0000-0000-0000-000000000001',
+        organizationUuid: '00000000-0000-0000-0000-000000000002',
+        sessionId: 'abc-123',
+      },
+    },
+    {
+      typeName: 'tools-used',
+      payload: { type: 'tools-used', tools: ['Bash', 'Agent'], sessionId: 'abc-123' },
+    },
+    {
+      typeName: 'fork-context-ref',
+      payload: {
+        type: 'fork-context-ref',
+        agentId: 'a0000000000000000',
+        parentSessionId: 'abc-123',
+        parentLastUuid: '00000000-0000-0000-0000-000000000003',
+        contextLength: 3,
+      },
+    },
   ])('skips $typeName messages silently', ({ payload }) => {
     const skippedLine = JSON.stringify(payload);
 
