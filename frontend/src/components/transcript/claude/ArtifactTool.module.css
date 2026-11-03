@@ -1,0 +1,124 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: var(--spacing-xs) 0;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-light);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.toolName {
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-accent);
+}
+
+.action {
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mono {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: var(--font-xs);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.link {
+  font-size: var(--font-sm);
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--spacing-sm);
+  row-gap: 2px;
+  margin: 0;
+  font-size: var(--font-xs);
+  min-width: 0;
+}
+
+.detailRow {
+  display: contents;
+}
+
+.detailRow dt {
+  color: var(--color-text-muted);
+}
+
+.detailRow dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.chip {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: var(--font-xs);
+  padding: 1px var(--spacing-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.resultLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.raw {
+  font-size: var(--font-xs);
+  min-width: 0;
+}
+
+.raw summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-semibold);
+}

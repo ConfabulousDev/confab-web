@@ -203,4 +203,115 @@ describe('ContentBlock', () => {
     expect(container.textContent).toContain('Unknown content block: mystery_block');
     expect(container.textContent).toContain('inner content');
   });
+
+  describe('Artifact tool', () => {
+    const publishUse: ContentBlockType = {
+      type: 'tool_use',
+      id: 'toolu_art',
+      name: 'Artifact',
+      input: {
+        file_path: '/Users/me/dev/resume/resume.html',
+        description: 'My resume',
+        icon: 'document',
+        edits: [{ old_str: 'a', new_str: 'b' }, { old_str: 'c', new_str: 'd' }],
+        capabilities: { comments: {} },
+      },
+    };
+
+    it('renders a publish call as a summary card with the raw input collapsed', () => {
+      const { container, getByText } = render(<ContentBlock block={publishUse} />);
+      expect(getByText('Publish')).toBeInTheDocument();
+      expect(getByText('/Users/me/dev/resume/resume.html')).toBeInTheDocument();
+      expect(getByText('My resume')).toBeInTheDocument();
+      expect(getByText('2 edits')).toBeInTheDocument();
+      expect(getByText('capabilities: comments')).toBeInTheDocument();
+      const details = container.querySelector('details');
+      expect(details?.open).toBe(false);
+      expect(details?.querySelector('[data-testid="codeblock"]')?.getAttribute('data-language')).toBe('json');
+    });
+
+    it('auto-opens the raw input when the row is the current search match', () => {
+      const { container } = render(<ContentBlock block={publishUse} isCurrentSearchMatch />);
+      expect(container.querySelector('details')?.open).toBe(true);
+    });
+
+    it('labels non-publish actions and links claude.ai URLs', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_read',
+        name: 'Artifact',
+        input: { action: 'read', url: 'https://claude.ai/artifact/abc' },
+      };
+      const { getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('Read')).toBeInTheDocument();
+      expect(getByText('https://claude.ai/artifact/abc').closest('a')?.getAttribute('href')).toBe('https://claude.ai/artifact/abc');
+    });
+
+    it('labels asset uploads and type-based creates', () => {
+      const asset: ContentBlockType = {
+        type: 'tool_use', id: 't1', name: 'Artifact',
+        input: { url: 'https://claude.ai/artifact/abc', file_path: '/x.png', asset: true },
+      };
+      expect(render(<ContentBlock block={asset} />).getByText('Upload asset')).toBeInTheDocument();
+      const fromType: ContentBlockType = {
+        type: 'tool_use', id: 't2', name: 'Artifact',
+        input: { type_url: 'https://claude.ai/artifact/type', title: 'Deck' },
+      };
+      expect(render(<ContentBlock block={fromType} />).getByText('Create from type')).toBeInTheDocument();
+    });
+
+    it('never turns a non-claude.ai URL into a link', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_bad',
+        name: 'Artifact',
+        input: { action: 'open', url: 'javascript:alert(1)' },
+      };
+      const { container, getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('javascript:alert(1)').closest('a')).toBeNull();
+      expect(container.querySelector('a')).toBeNull();
+    });
+
+    it('leads a successful result with the artifact link and version', () => {
+      const block: ContentBlockType = {
+        type: 'tool_result',
+        tool_use_id: 'toolu_art',
+        content: 'Published /x at https://claude.ai/artifact/abc (Version 3) ... long guidance ...',
+      };
+      const { container, getByText } = render(
+        <ContentBlock
+          block={block}
+          toolName="Artifact"
+          artifactToolUseResult={{ url: 'https://claude.ai/artifact/abc', title: 'My Resume', seq: 3 }}
+        />,
+      );
+      expect(getByText('My Resume').closest('a')?.getAttribute('href')).toBe('https://claude.ai/artifact/abc');
+      expect(getByText('Version 3')).toBeInTheDocument();
+      expect(container.querySelector('details')?.open).toBe(false);
+    });
+
+    it('reads the link from a read result', () => {
+      const block: ContentBlockType = { type: 'tool_result', tool_use_id: 't', content: '[Artifact ...] raw HTML' };
+      const { getByText } = render(
+        <ContentBlock
+          block={block}
+          toolName="Artifact"
+          artifactToolUseResult={{ read: { url: 'https://claude.ai/artifact/abc', title: 'Page' } }}
+        />,
+      );
+      expect(getByText('Page').closest('a')).not.toBeNull();
+    });
+
+    it('keeps the plain rendering for errors and results without a link', () => {
+      const err: ContentBlockType = { type: 'tool_result', tool_use_id: 't', content: 'Publish refused', is_error: true };
+      const r1 = render(
+        <ContentBlock block={err} toolName="Artifact" artifactToolUseResult={{ url: 'https://claude.ai/artifact/abc' }} />,
+      );
+      expect(r1.container.querySelector('details')).toBeNull();
+      expect(r1.container.querySelector('a')).toBeNull();
+      const quickstart: ContentBlockType = { type: 'tool_result', tool_use_id: 't', content: 'Quickstart. ...' };
+      const r2 = render(<ContentBlock block={quickstart} toolName="Artifact" artifactToolUseResult={{}} />);
+      expect(r2.container.querySelector('details')).toBeNull();
+    });
+  });
 });

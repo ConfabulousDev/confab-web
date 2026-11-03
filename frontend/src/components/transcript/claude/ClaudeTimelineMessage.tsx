@@ -4,7 +4,7 @@ import { useOpenOnRisingEdge } from '@/hooks/useOpenOnRisingEdge';
 import SubagentCard from './SubagentCard';
 import { findNotifiedAgent, getTaskNotificationText, parseTaskNotification } from './claudeAgentIndex';
 import { useClaudeThread } from './claudeThreadContext';
-import { BashToolResultSchema, type BashToolResult } from '@/schemas/claudeTranscript';
+import { ArtifactToolResultSchema, BashToolResultSchema, type ArtifactToolResult, type BashToolResult } from '@/schemas/claudeTranscript';
 import type { TokenUsage } from '@/utils/tokenStats';
 import { isTextBlock, isToolUseBlock, isToolResultBlock, isFileHistorySnapshot, isUserMessage, isAssistantMessage, isSystemMessage, isSummaryMessage, isAttachmentMessage, isCommandExpansionMessage, getCommandExpansionSkillName, stripCommandExpansionTags } from '@/types';
 import { useCopyToClipboard } from '@/hooks';
@@ -154,6 +154,19 @@ function getBashToolUseResult(message: TranscriptLine): BashToolResult | undefin
 }
 
 /**
+ * Extract the message's sibling `toolUseResult` as an Artifact result. Every
+ * field is optional, so any object parses — ContentBlock only consults it for
+ * a tool_result whose tool_use was `Artifact`.
+ */
+function getArtifactToolUseResult(message: TranscriptLine): ArtifactToolResult | undefined {
+  if (!isUserMessage(message)) return undefined;
+  const tur = message.toolUseResult;
+  if (!tur || typeof tur !== 'object' || Array.isArray(tur)) return undefined;
+  const parsed = ArtifactToolResultSchema.safeParse(tur);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/**
  * Get tool name for a tool result block
  */
 function getToolNameForResult(block: ContentBlock, toolNameMap: Map<string, string>): string {
@@ -264,6 +277,7 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
   // Bash `toolUseResult` metadata (interrupted / persisted-output / exit-code
   // interpretation) rides on the message as a sibling of its tool_result block.
   const bashToolUseResult = useMemo(() => getBashToolUseResult(message), [message]);
+  const artifactToolUseResult = useMemo(() => getArtifactToolUseResult(message), [message]);
 
   // et0r D5: a `<task-notification>` user message for a known subagent renders
   // as a "Subagent finished" card. Background-command notifications (no
@@ -501,6 +515,7 @@ function ClaudeTimelineMessage({ message, toolNameMap, previousMessage, isSelect
                 searchQuery={searchQuery}
                 isCurrentSearchMatch={isCurrentSearchMatch}
                 toolUseResult={isToolResultBlock(block) ? bashToolUseResult : undefined}
+                artifactToolUseResult={isToolResultBlock(block) ? artifactToolUseResult : undefined}
               />
             );
             // et0r D4/D8: an Agent/Task tool_result becomes a launch card with
