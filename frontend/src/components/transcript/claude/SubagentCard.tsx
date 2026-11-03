@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { useOpenOnRisingEdge } from '@/hooks/useOpenOnRisingEdge';
 import { formatDuration } from '@/components/transcript/timelineFormat';
 import type { TranscriptThreadStatus } from '@/providers/types';
+import { plural } from '@/utils/formatting';
 import { formatTokenCount } from '@/utils/tokenStats';
 import { cx } from '@/utils/utils';
 import { agentDisplayName, normalizeAgentStatus, type ClaudeAgentInfo } from './claudeAgentIndex';
@@ -35,16 +36,12 @@ const STATUS_CLASS: Record<TranscriptThreadStatus, string | undefined> = {
   unknown: undefined,
 };
 
-function plural(count: number, singular: string, pluralForm: string): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
-}
-
 function foregroundStats(agent: ClaudeAgentInfo): string[] {
   const stats: string[] = [];
   if (agent.totalDurationMs !== undefined) stats.push(formatDuration(agent.totalDurationMs));
   if (agent.totalTokens !== undefined) stats.push(`${formatTokenCount(agent.totalTokens)} tokens`);
   if (agent.totalToolUseCount !== undefined) {
-    stats.push(plural(agent.totalToolUseCount, 'tool use', 'tool uses'));
+    stats.push(plural(agent.totalToolUseCount, 'tool use'));
   }
   return stats;
 }

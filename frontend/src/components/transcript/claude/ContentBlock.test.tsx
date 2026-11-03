@@ -260,16 +260,72 @@ describe('ContentBlock', () => {
       expect(render(<ContentBlock block={fromType} />).getByText('Create from type')).toBeInTheDocument();
     });
 
-    it('never turns a non-claude.ai URL into a link', () => {
+    it('links any https URL', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_https',
+        name: 'Artifact',
+        input: { action: 'read', url: 'https://example.com/x' },
+      };
+      const link = render(<ContentBlock block={block} />).getByText('https://example.com/x').closest('a');
+      expect(link?.getAttribute('href')).toBe('https://example.com/x');
+      expect(link?.getAttribute('target')).toBe('_blank');
+      expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+
+    it.each([
+      'javascript:alert(1)',
+      'http://example.com/x',
+      'data:text/html,<script>alert(1)</script>',
+      'not a url',
+    ])('never turns a non-https URL into a link: %s', (url) => {
       const block: ContentBlockType = {
         type: 'tool_use',
         id: 'toolu_bad',
         name: 'Artifact',
-        input: { action: 'open', url: 'javascript:alert(1)' },
+        input: { action: 'open', url, type_url: url, from_url: url },
       };
-      const { container, getByText } = render(<ContentBlock block={block} />);
-      expect(getByText('javascript:alert(1)').closest('a')).toBeNull();
+      const { container, getAllByText } = render(<ContentBlock block={block} />);
+      expect(getAllByText(url)).toHaveLength(3);
       expect(container.querySelector('a')).toBeNull();
+    });
+
+    it('renders a non-https result link as plain text', () => {
+      const block: ContentBlockType = { type: 'tool_result', tool_use_id: 't', content: 'Published ...' };
+      const { container, getByText } = render(
+        <ContentBlock block={block} toolName="Artifact" artifactToolUseResult={{ url: 'javascript:alert(1)', title: 'Evil' }} />,
+      );
+      expect(getByText('Evil')).toBeInTheDocument();
+      expect(container.querySelector('a')).toBeNull();
+    });
+
+    it('shows unknown Artifact fields as rows and chips', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_unknown',
+        name: 'Artifact',
+        input: {
+          file_path: '/x.html',
+          contract: '0.2.96',
+          limit: 50,
+          overwrite_unread: ['a.css', 'b.js'],
+          root: '',
+          extra: null,
+        },
+      };
+      const { getByText, queryByText } = render(<ContentBlock block={block} />);
+      expect(getByText('contract').nextElementSibling?.textContent).toBe('0.2.96');
+      expect(getByText('limit').nextElementSibling?.textContent).toBe('50');
+      expect(getByText('overwrite_unread: 2 items')).toBeInTheDocument();
+      expect(queryByText('root')).toBeNull();
+      expect(queryByText('extra')).toBeNull();
+      // Hand-labeled fields are not repeated as generic rows.
+      expect(queryByText('file_path')).toBeNull();
+    });
+
+    it('capitalizes an unknown action verbatim', () => {
+      const block: ContentBlockType = { type: 'tool_use', id: 't', name: 'Artifact', input: { action: 'archive' } };
+      expect(render(<ContentBlock block={block} />).getByText('Archive')).toBeInTheDocument();
     });
 
     it('leads a successful result with the artifact link and version', () => {
@@ -312,6 +368,79 @@ describe('ContentBlock', () => {
       const quickstart: ContentBlockType = { type: 'tool_result', tool_use_id: 't', content: 'Quickstart. ...' };
       const r2 = render(<ContentBlock block={quickstart} toolName="Artifact" artifactToolUseResult={{}} />);
       expect(r2.container.querySelector('details')).toBeNull();
+    });
+  });
+
+  describe('ArtifactComments / ArtifactData tools', () => {
+    it('renders an ArtifactComments resolve call as a card', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_c1',
+        name: 'ArtifactComments',
+        input: { action: 'resolve', url: 'https://claude.ai/artifact/abc', thread_id: 'th_1' },
+      };
+      const { container, getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('Artifact comments')).toBeInTheDocument();
+      expect(getByText('Resolve')).toBeInTheDocument();
+      expect(getByText('https://claude.ai/artifact/abc').closest('a')?.getAttribute('href')).toBe('https://claude.ai/artifact/abc');
+      expect(getByText('thread_id').nextElementSibling?.textContent).toBe('th_1');
+      const details = container.querySelector('details');
+      expect(details?.open).toBe(false);
+      expect(details?.querySelector('[data-testid="codeblock"]')).not.toBeNull();
+    });
+
+    it('renders an ArtifactComments watch call with no link', () => {
+      const block: ContentBlockType = { type: 'tool_use', id: 'toolu_c2', name: 'ArtifactComments', input: { action: 'watch' } };
+      const { container, getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('Watch')).toBeInTheDocument();
+      expect(container.querySelector('a')).toBeNull();
+    });
+
+    it('omits the action label when the call has none', () => {
+      const block: ContentBlockType = { type: 'tool_use', id: 't', name: 'ArtifactData', input: { url: 'https://claude.ai/artifact/abc' } };
+      const { container, getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('Artifact data')).toBeInTheDocument();
+      expect(container.textContent).not.toContain('Publish');
+    });
+
+    it('renders an ArtifactData list call with a collection row and a query chip', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_d1',
+        name: 'ArtifactData',
+        input: { action: 'list', url: 'https://claude.ai/artifact/abc', collection: 'votes', query: { limit: 500 } },
+      };
+      const { getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('Artifact data')).toBeInTheDocument();
+      expect(getByText('List')).toBeInTheDocument();
+      expect(getByText('collection').nextElementSibling?.textContent).toBe('votes');
+      expect(getByText('query: 1 key')).toBeInTheDocument();
+    });
+
+    it('renders an unseen ArtifactData action with count chips', () => {
+      const block: ContentBlockType = {
+        type: 'tool_use',
+        id: 'toolu_d2',
+        name: 'ArtifactData',
+        input: { action: 'batch', url: 'https://claude.ai/artifact/abc', batch: [{}, {}, {}, {}], dry_run: false },
+      };
+      const { getByText } = render(<ContentBlock block={block} />);
+      expect(getByText('Batch')).toBeInTheDocument();
+      expect(getByText('batch: 4 items')).toBeInTheDocument();
+      expect(getByText('dry_run').nextElementSibling?.textContent).toBe('false');
+    });
+
+    it('keeps sibling tool_results unchanged', () => {
+      const block: ContentBlockType = { type: 'tool_result', tool_use_id: 't', content: 'No documents matched.' };
+      for (const toolName of ['ArtifactComments', 'ArtifactData']) {
+        const { container, unmount } = render(
+          <ContentBlock block={block} toolName={toolName} artifactToolUseResult={{ url: 'https://claude.ai/artifact/abc' }} />,
+        );
+        expect(container.querySelector('details')).toBeNull();
+        expect(container.querySelector('a')).toBeNull();
+        expect(container.querySelector('[data-testid="codeblock"]')?.textContent).toBe('No documents matched.');
+        unmount();
+      }
     });
   });
 });

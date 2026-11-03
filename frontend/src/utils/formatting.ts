@@ -259,3 +259,8 @@ export function formatCalendarDate(isoDate: string): string {
     day: 'numeric',
   });
 }
+
+/** "1 edit", "2 edits"; pass `pluralForm` for irregular plurals ("2 queries"). */
+export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}

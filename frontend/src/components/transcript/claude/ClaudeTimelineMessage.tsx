@@ -16,6 +16,7 @@ import { stringifyUnknownClaudeMessage } from '@/services/claudeMessageParser';
 import { AttachmentContent, AwaySummary, InformationalBanner } from '@/components/transcript/claude/attachments';
 import { formatCost, formatTokenCount, buildCostTooltip, normalizeClaudeUsage, computeMessageTokenSpeed, formatTokenSpeed, cacheWriteTotal } from '@/utils/tokenStats';
 import { claudeAdapter } from '@/providers/claudeAdapter';
+import { plural } from '@/utils/formatting';
 import { getClaudeRoleLabel, isUnknownClaudeMessage, isAwaySummaryMessage, isInformationalMessage } from '@/components/session/claudeCategories';
 import styles from './ClaudeTimelineMessage.module.css';
 
@@ -90,10 +91,10 @@ const SERVER_TOOL_LABELS: ReadonlyArray<readonly [keyof ClaudeServerToolUsage, s
 function getServerToolBadges(stu: ClaudeServerToolUsage | undefined): string[] {
   if (!stu) return [];
   const badges: string[] = [];
-  for (const [key, singular, plural] of SERVER_TOOL_LABELS) {
+  for (const [key, singular, pluralForm] of SERVER_TOOL_LABELS) {
     const count = stu[key];
     if (count) {
-      badges.push(`${count} ${count === 1 ? singular : plural}`);
+      badges.push(plural(count, singular, pluralForm));
     }
   }
   return badges;
@@ -160,9 +161,7 @@ function getBashToolUseResult(message: TranscriptLine): BashToolResult | undefin
  */
 function getArtifactToolUseResult(message: TranscriptLine): ArtifactToolResult | undefined {
   if (!isUserMessage(message)) return undefined;
-  const tur = message.toolUseResult;
-  if (!tur || typeof tur !== 'object' || Array.isArray(tur)) return undefined;
-  const parsed = ArtifactToolResultSchema.safeParse(tur);
+  const parsed = ArtifactToolResultSchema.safeParse(message.toolUseResult);
   return parsed.success ? parsed.data : undefined;
 }
 

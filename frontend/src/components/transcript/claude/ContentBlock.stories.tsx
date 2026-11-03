@@ -168,6 +168,39 @@ export const ToolUseArtifactRead: Story = {
   },
 };
 
+// Sibling artifact tools — same card shape: tool label + action, URL link,
+// remaining fields as rows, objects/arrays as count chips.
+export const ToolUseArtifactCommentsResolve: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_c1',
+      name: 'ArtifactComments',
+      input: {
+        action: 'resolve',
+        url: 'https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH',
+        thread_id: 'th_8f2c41',
+      },
+    },
+  },
+};
+
+export const ToolUseArtifactDataList: Story = {
+  args: {
+    block: {
+      type: 'tool_use',
+      id: 'tool_art_d1',
+      name: 'ArtifactData',
+      input: {
+        action: 'list',
+        url: 'https://claude.ai/artifact/J1dbkDyLFQRkrNrymM2nRH',
+        collection: 'signups',
+        query: { limit: 500 },
+      },
+    },
+  },
+};
+
 export const ToolResultArtifactPublished: Story = {
   args: {
     block: {

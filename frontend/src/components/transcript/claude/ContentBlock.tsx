@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ContentBlock as ContentBlockType } from '@/types';
 import type { ArtifactToolResult, BashToolResult } from '@/schemas/claudeTranscript';
 import { isTextBlock, isThinkingBlock, isToolUseBlock, isToolResultBlock, isImageBlock, isToolReferenceBlock, warnIfKnownTypeCaughtByCatchall } from '@/types';
@@ -7,7 +8,7 @@ import CodeBlock from '../CodeBlock';
 import BashOutput from '../BashOutput';
 import ReportUnknownButton from '../ReportUnknownButton';
 import { ArtifactResult, ArtifactToolUse } from './ArtifactTool';
-import { ARTIFACT_TOOL_NAME, getArtifactResultLink } from './artifactToolHelpers';
+import { ARTIFACT_TOOL_NAME, getArtifactResultLink, isArtifactToolName } from './artifactToolHelpers';
 import { computeKeyFingerprint } from '@/utils/reportUnknown';
 import styles from './ContentBlock.module.css';
 
@@ -84,9 +85,9 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
     const inputJson = (
       <CodeBlock code={JSON.stringify(block.input, null, 2)} language="json" searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
     );
-    if (block.name === ARTIFACT_TOOL_NAME) {
+    if (isArtifactToolName(block.name)) {
       return (
-        <ArtifactToolUse input={block.input} isCurrentSearchMatch={isCurrentSearchMatch}>
+        <ArtifactToolUse toolName={block.name} input={block.input} isCurrentSearchMatch={isCurrentSearchMatch}>
           {inputJson}
         </ArtifactToolUse>
       );
@@ -103,8 +104,20 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
   }
 
   if (isToolResultBlock(block)) {
-    const content = typeof block.content === 'string' ? (
-      isBashOutput(block.content, toolName) ? (
+    let content: ReactNode;
+    if (typeof block.content !== 'string') {
+      // Recursive rendering for nested content blocks
+      content = block.content.map((nestedBlock, i) => (
+        <ContentBlock
+          key={i}
+          block={nestedBlock}
+          toolName={toolName}
+          searchQuery={searchQuery}
+          isCurrentSearchMatch={isCurrentSearchMatch}
+        />
+      ));
+    } else if (isBashOutput(block.content, toolName)) {
+      content = (
         <BashOutput
           output={block.content}
           exitCode={toolUseResult?.exitCode}
@@ -117,21 +130,12 @@ function ContentBlock({ block, toolName: initialToolName = '', searchQuery, isCu
           searchQuery={searchQuery}
           isCurrentSearchMatch={isCurrentSearchMatch}
         />
-      ) : (
+      );
+    } else {
+      content = (
         <CodeBlock code={block.content} language="plain" maxHeight="500px" truncateLines={100} searchQuery={searchQuery} isCurrentSearchMatch={isCurrentSearchMatch} />
-      )
-    ) : (
-      // Recursive rendering for nested content blocks
-      block.content.map((nestedBlock, i) => (
-        <ContentBlock
-          key={i}
-          block={nestedBlock}
-          toolName={toolName}
-          searchQuery={searchQuery}
-          isCurrentSearchMatch={isCurrentSearchMatch}
-        />
-      ))
-    );
+      );
+    }
     // Artifact results are mostly model guidance; lead with the artifact link.
     const artifactLink = !block.is_error && toolName === ARTIFACT_TOOL_NAME
       ? getArtifactResultLink(artifactToolUseResult)
