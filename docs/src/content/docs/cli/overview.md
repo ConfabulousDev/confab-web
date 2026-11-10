@@ -3,7 +3,7 @@ title: CLI overview
 description: The confab CLI that syncs your Claude Code, Codex, and OpenCode sessions in real time.
 ---
 
-The `confab` CLI is the bridge between your local AI coding sessions and the Confabulous backend. It lives in a separate repository: [ConfabulousDev/confab](https://github.com/ConfabulousDev/confab).
+The `confab` CLI is the bridge between your local AI coding sessions and the Confabulous Code backend. It lives in a separate repository: [ConfabulousDev/confab](https://github.com/ConfabulousDev/confab).
 
 ## Installation
 
@@ -19,7 +19,7 @@ The install script fetches a pre-built binary from [GitHub Releases](https://git
 confab setup --backend-url https://your-confab-instance.example.com
 ```
 
-`--backend-url` is required — the CLI doesn't have a default backend. Pass the URL of the Confabulous instance you sign in to in the browser:
+`--backend-url` is required — the CLI doesn't have a default backend. Pass the URL of the Confabulous Code instance you sign in to in the browser:
 
 - **Managed:** `--backend-url https://code.confabulous.dev`
 - **Self-hosted:** `--backend-url https://confab.your-company.com`

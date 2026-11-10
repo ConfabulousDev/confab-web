@@ -8,7 +8,7 @@ Docs-site conventions Claude would get wrong by default. Add a rule here only wh
 
 ## Sentence case for titles and headings
 
-All page titles, sidebar labels, and `##` / `###` headings use **sentence case**: capitalize only the first word. Proper nouns (Confabulous, Claude Code, Codex, Docker, GitHub, Fly.io, Linode, Caddy, MinIO, PostgreSQL, Neon, Resend, Honeycomb, Anthropic, OpenAI) and acronyms (CLI, API, HTTP, HTTPS, OAuth, OIDC, SSO, TLS, DNS, S3, AWS) keep their canonical capitalization.
+All page titles, sidebar labels, and `##` / `###` headings use **sentence case**: capitalize only the first word. Proper nouns (Confabulous Code, Claude Code, Codex, Docker, GitHub, Fly.io, Linode, Caddy, MinIO, PostgreSQL, Neon, Resend, Honeycomb, Anthropic, OpenAI) and acronyms (CLI, API, HTTP, HTTPS, OAuth, OIDC, SSO, TLS, DNS, S3, AWS) keep their canonical capitalization.
 
 Examples:
 - ✅ `title: Quickstart for end users` (not `Quickstart for End Users`)

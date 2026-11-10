@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  Source for frontend/public/og-image.png (the 1200x630 Open Graph / Twitter
+  link-preview image referenced from index.html). Not served or bundled.
+
+  Re-render after editing (from frontend/, after `npm install` so the
+  self-hosted Lobster font below resolves):
+
+    npx playwright screenshot --channel chrome --viewport-size "1200, 630" \
+      --wait-for-timeout 500 "file://$PWD/scripts/og-image.html" public/og-image.png
+
+  The backend's serveSPA rewrites the og:image / twitter:image path to an
+  absolute FRONTEND_URL URL at startup, so only the file needs to change.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Confabulous Code OG image</title>
+    <style>
+      @font-face {
+        font-family: 'Lobster';
+        font-weight: 400;
+        src: url('../node_modules/@fontsource/lobster/files/lobster-latin-400-normal.woff2') format('woff2');
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: #fafafa;
+        color: #1a1a1a;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      }
+      .wordmark {
+        display: flex;
+        align-items: baseline;
+        gap: 24px;
+        line-height: 1;
+      }
+      .name {
+        font-family: 'Lobster', cursive;
+        font-size: 150px;
+      }
+      .suffix {
+        font-size: 64px;
+        font-weight: 500;
+        color: #555555;
+      }
+      .rule {
+        width: 96px;
+        height: 6px;
+        margin: 44px 0 36px;
+        border-radius: 3px;
+        background: #0066cc;
+      }
+      .tagline {
+        font-size: 40px;
+        font-weight: 400;
+        color: #333333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wordmark">
+      <span class="name">Confabulous</span>
+      <span class="suffix">Code</span>
+    </div>
+    <div class="rule"></div>
+    <div class="tagline">Understand your AI coding sessions</div>
+  </body>
+</html>

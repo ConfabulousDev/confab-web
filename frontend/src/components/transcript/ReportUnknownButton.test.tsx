@@ -40,7 +40,7 @@ describe('ReportUnknownButton', () => {
     expect(href).toContain(encodeURIComponent('mystery_type'));
   });
 
-  it('includes the Confab app version from context in the prefilled body', () => {
+  it('includes the Confabulous Code version from context in the prefilled body', () => {
     render(<ReportUnknownButton descriptor={descriptor} />, { wrapper: withConfig('9.9.9') });
 
     const href = screen.getByRole('link', { name: /report bug/i }).getAttribute('href') ?? '';

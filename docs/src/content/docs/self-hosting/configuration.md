@@ -1,6 +1,6 @@
 ---
 title: Configuration reference
-description: All environment variables that control Confabulous's behavior.
+description: All environment variables that control Confabulous Code's behavior.
 ---
 
 All configuration is via environment variables, set in `docker-compose.yml` or your platform's equivalent. The backend runs as either `./server` (web) or `./server worker` (background analytics). Which mode each variable applies to is noted per section.
@@ -15,7 +15,7 @@ See [`backend/.env.example`](https://github.com/ConfabulousDev/confab-web/blob/m
 |----------|---------|----------|-------------|
 | `PORT` | `8080` | No | HTTP server port |
 | `BACKEND_URL` | `http://localhost:8080` | No | Public URL of the backend; used for CLI device-code authorization flow |
-| `FRONTEND_URL` | `http://localhost:5173` | Yes | Public URL of the frontend; used for OAuth redirects, email links, and CORS |
+| `FRONTEND_URL` | `http://localhost:5173` | Yes | Public URL of the frontend; used for OAuth redirects, email links, CORS, and the absolute link-preview image URL |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Yes | Comma-separated list of allowed CORS origins |
 | `STATIC_FILES_DIR` | `/app/static` | No | Directory for serving the built frontend |
 | `CSRF_SECRET_KEY` | *(none)* | Yes | CSRF protection secret; must be at least 32 characters |
@@ -116,7 +116,7 @@ Email is enabled when both `RESEND_API_KEY` and `EMAIL_FROM_ADDRESS` are set.
 |----------|---------|----------|-------------|
 | `RESEND_API_KEY` | *(none)* | If email enabled | Resend API key ([resend.com](https://resend.com)) |
 | `EMAIL_FROM_ADDRESS` | *(none)* | If email enabled | Sender email address |
-| `EMAIL_FROM_NAME` | `Confab` | No | Sender display name |
+| `EMAIL_FROM_NAME` | `Confabulous Code` | No | Sender display name |
 | `EMAIL_RATE_LIMIT_PER_HOUR` | `100` | No | Per-user email rate limit |
 | `SUPPORT_EMAIL` | *(none)* | No | Support email shown in UI |
 

@@ -38,7 +38,7 @@ Inside a fresh Claude Code, Codex, or OpenCode session:
 /retro <session-id> [optional question or focus]
 ```
 
-`<session-id>` is the ID shown on your Confabulous dashboard. The optional trailing text steers the discussion.
+`<session-id>` is the ID shown on your Confabulous Code dashboard. The optional trailing text steers the discussion.
 
 The agent:
 
@@ -63,4 +63,4 @@ The `SKILL.md` files are plain markdown — you can edit them in place. Your edi
 
 To pin a customized version: edit `SKILL.md`, then run `confab status` to confirm the skill is still recognized as installed. To revert: delete the file and run `confab skills add`.
 
-To author entirely new skills for your team's workflow, drop a `SKILL.md` into the provider's skills directory directly — Confabulous doesn't restrict what skills can live there beyond its own bundled set.
+To author entirely new skills for your team's workflow, drop a `SKILL.md` into the provider's skills directory directly — Confabulous Code doesn't restrict what skills can live there beyond its own bundled set.

@@ -831,7 +831,7 @@ func HandleCLIAuthorize(database *db.DB, allowedDomains []string) http.HandlerFu
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="refresh" content="5;url=%s">
-    <title>API Key Limit Reached - Confab</title>
+    <title>API Key Limit Reached - Confabulous Code</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #fafafa; color: #1a1a1a; }
         .container { background: #fff; padding: 2.5rem; border-radius: 6px; border: 1px solid #e5e5e5; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; max-width: 500px; }

@@ -1,6 +1,6 @@
 # Self-Hosting Guide
 
-Deploy Confabulous — self-hosted analytics for your Claude Code and Codex sessions — on your own infrastructure.
+Deploy Confabulous Code — self-hosted analytics for your Claude Code and Codex sessions — on your own infrastructure.
 
 This guide walks you through setup step by step. For the full environment variable reference, see [CONFIGURATION.md](CONFIGURATION.md). For security details, see [backend/SECURITY.md](backend/SECURITY.md).
 

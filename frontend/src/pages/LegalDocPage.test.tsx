@@ -28,7 +28,7 @@ describe('LegalDocPage', () => {
 
   it('sets the document title', () => {
     renderPage('privacy');
-    expect(document.title).toBe('Privacy Notice | Confabulous');
+    expect(document.title).toBe('Privacy Notice | Confabulous Code');
   });
 
   it('renders the policy body with heading anchors', () => {

@@ -45,9 +45,9 @@ interface LoginPageLayoutProps {
 function renderError(error: { type: string; message: string }) {
   switch (error.type) {
     case 'access_denied':
-      return <>Please request access <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>;
+      return <>Please request access <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Requesting access to Confabulous Code')}`}>here</a>.</>;
     case 'account_inactive':
-      return <>Your account is not active. Please contact <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Confabulous account access')}`}>support</a>.</>;
+      return <>Your account is not active. Please contact <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Confabulous Code account access')}`}>support</a>.</>;
     default:
       return error.message;
   }

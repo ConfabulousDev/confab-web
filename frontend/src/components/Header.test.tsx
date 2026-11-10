@@ -62,7 +62,7 @@ describe('Header logo badge', () => {
   // to the logo. Previously the CSS pseudo-element forced 'beta'.
   it('renders no badge in normal (non-demo) deployments', () => {
     renderHeader();
-    expect(screen.getByText('Confabulous')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confabulous Code' })).toBeInTheDocument();
     expect(screen.queryByText(/beta/i)).toBeNull();
     expect(screen.queryByText(/demo/i)).toBeNull();
   });
@@ -70,7 +70,7 @@ describe('Header logo badge', () => {
   it('renders a "demo" badge when window.__DEMO_IDENTITY__ is set', () => {
     window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
     renderHeader();
-    expect(screen.getByText('Confabulous')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Confabulous Code\s*demo$/ })).toBeInTheDocument();
     expect(screen.getByText('demo')).toBeInTheDocument();
   });
 

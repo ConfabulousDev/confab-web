@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Frequently asked questions about Confabulous and the managed instance.
+description: Frequently asked questions about Confabulous Code and the managed instance.
 ---
 
 ## General

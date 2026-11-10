@@ -23,7 +23,7 @@
   </g>
 
   <!-- Wordmark -->
-  <text x="600" y="300" font-family="Lobster, cursive" font-size="160" fill="#f8fafc" text-anchor="middle">Confabulous</text>
+  <text x="600" y="300" font-family="Lobster, cursive" font-size="140" fill="#f8fafc" text-anchor="middle">Confabulous<tspan dx="24" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="64" font-weight="500" fill="#94a3b8">Code</tspan></text>
 
   <!-- Tagline -->
   <text x="600" y="380" font-size="34" fill="#cbd5e1" text-anchor="middle">

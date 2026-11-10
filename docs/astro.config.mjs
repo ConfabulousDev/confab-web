@@ -20,7 +20,7 @@ const head = [
   { tag: 'meta', attrs: { property: 'og:image', content: OG_IMAGE } },
   { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
   { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
-  { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Confabulous documentation' } },
+  { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Confabulous Code documentation' } },
   { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
   { tag: 'meta', attrs: { name: 'twitter:image', content: OG_IMAGE } },
 ];
@@ -42,7 +42,7 @@ export default defineConfig({
   site: SITE,
   integrations: [
     starlight({
-      title: 'Confabulous',
+      title: 'Confabulous Code',
       description: 'Open-source analytics for your Claude Code, Codex, and OpenCode sessions — managed or self-hosted.',
       // Self-hosted Lobster for the wordmark (no third-party font requests).
       customCss: ['@fontsource/lobster/400.css', './src/styles/custom.css'],

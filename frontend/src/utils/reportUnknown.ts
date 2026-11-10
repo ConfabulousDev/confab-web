@@ -46,7 +46,7 @@ export function computeKeyFingerprint(obj: unknown): string[] {
 
 /**
  * Build the prefilled issue title + Markdown body for an unknown-row report.
- * The Confab app version line is included only when `appVersion` is non-empty.
+ * The Confabulous Code version line is included only when `appVersion` is non-empty.
  * No payload, no label, no raw-paste invitation (CF-574 decisions).
  */
 export function buildUnknownReportIssue(
@@ -58,7 +58,7 @@ export function buildUnknownReportIssue(
   const title = `[parser-gap] ${provider}: unrecognized ${surface} "${type}"`;
 
   const lines: string[] = [
-    'A transcript row was not recognized by the Confab parser. The details below are',
+    'A transcript row was not recognized by the Confabulous Code parser. The details below are',
     'structural metadata only — **no message content is included**.',
     '',
     `- **Provider:** ${provider}`,
@@ -71,7 +71,7 @@ export function buildUnknownReportIssue(
       keyFingerprint.length > 0 ? keyFingerprint.map((k) => `\`${k}\``).join(', ') : '_(none)_'
     }`,
   );
-  if (appVersion) lines.push(`- **Confab version:** ${appVersion}`);
+  if (appVersion) lines.push(`- **Confabulous Code version:** ${appVersion}`);
 
   return { title, body: lines.join('\n') };
 }

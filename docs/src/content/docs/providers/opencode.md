@@ -1,9 +1,9 @@
 ---
 title: OpenCode
-description: How Confabulous parses, analyzes, and displays OpenCode sessions.
+description: How Confabulous Code parses, analyzes, and displays OpenCode sessions.
 ---
 
-Confabulous has first-class support for [OpenCode](https://opencode.ai) sessions.
+Confabulous Code has first-class support for [OpenCode](https://opencode.ai) sessions.
 
 ## What gets parsed
 
@@ -25,7 +25,7 @@ Each OpenCode session produces these cards:
 
 ## Subagent aggregation
 
-When an OpenCode session spawns subagents (`explore`, `build`, etc.), Confabulous aggregates the main thread plus every subagent thread for most analytics cards. The Conversation card stays main-only by design (it reflects user-perceived turn structure, not subagent reasoning). Subagent uploads require a recent CLI and backend; older deployments simply skip them.
+When an OpenCode session spawns subagents (`explore`, `build`, etc.), Confabulous Code aggregates the main thread plus every subagent thread for most analytics cards. The Conversation card stays main-only by design (it reflects user-perceived turn structure, not subagent reasoning). Subagent uploads require a recent CLI and backend; older deployments simply skip them.
 
 ## Pricing
 
@@ -33,4 +33,4 @@ Because OpenCode runs models from many providers, each session is priced against
 
 ## Other supported providers
 
-Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Codex](/providers/codex/), and [Cursor](/providers/cursor/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
+Confabulous Code treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Codex](/providers/codex/), and [Cursor](/providers/cursor/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.

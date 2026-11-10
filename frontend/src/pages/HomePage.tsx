@@ -10,7 +10,7 @@ import { PROVIDER_METADATA, PROVIDER_VALUES } from '@/utils/providers';
 import styles from './HomePage.module.css';
 
 function HomePage() {
-  useDocumentTitle('Confabulous');
+  useDocumentTitle('Confabulous Code');
   const { user, loading, serverError } = useAuth();
   const navigate = useNavigate();
 

@@ -34,7 +34,7 @@ This package is intentionally thin. Request handlers live in [`internal/api`](..
 |---|---|---|
 | `CSRF_SECRET_KEY` | (required, ≥ 32 chars) | Signing secret for CSRF tokens. |
 | `DATABASE_URL` | (required) | Postgres DSN. |
-| `FRONTEND_URL` | (required) | Public origin of the frontend, used in emails and CORS. |
+| `FRONTEND_URL` | (required) | Public origin of the frontend, used in emails, CORS and the absolute `og:image` URL. |
 | `ALLOWED_ORIGINS` | (required) | Comma-separated CORS allow-list. |
 
 ### Startup safety guard (`security_guard.go`)
@@ -61,7 +61,7 @@ that still uses the public template defaults, `loadConfig` refuses to start when
 |---|---|---|
 | `RESEND_API_KEY` | (off) | Resend API key. |
 | `EMAIL_FROM_ADDRESS` | (off) | Sender address. |
-| `EMAIL_FROM_NAME` | `Confab` | Sender display name. |
+| `EMAIL_FROM_NAME` | `Confabulous Code` | Sender display name. |
 | `EMAIL_RATE_LIMIT_PER_HOUR` | `100` | Per-user hourly cap. |
 
 ### Storage (S3 / MinIO — all required)

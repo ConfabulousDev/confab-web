@@ -1,9 +1,9 @@
 ---
 title: API reference
-description: HTTP API surface for the Confabulous backend.
+description: HTTP API surface for the Confabulous Code backend.
 ---
 
-The Confabulous backend exposes a JSON HTTP API used by the web frontend, the [`confab` CLI](https://github.com/ConfabulousDev/confab), and external integrations. All endpoints are prefixed with `/api/v1` unless otherwise noted.
+The Confabulous Code backend exposes a JSON HTTP API used by the web frontend, the [`confab` CLI](https://github.com/ConfabulousDev/confab), and external integrations. All endpoints are prefixed with `/api/v1` unless otherwise noted.
 
 :::note
 The canonical reference is maintained alongside the source code at [`backend/API.md`](https://github.com/ConfabulousDev/confab-web/blob/main/backend/API.md). This page is a structured index — follow the links for the complete request/response schemas.

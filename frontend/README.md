@@ -27,6 +27,7 @@ See [`src/README.md`](src/README.md) for the module-by-module index and data-flo
 - `src/components/` — shared UI; session/cards live under `components/session/cards/`.
 - `src/providers/` — per-provider transcript adapters (Claude, Codex) behind a shared `ProviderAdapter` interface.
 - `src/utils/` — pure helpers (formatting, date ranges, pricing, providers).
+- `public/og-image.png` — the 1200×630 link-preview image; its source is `scripts/og-image.html` (re-render command in that file's header).
 
 ## Development
 

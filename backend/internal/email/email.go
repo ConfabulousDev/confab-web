@@ -362,7 +362,7 @@ const htmlTemplate = `<!DOCTYPE html>
                     <!-- Header -->
                     <tr>
                         <td style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
-                            <span style="font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 22px; color: #1a1a1a;">Confabulous</span>
+                            <span style="font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 22px; color: #1a1a1a;">Confabulous Code</span>
                         </td>
                     </tr>
                     <!-- Content -->

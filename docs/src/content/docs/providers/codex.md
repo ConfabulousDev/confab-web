@@ -1,9 +1,9 @@
 ---
 title: Codex
-description: How Confabulous parses, analyzes, and displays OpenAI Codex sessions.
+description: How Confabulous Code parses, analyzes, and displays OpenAI Codex sessions.
 ---
 
-Confabulous has first-class support for [OpenAI Codex](https://developers.openai.com/codex) sessions, including subagent spawns and skill invocations.
+Confabulous Code has first-class support for [OpenAI Codex](https://developers.openai.com/codex) sessions, including subagent spawns and skill invocations.
 
 ## What gets parsed
 
@@ -26,15 +26,15 @@ Confabulous has first-class support for [OpenAI Codex](https://developers.openai
 
 ## Codex CLI version differences
 
-Codex reshaped its rollout format in version 0.149.1. Confabulous reads both formats, so old and new sessions analyze correctly, but two things legitimately differ between them.
+Codex reshaped its rollout format in version 0.149.1. Confabulous Code reads both formats, so old and new sessions analyze correctly, but two things legitimately differ between them.
 
-**Tool names are reported as Codex recorded them.** Sessions from 0.130.0 and earlier show `exec_command`, `apply_patch` and `write_stdin`; sessions from 0.149.1 onward show `exec`, `wait` and `web.search`. Codex renamed its tools, so a session from before the change and one from after will list different tool names for the same kind of work. Confabulous does not remap them onto a common vocabulary — that would mean displaying names that never appeared in your transcript.
+**Tool names are reported as Codex recorded them.** Sessions from 0.130.0 and earlier show `exec_command`, `apply_patch` and `write_stdin`; sessions from 0.149.1 onward show `exec`, `wait` and `web.search`. Codex renamed its tools, so a session from before the change and one from after will list different tool names for the same kind of work. Confabulous Code does not remap them onto a common vocabulary — that would mean displaying names that never appeared in your transcript.
 
-**Files read and searches are only available from 0.149.1 onward.** Newer Codex versions record what each shell command was doing, so Confabulous can count file reads and searches. Older versions recorded only the command line itself, with no indication of its purpose, so those two figures stay at zero for older sessions rather than being guessed at from command text.
+**Files read and searches are only available from 0.149.1 onward.** Newer Codex versions record what each shell command was doing, so Confabulous Code can count file reads and searches. Older versions recorded only the command line itself, with no indication of its purpose, so those two figures stay at zero for older sessions rather than being guessed at from command text.
 
 ## Subagent aggregation
 
-When a Codex session spawns subagents, Confabulous aggregates the main thread plus every subagent thread for most analytics cards. The Conversation card stays main-only by design.
+When a Codex session spawns subagents, Confabulous Code aggregates the main thread plus every subagent thread for most analytics cards. The Conversation card stays main-only by design.
 
 ## Pricing nuances
 
@@ -44,4 +44,4 @@ When a Codex session spawns subagents, Confabulous aggregates the main thread pl
 
 ## Other supported providers
 
-Confabulous treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Cursor](/providers/cursor/), and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.
+Confabulous Code treats every provider as a first-class citizen. [Claude Code](/providers/claude-code/), [Cursor](/providers/cursor/), and [OpenCode](/providers/opencode/) are also supported today. New providers slot into the same sync, storage, and analytics pipeline.

@@ -1,15 +1,17 @@
 import { useEffect } from 'react';
 
+const PRODUCT_NAME = 'Confabulous Code';
+
 /**
- * Sets the document title. Appends "| Confabulous" suffix unless title is just "Confabulous".
+ * Sets the document title as "<title> | Confabulous Code", or just
+ * "Confabulous Code" when the title is the product name itself (home page).
  */
 export function useDocumentTitle(title: string) {
   useEffect(() => {
-    const fullTitle = title === 'Confabulous' ? title : `${title} | Confabulous`;
-    document.title = fullTitle;
+    document.title = title === PRODUCT_NAME ? title : `${title} | ${PRODUCT_NAME}`;
 
     return () => {
-      document.title = 'Confabulous';
+      document.title = PRODUCT_NAME;
     };
   }, [title]);
 }

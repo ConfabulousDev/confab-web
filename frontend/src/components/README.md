@@ -46,7 +46,7 @@ Root-level files are **shared, reusable components** used across multiple pages.
 | `RelativeTime.tsx` | Auto-updating relative timestamp display |
 | `ScrollNavButtons.tsx` | Floating scroll-to-top/bottom buttons |
 | `ServerError.tsx` | Full-page server error state with auto-retry |
-| `SessionEmptyState.tsx` | Empty state when no sessions exist. Includes a subtle "New to Confabulous? Read the docs" link to `DOCS_URL` (CF-571). |
+| `SessionEmptyState.tsx` | Empty state when no sessions exist. Includes a subtle "New to Confabulous Code? Read the docs" link to `DOCS_URL` (CF-571). |
 | `ShareDialog.tsx` | Dialog for sharing sessions (public/private, recipients) |
 | `SortableHeader.tsx` | Table header with sort direction indicator |
 | `ThemeToggle.tsx` | Light/dark theme toggle button |

@@ -1,9 +1,9 @@
 ---
 title: Sample deployments
-description: Annotated, real-world deployments of Confabulous you can copy from.
+description: Annotated, real-world deployments of Confabulous Code you can copy from.
 ---
 
-The Confabulous-maintained instances run on two different stacks. Both configurations are public and you can copy from them.
+The project's own Confabulous Code instances run on two different stacks. Both configurations are public and you can copy from them.
 
 ## Fly.io — `code.confabulous.dev` (managed)
 
@@ -53,4 +53,4 @@ Cloudflare DNS is added by hand so no DNS token lives in the repo.
 |--|--|
 | Managed PaaS, scale-to-zero, minimal ops | **Fly.io** (or similar — Railway, Render) |
 | Full control of a VM, low monthly cost | **Linode VPS** (or DigitalOcean, Hetzner) + Docker Compose + Caddy |
-| Enterprise infra, OIDC SSO | Bring your own — k8s, ECS, etc. Confabulous is just a single Docker image plus Postgres + S3. |
+| Enterprise infra, OIDC SSO | Bring your own — k8s, ECS, etc. Confabulous Code is just a single Docker image plus Postgres + S3. |

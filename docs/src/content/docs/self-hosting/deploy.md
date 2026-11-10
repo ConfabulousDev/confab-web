@@ -1,9 +1,9 @@
 ---
 title: Deployment walkthrough
-description: Deploy Confabulous on your own infrastructure — from clone-and-run to HTTPS and OAuth.
+description: Deploy Confabulous Code on your own infrastructure — from clone-and-run to HTTPS and OAuth.
 ---
 
-This guide walks through deploying Confabulous step by step. For the full environment-variable reference, see [Configuration](/self-hosting/configuration/). For real-world annotated configs, see [Sample deployments](/self-hosting/examples/).
+This guide walks through deploying Confabulous Code step by step. For the full environment-variable reference, see [Configuration](/self-hosting/configuration/). For real-world annotated configs, see [Sample deployments](/self-hosting/examples/).
 
 :::tip[Worked example]
 [`confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — live compose, Caddyfile, and OpenTofu behind [demo.confabulous.dev](https://demo.confabulous.dev) on a $7/mo Linode. Tracks this guide.
