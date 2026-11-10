@@ -23,7 +23,7 @@ describe('LegalDocPage', () => {
 
   it('shows the Last updated date from the registry', () => {
     renderPage('terms');
-    expect(screen.getByText(/Last updated/)).toHaveTextContent('Last updated January 9, 2026');
+    expect(screen.getByText(/Last updated/)).toHaveTextContent('Last updated November 10, 2026');
   });
 
   it('sets the document title', () => {
