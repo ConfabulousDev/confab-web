@@ -75,8 +75,8 @@ export const WEB_SEARCH_COST_PER_REQUEST = 0.01;
 
 // Fast mode multiplier applied by the Claude adapter when usage.speed === 'fast'.
 // Anthropic publishes fast mode at a flat 2x the standard rate on every model
-// that offers it: $10/$50 against $5/$25 (Opus 5, Opus 4.8) and $8/$40 against
-// $4/$20 (Opus 5.5).
+// that offers it: $10/$50 against $5/$25 (Opus 5, Opus 4.8), $8/$40 against
+// $4/$20 (Opus 5.5) and $16/$80 against $8/$40 (Fable 5.2, Mythos 5.2).
 // Mirrors the backend's fastModeMultiplier (analytics/pricing.go).
 export const FAST_MODE_MULTIPLIER = 2;
 

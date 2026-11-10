@@ -186,7 +186,8 @@ var webSearchPricePerRequest = decimal.NewFromFloat(0.01) // $10 per 1,000 searc
 // fastModeMultiplier is applied to all token costs (input, output and both
 // cache tiers) when speed is "fast". Fast mode bills a flat 2x the standard
 // rate on every model that offers it: $10/$50 against $5/$25 on Claude Opus 5
-// and Opus 4.8, and $8/$40 against $4/$20 on Claude Opus 5.5.
+// and Opus 4.8, $8/$40 against $4/$20 on Claude Opus 5.5, and $16/$80 against
+// $8/$40 on Claude Fable 5.2 and Mythos 5.2.
 // Source: https://docs.anthropic.com/en/build-with-claude/fast-mode
 var fastModeMultiplier = decimal.NewFromInt(2)
 
