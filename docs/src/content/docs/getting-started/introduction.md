@@ -1,9 +1,9 @@
 ---
 title: Introduction
-description: What Confabulous is, who it's for, and what you can do with it.
+description: What Confabulous Code is, who it's for, and what you can do with it.
 ---
 
-Confabulous is an **open-source platform** for archiving, searching, and analyzing your Claude Code, OpenAI Codex, and OpenCode sessions. Use the free managed instance at [confabulous.dev](https://confabulous.dev), or self-host the whole stack on your own infrastructure.
+Confabulous Code is an **open-source platform** for archiving, searching, and analyzing your Claude Code, OpenAI Codex, and OpenCode sessions. Use the free managed instance at [code.confabulous.dev](https://code.confabulous.dev), or self-host the whole stack on your own infrastructure.
 
 ## What you get
 

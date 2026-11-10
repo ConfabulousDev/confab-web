@@ -1,6 +1,6 @@
 # legal/
 
-The legal documents for the managed service at confabulous.dev, published by Confabulous Software LLC. They render in-app at `/terms`, `/privacy`, `/cookies`, `/disclaimer` and `/acceptable-use` (via `pages/LegalDocPage.tsx`), and those routes only exist when `saasFooterEnabled` is on: self-hosted instances 404 on them.
+The legal documents for the managed service at code.confabulous.dev, published by Confabulous Software LLC. They render in-app at `/terms`, `/privacy`, `/cookies`, `/disclaimer` and `/acceptable-use` (via `pages/LegalDocPage.tsx`), and those routes only exist when `saasFooterEnabled` is on: self-hosted instances 404 on them.
 
 ## Files
 
@@ -21,7 +21,7 @@ The legal documents for the managed service at confabulous.dev, published by Con
 ## Links and anchors
 
 - Headings get `id`s derived from their text (lowercased, punctuation dropped, spaces to hyphens; repeats get `-2`, `-3`). For example, `## 1. WHAT INFORMATION DO WE COLLECT?` becomes `#1-what-information-do-we-collect`. Renaming a heading changes its anchor, so update the links to it.
-- Links to another policy use the route (`[confabulous.dev/terms](/terms)`); `LegalDocPage` routes them client-side.
+- Links to another policy use the route (`[code.confabulous.dev/terms](/terms)`); `LegalDocPage` routes them client-side.
 - An anchor that isn't a heading uses inline HTML: `<a id="withdrawconsent"></a>` (Privacy Notice).
 
 ## Tests
@@ -31,6 +31,8 @@ The legal documents for the managed service at confabulous.dev, published by Con
 - a document is empty
 - an in-page `#anchor` link has no matching `id` (catches renamed headings, and ids that `DOMPurify` strips)
 - a document mentions the former policy host
+- a document mentions the bare `confabulous.dev` host (subdomains such as `code.` and `demo.`, and `contact@` addresses, are allowed; the managed service is `code.confabulous.dev`)
+- a document contains the retired San Jose mailing address (every address must be the D-U-N-S one, 2108 N St, Ste N, Sacramento, CA 95816)
 - `lastUpdated` isn't an ISO date
 - a document starts with its own `#` title
 

@@ -9,6 +9,19 @@ import { LEGAL_MARKDOWN } from './content';
 // directory stays empty (evvf acceptance).
 const FORMER_HOST = new RegExp('ter' + 'mly', 'i');
 
+// The managed service lives at code.confabulous.dev; the bare domain is the
+// company site. Subdomains (code., demo., docs., share.) and contact@ addresses
+// are fine; a bare `confabulous.dev` reference is not.
+const BARE_HOST = /(?<![\w@.-])confabulous\.dev/;
+
+// The retired San Jose mailing address. Every address must match the D-U-N-S
+// record (2108 N St, Ste N, Sacramento, CA 95816).
+const FORMER_ADDRESS = /piedmont|san jose|32281/i;
+
+function linesMatching(markdown: string, re: RegExp): string[] {
+  return markdown.split('\n').filter((line) => re.test(line));
+}
+
 describe('legal documents', () => {
   it('registers the five policies under stable slugs', () => {
     expect(LEGAL_DOCS.map((d) => d.slug)).toEqual([
@@ -38,6 +51,14 @@ describe('legal documents', () => {
 
     it('contains no references to the former policy host', () => {
       expect(markdown).not.toMatch(FORMER_HOST);
+    });
+
+    it('never references the bare confabulous.dev host', () => {
+      expect(linesMatching(markdown, BARE_HOST), `bare-host references in ${slug}`).toEqual([]);
+    });
+
+    it('uses only the D-U-N-S mailing address', () => {
+      expect(linesMatching(markdown, FORMER_ADDRESS), `former address in ${slug}`).toEqual([]);
     });
 
     it('has a parseable ISO lastUpdated date', () => {

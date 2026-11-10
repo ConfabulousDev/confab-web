@@ -28,7 +28,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useShareDialog.ts` | Share dialog form state and API interactions |
 | `useAppConfig.ts` | App configuration context accessor |
 | `useTheme.ts` | Theme state (light/dark) with toggle |
-| `useDocumentTitle.ts` | Sets document title with "| Confabulous" suffix |
+| `useDocumentTitle.ts` | Sets document title as `<Page> \| Confabulous Code` (home page: bare "Confabulous Code") |
 | `useCopyToClipboard.ts` | Clipboard copy with success feedback timer |
 | `useOpenOnRisingEdge.ts` | Controlled `<details>` open state that auto-opens on the rising edge of a boolean trigger (e.g. active search match) and stays user-toggleable. Shared by `UnknownRawDetails`, Claude's `UnknownRawJson`, and `SubagentCard`. Imported by path (not in the barrel) |
 | `useSuccessMessage.ts` | Auto-dismissing success messages (optional URL param support) |

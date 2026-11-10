@@ -1,4 +1,4 @@
-# Confabulous docs site
+# Confabulous Code docs site
 
 The documentation site published at [docs.confabulous.dev](https://docs.confabulous.dev), built with [Starlight](https://starlight.astro.build/) (Astro).
 

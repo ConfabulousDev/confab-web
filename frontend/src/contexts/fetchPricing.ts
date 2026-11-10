@@ -7,7 +7,7 @@ interface PricingResponse {
 // Fetch the effective model price table from this app's own backend
 // (GET /api/v1/pricing) and install it for all cost arithmetic. The backend
 // always returns a valid table (its embedded floor, or a freshest remote pull
-// from confabulous.dev), so there is no client-side fallback or version logic.
+// from code.confabulous.dev), so there is no client-side fallback or version logic.
 //
 // Best-effort and single-shot: on failure the table stays empty and cost bills
 // $0 until the next load. Cost UI renders only after auth + session-data load,

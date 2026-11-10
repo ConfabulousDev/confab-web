@@ -8,7 +8,7 @@
     "url": "https://github.com/ConfabulousDev/confab-web",
     "directory": "frontend"
   },
-  "homepage": "https://confabulous.dev",
+  "homepage": "https://code.confabulous.dev",
   "type": "module",
   "scripts": {
     "dev": "vite",

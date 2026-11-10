@@ -35,8 +35,8 @@ func TestLoadConfig_DefaultsWhenOnlyRequiredEnvSet(t *testing.T) {
 	if cfg.EmailConfig.Enabled {
 		t.Error("EmailConfig.Enabled: want false")
 	}
-	if cfg.EmailConfig.FromName != "Confab" {
-		t.Errorf("EmailConfig.FromName default: want Confab, got %q", cfg.EmailConfig.FromName)
+	if cfg.EmailConfig.FromName != "Confabulous Code" {
+		t.Errorf("EmailConfig.FromName default: want Confabulous Code, got %q", cfg.EmailConfig.FromName)
 	}
 	if cfg.EmailConfig.RateLimitPerHour != 100 {
 		t.Errorf("EmailConfig.RateLimitPerHour default: want 100, got %d", cfg.EmailConfig.RateLimitPerHour)

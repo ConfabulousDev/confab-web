@@ -1,6 +1,6 @@
 // Package pricingsource owns the model price table: the compiled-in default
 // (embedded pricing.json — the single source of truth in the repo) plus an
-// optional best-effort refresh from a remote URL (confabulous.dev). It serves
+// optional best-effort refresh from a remote URL (code.confabulous.dev). It serves
 // the /api/v1/pricing endpoint and feeds the analytics cost compute.
 //
 // Modeled on internal/updatecheck: a lazy TTL-cached fetch, never blocking,
@@ -32,7 +32,7 @@ const maxSchemaVersion = 0
 // defaultSourceURL is where a self-hosted backend pulls the freshest table when
 // PRICING_SOURCE_URL is unset. The canonical SaaS instance disables fetching
 // (empty URL) so it never requests from itself.
-const defaultSourceURL = "https://confabulous.dev/api/v1/pricing"
+const defaultSourceURL = "https://code.confabulous.dev/api/v1/pricing"
 
 // maxBodyBytes bounds the fetched response so a misbehaving source can't make
 // us read an unbounded body. The real document is a few KB.
@@ -106,7 +106,7 @@ func NewSource(embedded Document, url string, refresh time.Duration) *Source {
 
 // NewFromEnv builds a source from the embedded floor and PRICING_SOURCE_URL /
 // PRICING_REFRESH_INTERVAL. forceDisabled blanks the URL (the composition root
-// passes this when running as SaaS, so confabulous.dev serves its own table).
+// passes this when running as SaaS, so code.confabulous.dev serves its own table).
 func NewFromEnv(forceDisabled bool) *Source {
 	url := envSourceURL()
 	if forceDisabled {

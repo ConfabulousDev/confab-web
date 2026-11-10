@@ -3,7 +3,7 @@ title: Organization analytics
 description: Per-user aggregated analytics across every session in your organization.
 ---
 
-The **Organization Analytics** view rolls up usage and cost across every user in your Confabulous instance. It's designed for trusted-team deployments where the team wants full visibility into how AI coding is being used — who's running sessions, which repos and providers they're hitting, and how much it's costing.
+The **Organization Analytics** view rolls up usage and cost across every user in your Confabulous Code instance. It's designed for trusted-team deployments where the team wants full visibility into how AI coding is being used — who's running sessions, which repos and providers they're hitting, and how much it's costing.
 
 See it live on the demo instance: [demo.confabulous.dev/organization](https://demo.confabulous.dev/organization).
 

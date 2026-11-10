@@ -1,4 +1,4 @@
-This Acceptable Use Policy ("**Policy**") is part of our Terms of Service ("**Legal Terms**") and should therefore be read alongside our main Legal Terms: [confabulous.dev/terms](/terms). If you do not agree with these Legal Terms, please refrain from using our Services. Your continued use of our Services implies acceptance of these Legal Terms.
+This Acceptable Use Policy ("**Policy**") is part of our Terms of Service ("**Legal Terms**") and should therefore be read alongside our main Legal Terms: [code.confabulous.dev/terms](/terms). If you do not agree with these Legal Terms, please refrain from using our Services. Your continued use of our Services implies acceptance of these Legal Terms.
 
 Please carefully review this Policy which applies to any and all:
 
@@ -10,7 +10,7 @@ Please carefully review this Policy which applies to any and all:
 
 ## WHO WE ARE
 
-We are Confabulous Software LLC ("**Company**," "**we**," "**us**," or "**our**") a company registered in California, United States at 2108 N ST, STE N, SACRAMENTO, CA 95816. We operate the website [https://confabulous.dev](https://confabulous.dev) (the "**Site**"), as well as any other related products and services that refer or link to this Policy (collectively, the "**Services**").
+We are Confabulous Software LLC ("**Company**," "**we**," "**us**," or "**our**") a company registered in California, United States at 2108 N St, Ste N, Sacramento, CA 95816. We operate the website [https://code.confabulous.dev](https://code.confabulous.dev) (the "**Site**"), as well as any other related products and services that refer or link to this Policy (collectively, the "**Services**").
 
 ## USE OF THE SERVICES
 
@@ -80,7 +80,7 @@ We may but are under no obligation to review or moderate the Contributions made 
 If you consider that any Service, Content, or Contribution:
 
 - breach this Policy, please email us at [contact@confabulous.dev](mailto:contact@confabulous.dev), or refer to the contact details at the bottom of this document to let us know which Service, Content, or Contribution is in breach of this Policy and why
-- infringe any third-party intellectual property rights, please check out our Legal Terms for information about our copyright infringement reporting process here: [confabulous.dev/terms](/terms)
+- infringe any third-party intellectual property rights, please check out our Legal Terms for information about our copyright infringement reporting process here: [code.confabulous.dev/terms](/terms)
 
 We will reasonably determine whether a Service, Content, or Contribution breaches this Policy.
 

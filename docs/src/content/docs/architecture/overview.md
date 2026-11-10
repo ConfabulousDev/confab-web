@@ -1,6 +1,6 @@
 ---
 title: Architecture overview
-description: How the Confabulous backend and frontend fit together.
+description: How the Confabulous Code backend and frontend fit together.
 ---
 
 <img src="/how-it-works.svg" alt="Architecture diagram" />

@@ -1,4 +1,4 @@
-# Confabulous
+# Confabulous Code
 
 Self-hosted analytics for your Claude Code and Codex sessions.
 
@@ -26,13 +26,13 @@ Self-hosted analytics for your Claude Code and Codex sessions.
 **Open-source, self-hosted** platform for archiving, searching, and analyzing your Claude Code and Codex sessions. Runs entirely in Docker on **your own infrastructure**.
 
 > [!IMPORTANT]
-> Code sessions contain proprietary code, architecture decisions, and internal workflows. The self hosted Confabulous stack keeps all of it on your network — no third-party access, no vendor lock-in.
+> Code sessions contain proprietary code, architecture decisions, and internal workflows. The self hosted Confabulous Code stack keeps all of it on your network — no third-party access, no vendor lock-in.
 
 > [!TIP]
-> **No login required** — see Confabulous in action at **[demo.confabulous.dev](https://demo.confabulous.dev)**.
+> **No login required** — see Confabulous Code in action at **[demo.confabulous.dev](https://demo.confabulous.dev)**.
 
 > [!TIP]
-> **Don't want to self-host?** Use the **free, fully featured** managed instance at **[confabulous.dev](https://confabulous.dev)** — no install required.
+> **Don't want to self-host?** Use the **free, fully featured** managed instance at **[code.confabulous.dev](https://code.confabulous.dev)** — no install required.
 
 ## Quickstart
 
@@ -78,7 +78,7 @@ Configuration is simple — everything is controlled through environment variabl
 Two production reference deployments:
 
 - **Linode + Docker Compose + Caddy** — [`confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) (OpenTofu, compose, Caddyfile, deploy script) powers [demo.confabulous.dev](https://demo.confabulous.dev) for $7/mo.
-- **Fly.io + Neon** — [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) power [confabulous.dev](https://confabulous.dev).
+- **Fly.io + Neon** — [`deploy-to-fly.sh`](deploy-to-fly.sh) and [`fly.toml`](fly.toml) power [code.confabulous.dev](https://code.confabulous.dev).
 
 ## Developer Docs
 

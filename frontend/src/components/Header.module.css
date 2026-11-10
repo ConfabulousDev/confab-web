@@ -16,6 +16,16 @@
   font-weight: normal;
   color: var(--color-text-primary);
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.logoSuffix {
+  font-family: system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-left: 0.125rem;
+  color: var(--color-text-secondary);
 }
 
 .logo:hover {
@@ -214,11 +224,19 @@
 
 @media (max-width: 480px) {
   .header {
-    padding: 0 var(--spacing-lg);
+    padding: 0 var(--spacing-md);
+  }
+
+  .logoSuffix {
+    font-size: 0.75rem;
   }
 
   .nav {
-    margin-left: var(--spacing-lg);
-    gap: var(--spacing-lg);
+    margin-left: var(--spacing-md);
+    gap: var(--spacing-md);
+  }
+
+  .actions {
+    margin-right: var(--spacing-sm);
   }
 }

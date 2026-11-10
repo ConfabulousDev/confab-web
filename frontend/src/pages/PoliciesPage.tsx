@@ -10,7 +10,7 @@ function PoliciesPage() {
       <div className={styles.content}>
         <h1 className={styles.title}>Policies</h1>
         <p className={styles.subtitle}>
-          Legal documents and policies for Confabulous.dev.
+          Legal documents and policies for Confabulous Code.
         </p>
 
         <div className={styles.links}>

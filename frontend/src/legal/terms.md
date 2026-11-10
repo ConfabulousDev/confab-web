@@ -1,10 +1,10 @@
 ## AGREEMENT TO OUR LEGAL TERMS
 
-We are Confabulous Software LLC ("**Company**," "**we**," "**us**," "**our**"), a company registered in California, United States at 2108 N ST, STE N, SACRAMENTO, CA 95816.
+We are Confabulous Software LLC ("**Company**," "**we**," "**us**," "**our**"), a company registered in California, United States at 2108 N St, Ste N, Sacramento, CA 95816.
 
-We operate the website [https://confabulous.dev](https://confabulous.dev) (the "**Site**"), as well as any other related products and services that refer or link to these legal terms (the "**Legal Terms**") (collectively, the "**Services**").
+We operate the website [https://code.confabulous.dev](https://code.confabulous.dev) (the "**Site**"), as well as any other related products and services that refer or link to these legal terms (the "**Legal Terms**") (collectively, the "**Services**").
 
-You can contact us by phone at ()9179400779, email at [contact@confabulous.dev](mailto:contact@confabulous.dev), or by mail to 1315 Piedmont Rd, #32281, #32281, San Jose, CA 95152, United States.
+You can contact us by phone at (917) 940-0779, email at [contact@confabulous.dev](mailto:contact@confabulous.dev), or by mail to 2108 N St, Ste N, Sacramento, CA 95816, United States.
 
 These Legal Terms constitute a legally binding agreement made between you, whether personally or on behalf of an entity ("**you**"), and Confabulous Software LLC, concerning your access to and use of the Services. You agree that by accessing the Services, you have read, understood, and agreed to be bound by all of these Legal Terms. IF YOU DO NOT AGREE WITH ALL OF THESE LEGAL TERMS, THEN YOU ARE EXPRESSLY PROHIBITED FROM USING THE SERVICES AND YOU MUST DISCONTINUE USE IMMEDIATELY.
 
@@ -241,7 +241,7 @@ We reserve the right, but not the obligation, to: (1) monitor the Services for v
 
 ## 14. PRIVACY POLICY
 
-We care about data privacy and security. Please review our Privacy Policy: **[confabulous.dev/privacy](/privacy)**. By using the Services, you agree to be bound by our Privacy Policy, which is incorporated into these Legal Terms. Please be advised the Services are hosted in the United States. If you access the Services from any other region of the world with laws or other requirements governing personal data collection, use, or disclosure that differ from applicable laws in the United States, then through your continued use of the Services, you are transferring your data to the United States, and you expressly consent to have your data transferred to and processed in the United States.
+We care about data privacy and security. Please review our Privacy Policy: **[code.confabulous.dev/privacy](/privacy)**. By using the Services, you agree to be bound by our Privacy Policy, which is incorporated into these Legal Terms. Please be advised the Services are hosted in the United States. If you access the Services from any other region of the world with laws or other requirements governing personal data collection, use, or disclosure that differ from applicable laws in the United States, then through your continued use of the Services, you are transferring your data to the United States, and you expressly consent to have your data transferred to and processed in the United States.
 
 ## 15. DIGITAL MILLENNIUM COPYRIGHT ACT (DMCA) NOTICE AND POLICY
 
@@ -263,11 +263,9 @@ Copyright Agent Officer
 
 Attn: Copyright Agent
 
-1315 Piedmont Road
+2108 N St, Ste N
 
-#32281
-
-San Jose, CA 95152
+Sacramento, CA 95816
 
 United States
 
@@ -349,14 +347,12 @@ In order to resolve a complaint regarding the Services or to receive further inf
 
 **Confabulous Software LLC**
 
-**1315 Piedmont Rd, #32281**
+**2108 N St, Ste N**
 
-**#32281**
-
-**San Jose, CA 95152**
+**Sacramento, CA 95816**
 
 **United States**
 
-**Phone: ()9179400779**
+**Phone: (917) 940-0779**
 
 **[contact@confabulous.dev](mailto:contact@confabulous.dev)**

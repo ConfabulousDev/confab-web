@@ -8,7 +8,7 @@ Docs-site conventions Claude would get wrong by default. Add a rule here only wh
 
 ## Sentence case for titles and headings
 
-All page titles, sidebar labels, and `##` / `###` headings use **sentence case**: capitalize only the first word. Proper nouns (Confabulous, Claude Code, Codex, Docker, GitHub, Fly.io, Linode, Caddy, MinIO, PostgreSQL, Neon, Resend, Honeycomb, Anthropic, OpenAI) and acronyms (CLI, API, HTTP, HTTPS, OAuth, OIDC, SSO, TLS, DNS, S3, AWS) keep their canonical capitalization.
+All page titles, sidebar labels, and `##` / `###` headings use **sentence case**: capitalize only the first word. Proper nouns (Confabulous Code, Claude Code, Codex, Docker, GitHub, Fly.io, Linode, Caddy, MinIO, PostgreSQL, Neon, Resend, Honeycomb, Anthropic, OpenAI) and acronyms (CLI, API, HTTP, HTTPS, OAuth, OIDC, SSO, TLS, DNS, S3, AWS) keep their canonical capitalization.
 
 Examples:
 - ✅ `title: Quickstart for end users` (not `Quickstart for End Users`)
@@ -77,7 +77,7 @@ Config changes (`astro.config.mjs`, `src/content.config.ts`, `src/styles/custom.
   - Mirror Starlight's own structure: dark values under `:root`, light under `:root[data-theme='light']`.
   - `custom.css` also makes a few chrome elements app-consistent: the wordmark and header social icon use neutral text colors (not Starlight's accent default), and the splash hero CTA is overridden from Starlight's full pill to the app's compact filled-accent button (radius + padding + a shrunk arrow icon). `custom.css` is a plain global stylesheet — do **not** use `:global()` there (it's a CSS-modules/scoped-style construct and is silently dropped as an invalid selector); use plain descendant selectors.
 - **Provider logo strip:** `src/components/ProviderLogos.astro` renders the "Works with" row on the splash page (`index.mdx`). It inlines the same official marks the main app uses (`frontend/src/components/icons.tsx` — Claude clay `#d97757`, Codex teal `#10a37f`, Cursor monochrome via `currentColor`, OpenCode monochrome via `currentColor`); keep them in sync. SVGs are inlined (not `<img>`) so the `currentColor` marks adapt per theme.
-- **Footer override:** `src/components/Footer.astro` (wired via Starlight's `components.Footer` in `astro.config.mjs`) renders Starlight's default footer, then a Privacy / Terms / Cookies row linking to `https://confabulous.dev/{privacy,terms,cookies}`. Keep the Cookies link: the main site's Cookie Policy is where this site's Cloudflare Web Analytics beacon and browser storage are disclosed.
+- **Footer override:** `src/components/Footer.astro` (wired via Starlight's `components.Footer` in `astro.config.mjs`) renders Starlight's default footer, then a Privacy / Terms / Cookies row linking to `https://code.confabulous.dev/{privacy,terms,cookies}`. Keep the Cookies link: the main site's Cookie Policy is where this site's Cloudflare Web Analytics beacon and browser storage are disclosed.
 - First-visit theme defaults to **dark** to match the main app, via a pre-paint script at the top of the `head` array in `astro.config.mjs` that seeds `localStorage['starlight-theme']` with `'dark'` when unset. Explicit choices from Starlight's theme switcher are preserved.
 
 ## Deployment

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"os"
@@ -126,7 +127,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60, 20_000),
 		updateChecker:       updatecheck.NewChecker(build.Version, updateCheckDisabled),
 		// SaaS blanks the URL so the canonical instance serves its embedded
-		// table without fetching from itself; self-host pulls from confabulous.dev.
+		// table without fetching from itself; self-host pulls from code.confabulous.dev.
 		pricingSource: pricingsource.NewFromEnv(saasFooterEnabled),
 		buildInfo:     build,
 	}
@@ -332,7 +333,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Get("/version", withMaxBody(MaxBodyXS, s.handleVersion))
 
 		// Public model price table (no auth): the frontend reads it at bootstrap
-		// and downstream self-hosted backends pull it from confabulous.dev.
+		// and downstream self-hosted backends pull it from code.confabulous.dev.
 		r.Get("/pricing", withMaxBody(MaxBodyXS, s.handlePricing))
 
 		// Public capability probe (no auth, no external deps): advertises optional
@@ -543,7 +544,7 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Delete Your Account - Confab</title>
+    <title>Delete Your Account - Confabulous Code</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -633,12 +634,12 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
 <body>
     <div class="container">
         <h1>Delete Your Account</h1>
-        <p class="subtitle">Request permanent deletion of your Confab account</p>
+        <p class="subtitle">Request permanent deletion of your Confabulous Code account</p>
 
         <h2>How to Request Account Deletion</h2>
         <p>To delete your account and all associated data, please send an email to:</p>
         <p><a href="mailto:%s?subject=Account%%20Deletion%%20Request" class="email-link">%s</a></p>
-        <p>Include the email address associated with your Confab account in your request.</p>
+        <p>Include the email address associated with your Confabulous Code account in your request.</p>
 
         <h2>What Will Be Deleted</h2>
         <p>When your account is deleted, the following data will be permanently removed:</p>
@@ -657,7 +658,7 @@ func (s *Server) handleDeleteAccountHelp(w http.ResponseWriter, r *http.Request)
         <h2>Processing Time</h2>
         <p>We typically process account deletion requests within 7 business days. You'll receive a confirmation email once your account has been deleted.</p>
 
-        <a href="/" class="back-link">&larr; Back to Confab</a>
+        <a href="/" class="back-link">&larr; Back to Confabulous Code</a>
     </div>
 </body>
 </html>`, s.supportEmail, s.supportEmail)
@@ -707,13 +708,18 @@ func (s *Server) serveSPA(staticDir string) http.HandlerFunc {
 	// Clean staticDir once during initialization for security check
 	cleanStaticDir := filepath.Clean(staticDir)
 
-	// Pre-process index.html at startup: inject the demo banner state hook
-	// before </head> if enabled. Done once at boot so per-request serving is
-	// just a Write.
+	// Pre-process index.html at startup: make the link-preview image URL
+	// absolute and inject the demo banner state hook before </head> if
+	// enabled. Done once at boot so per-request serving is just a Write.
 	indexPath := filepath.Join(cleanStaticDir, "index.html")
 	var processedIndex []byte
 	if raw, err := os.ReadFile(indexPath); err == nil {
 		processed := string(raw)
+		// og:image / twitter:image must be absolute for link-preview crawlers;
+		// index.html ships the relative path, so prefix it with FRONTEND_URL.
+		if base := strings.TrimRight(s.frontendURL, "/"); base != "" {
+			processed = strings.ReplaceAll(processed, `content="/og-image.png"`, `content="`+html.EscapeString(base)+`/og-image.png"`)
+		}
 		// CF-483: RenderDemoBannerScriptTag returns "" when DemoIdentityEmail
 		// is unset, so this is a no-op in non-demo deployments.
 		if demoScript := auth.RenderDemoBannerScriptTag(s.oauthConfig.DemoIdentityEmail); demoScript != "" {

@@ -349,7 +349,7 @@ func loadConfig() Config {
 	emailFromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
 	emailFromName := os.Getenv("EMAIL_FROM_NAME")
 	if emailFromName == "" {
-		emailFromName = "Confab"
+		emailFromName = "Confabulous Code"
 	}
 
 	emailRateLimitPerHour := 100 // Default: 100 emails per hour per user

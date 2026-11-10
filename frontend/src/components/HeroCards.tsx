@@ -92,7 +92,7 @@ const cards: HeroCard[] = [
     icon: '⚙️',
     title: 'How it works',
     description:
-      'Learn how Confab syncs and organizes your Claude Code, Codex, OpenCode, and Cursor sessions on your own server.',
+      'Learn how Confabulous Code syncs and organizes your Claude Code, Codex, OpenCode, and Cursor sessions on your own server.',
     docsLinks: [{ label: 'Docs', href: `${DOCS}/architecture/overview/` }],
   },
 ];

@@ -1,9 +1,9 @@
 ---
 title: Demo mode
-description: Configure a read-only demo identity for showcasing your Confabulous instance.
+description: Configure a read-only demo identity for showcasing your Confabulous Code instance.
 ---
 
-Confabulous supports a **demo identity** — a read-only, shared-cookie user account that anyone can log in as without credentials. Useful for showcasing the product (this is what powers [demo.confabulous.dev](https://demo.confabulous.dev)).
+Confabulous Code supports a **demo identity** — a read-only, shared-cookie user account that anyone can log in as without credentials. Useful for showcasing the product (this is what powers [demo.confabulous.dev](https://demo.confabulous.dev)).
 
 ## Enabling
 

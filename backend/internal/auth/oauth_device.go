@@ -416,7 +416,7 @@ func generateDevicePageHTML(prefilledCode string) string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authorize Device - Confab</title>
+    <title>Authorize Device - Confabulous Code</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -516,7 +516,7 @@ func generateDeviceResultHTML(success bool, message string) string {
 		iconColor = "#16a34a"
 		title = "Success!"
 		if frontendURL := os.Getenv("FRONTEND_URL"); frontendURL != "" {
-			homeLink = fmt.Sprintf(`<a href="%s" class="home-link">Go to Confab</a>`, frontendURL)
+			homeLink = fmt.Sprintf(`<a href="%s" class="home-link">Go to Confabulous Code</a>`, frontendURL)
 		}
 	} else {
 		icon = "✗"
@@ -529,7 +529,7 @@ func generateDeviceResultHTML(success bool, message string) string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Device Authorization - Confab</title>
+    <title>Device Authorization - Confabulous Code</title>
     <style>
         * { box-sizing: border-box; }
         body {

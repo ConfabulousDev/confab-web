@@ -23,8 +23,8 @@ Hooks are the bridge between your provider CLI (Claude Code, Codex) and the sync
 
 | Command | What it does |
 |---------|--------------|
-| `confab hooks add --provider <name>` | Install Confabulous hooks into the provider CLI's config. |
-| `confab hooks remove --provider <name>` | Remove Confabulous hooks from the provider CLI's config. |
+| `confab hooks add --provider <name>` | Install Confabulous Code hooks into the provider CLI's config. |
+| `confab hooks remove --provider <name>` | Remove Confabulous Code hooks from the provider CLI's config. |
 
 The individual `confab hook session-start` / `session-end` / `pre-tool-use` / `post-tool-use` / `user-prompt-submit` subcommands are invoked **by the provider CLI**, not by you directly. They read JSON from stdin and write JSON to stdout — running them by hand isn't useful.
 

@@ -1,6 +1,6 @@
-# Contributing to Confabulous
+# Contributing to Confabulous Code
 
-Thanks for your interest in contributing! Confabulous is MIT-licensed open source, and contributions — bug reports, feature ideas, docs fixes, and code — are welcome.
+Thanks for your interest in contributing! Confabulous Code is MIT-licensed open source, and contributions — bug reports, feature ideas, docs fixes, and code — are welcome.
 
 ## Reporting bugs and requesting features
 

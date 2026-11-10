@@ -163,12 +163,12 @@ function LoginPage() {
   function getErrorContent(error: { type: string; message: string }) {
     switch (error.type) {
       case 'access_denied':
-        return <>Please request access <a href={`mailto:${supportEmail}?subject=${encodeURIComponent('Requesting access to Confabulous')}`}>here</a>.</>;
+        return <>Please request access <a href={`mailto:${supportEmail}?subject=${encodeURIComponent('Requesting access to Confabulous Code')}`}>here</a>.</>;
       case 'account_inactive':
         // w8tz: deactivated users get a fixed, generic message. We ignore the
         // server-supplied description so the copy can't be tampered with via the
         // URL and we don't confirm the account is deactivated.
-        return <>Your account is not active. Please contact <a href={`mailto:${supportEmail}?subject=${encodeURIComponent('Confabulous account access')}`}>support</a>.</>;
+        return <>Your account is not active. Please contact <a href={`mailto:${supportEmail}?subject=${encodeURIComponent('Confabulous Code account access')}`}>support</a>.</>;
       default:
         return error.message;
     }

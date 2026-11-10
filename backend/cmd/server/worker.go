@@ -104,7 +104,7 @@ func runWorker() {
 	precomputer := analytics.NewPrecomputer(database.Conn(), store, analyticsStore, precomputeConfig, database)
 
 	// Create and run worker. The pricing source pulls the freshest price table
-	// from confabulous.dev (disabled on the SaaS instance, which is the source).
+	// from code.confabulous.dev (disabled on the SaaS instance, which is the source).
 	worker := &Worker{
 		db:            database,
 		store:         store,

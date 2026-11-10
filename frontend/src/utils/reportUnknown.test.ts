@@ -61,13 +61,15 @@ describe('buildUnknownReportIssue', () => {
     expect(body).toContain('payload.type');
   });
 
-  it('includes the Confab version only when a non-empty version is supplied', () => {
-    expect(buildUnknownReportIssue(baseDescriptor, '1.2.3').body).toContain('1.2.3');
+  it('includes the Confabulous Code version only when a non-empty version is supplied', () => {
+    expect(buildUnknownReportIssue(baseDescriptor, '1.2.3').body).toContain(
+      '- **Confabulous Code version:** 1.2.3',
+    );
     expect(buildUnknownReportIssue(baseDescriptor, '').body.toLowerCase()).not.toContain(
-      'confab version',
+      'confabulous code version',
     );
     expect(buildUnknownReportIssue(baseDescriptor).body.toLowerCase()).not.toContain(
-      'confab version',
+      'confabulous code version',
     );
   });
 

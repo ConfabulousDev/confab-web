@@ -264,7 +264,7 @@ function SessionSummaryPanel({ sessionId, isOwner, provider, initialAnalytics, i
             <div className={styles.spanFull}>
               <p className={styles.unmeasuredTokensNote}>
                 Token and cost data are not recorded in Cursor&apos;s local agent transcript, so
-                Confab cannot compute per-session usage from synced files. Turn timing and token
+                Confabulous Code cannot compute per-session usage from synced files. Turn timing and token
                 speed are unavailable for the same reason.{' '}
                 <a href={`${DOCS_URL}/providers/cursor/#tokens-and-cost`} target="_blank" rel="noopener noreferrer">
                   Learn more

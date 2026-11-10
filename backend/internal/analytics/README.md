@@ -161,7 +161,7 @@ Increment a card's version constant whenever compute logic changes. This trigger
 
 ### Pricing source
 
-Prices are no longer hardcoded here. The single source is `internal/pricingsource/pricing.json` (embedded there). `LookupPricing` reads an active table that `init` seeds from `pricingsource.Embedded()` and the precompute worker refreshes each cycle via `SetActivePricing(pricingsource.Effective(ctx))` — so a self-hosted backend picks up new prices pulled from confabulous.dev without a redeploy. To change a price, edit `pricing.json` and bump `updated_at`.
+Prices are no longer hardcoded here. The single source is `internal/pricingsource/pricing.json` (embedded there). `LookupPricing` reads an active table that `init` seeds from `pricingsource.Embedded()` and the precompute worker refreshes each cycle via `SetActivePricing(pricingsource.Effective(ctx))` — so a self-hosted backend picks up new prices pulled from code.confabulous.dev without a redeploy. To change a price, edit `pricing.json` and bump `updated_at`.
 
 **Unknown / empty models.** Token sources that carry no model name (notably file-less Claude sub-agents, whose `toolUseResult.usage` lacks a model) are priced at the **main session model** resolved by `TokensAnalyzer` — see the `Finalize` fallback in `analyzer_tokens_claude.go`. An empty model that still reaches `pricingForModel` is an expected sentinel: it resolves to $0 and logs only at DEBUG, never WARN. A WARN is reserved for a genuinely-unknown **non-empty** model (a real gap in `pricing.json`) and carries `session_id` + `provider` via the threaded logger.
 

@@ -3,7 +3,7 @@ title: Sharing
 description: Share individual sessions with teammates, or open the floodgates for high-trust deployments.
 ---
 
-Confabulous supports two sharing modes:
+Confabulous Code supports two sharing modes:
 
 ## Per-session sharing (default)
 
