@@ -410,13 +410,14 @@ describe('calculateCost — Sonnet 5 standard pricing', () => {
 });
 
 // ---------------------------------------------------------------------------
-// calculateCost — Fable 5.1 / Mythos 5.1 non-standard cache-read rate.
-// Both bill cache hits at 0.025x base input ($0.25/MTok), not the usual 0.1x
-// ($1.00/MTok) the 5.0 generation uses. Cache reads dominate token volume in
-// agentic sessions, so treating these as 0.1x is a silent 4x overcharge.
+// calculateCost — Fable / Mythos 5.1 and 5.2 non-standard cache-read rate.
+// All bill cache hits at 0.025x base input ($0.25/MTok on 5.1, $0.20/MTok on
+// 5.2), not the usual 0.1x ($1.00/MTok) the 5.0 generation uses. Cache reads
+// dominate token volume in agentic sessions, so treating these as 0.1x is a
+// silent 4x overcharge.
 // ---------------------------------------------------------------------------
 
-describe('calculateCost — Fable/Mythos 5.1 cache reads', () => {
+describe('calculateCost — Fable/Mythos 5.1 and 5.2 cache reads', () => {
   const cacheOnly = usage({ cacheRead: 1_000_000 });
 
   it('prices Fable 5.1 cache reads at $0.25/M', () => {
@@ -425,6 +426,11 @@ describe('calculateCost — Fable/Mythos 5.1 cache reads', () => {
 
   it('prices Mythos 5.1 cache reads at $0.25/M', () => {
     expect(calculateCost('claude-code', 'claude-mythos-5-1', cacheOnly)).toBeCloseTo(0.25, 4);
+  });
+
+  it('prices Fable and Mythos 5.2 cache reads at $0.20/M (also 0.025x)', () => {
+    expect(calculateCost('claude-code', 'claude-fable-5-2', cacheOnly)).toBeCloseTo(0.2, 4);
+    expect(calculateCost('claude-code', 'claude-mythos-5-2', cacheOnly)).toBeCloseTo(0.2, 4);
   });
 
   it('leaves the 5.0 generation on the $1.00/M cache-read rate', () => {

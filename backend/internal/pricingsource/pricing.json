@@ -1,8 +1,10 @@
 {
   "schema_version": 0,
-  "updated_at": "2026-10-28T00:00:00Z",
+  "updated_at": "2026-11-09T00:00:00Z",
   "pricing": {
     "claude-code": {
+      "mythos-5-2": { "input": 8, "output": 40, "cacheWrite": 10, "cacheWrite1h": 16, "cacheRead": 0.20 },
+      "fable-5-2": { "input": 8, "output": 40, "cacheWrite": 10, "cacheWrite1h": 16, "cacheRead": 0.20 },
       "mythos-5-1": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheWrite1h": 20, "cacheRead": 0.25 },
       "fable-5-1": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheWrite1h": 20, "cacheRead": 0.25 },
       "mythos-5": { "input": 10, "output": 50, "cacheWrite": 12.5, "cacheWrite1h": 20, "cacheRead": 1.0 },

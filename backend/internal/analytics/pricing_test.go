@@ -115,6 +115,8 @@ func TestLookupPricing(t *testing.T) {
 		{"claude-mythos-5", true, 10},
 		{"claude-mythos-5-1", true, 10},
 		{"claude-fable-5-1", true, 10},
+		{"claude-mythos-5-2", true, 8},
+		{"claude-fable-5-2", true, 8},
 		{"claude-sonnet-5", true, 2},
 		{"claude-sonnet-5-5", true, 2},
 		{"claude-haiku-5-5", true, 0.10},
@@ -573,9 +575,9 @@ func TestEmbeddedRates(t *testing.T) {
 	tests := []rateSpec{
 		// claude-code — corrections and additions. Cache reads are normally 0.1x
 		// base input; two deliberate exceptions are pinned here alongside the rows
-		// that keep the norm. The 5.1 generation bills cache hits at 0.025x
-		// ($0.25/MTok against $10 input, against the $1.00 the 5.0 rows below
-		// keep), and Opus 5.5 and Sonnet 5.5 at 0.05x ($0.20 against $4, $0.10
+		// that keep the norm. The 5.1 and 5.2 generations bill cache hits at 0.025x
+		// ($0.25/MTok against $10 input and $0.20 against $8, against the $1.00 the
+		// 5.0 rows below keep), and Opus 5.5 and Sonnet 5.5 at 0.05x ($0.20 against $4, $0.10
 		// against $2 — Sonnet 5.5 since 2026-10-07, while Sonnet 5 keeps 0.1x).
 		// "Normalizing" either would be a silent overcharge — 4x and 2x
 		// respectively — on the dominant token category in agentic sessions.
@@ -585,6 +587,8 @@ func TestEmbeddedRates(t *testing.T) {
 		// Haiku 5.5 bills prompts over 100k tokens at 5x; the <=100k tier is stored
 		// (see the context-tier convention in pricingsource/README.md).
 		{"haiku-5-5", 0.10, 0.50, 0.125, 0.20, 0.01},
+		{"fable-5-2", 8, 40, 10, 16, 0.20},
+		{"mythos-5-2", 8, 40, 10, 16, 0.20},
 		{"fable-5-1", 10, 50, 12.5, 20, 0.25},
 		{"mythos-5-1", 10, 50, 12.5, 20, 0.25},
 		{"fable-5", 10, 50, 12.5, 20, 1.0},
