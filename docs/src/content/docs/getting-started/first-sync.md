@@ -19,4 +19,4 @@ After running `confab setup`, the CLI watches your local Claude Code, Codex, and
 
 ## Verifying
 
-Open your Confabulous dashboard — your active session should appear within a few seconds of starting, and continue to update as new turns happen. The dashboard URL depends on how Confabulous was deployed for you: the managed instance at [confabulous.dev](https://confabulous.dev), your team's self-hosted URL, or — when you're prototyping the stack on your own laptop — [http://localhost:8080](http://localhost:8080).
+Open your Confabulous dashboard — your active session should appear within a few seconds of starting, and continue to update as new turns happen. The dashboard URL depends on how Confabulous was deployed for you: the managed instance at [code.confabulous.dev](https://code.confabulous.dev), your team's self-hosted URL, or — when you're prototyping the stack on your own laptop — [http://localhost:8080](http://localhost:8080).

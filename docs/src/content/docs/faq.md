@@ -13,9 +13,9 @@ Yes — OpenCode sessions sync and analyze like any other provider. See [OpenCod
 
 Yes — contributions are welcome. See the [contributing guide](https://github.com/ConfabulousDev/confab-web/blob/main/CONTRIBUTING.md) to get started. Bug reports and feature requests are welcome too — [open an issue](https://github.com/ConfabulousDev/confab-web/issues/new).
 
-## confabulous.dev (managed instance)
+## code.confabulous.dev (managed instance)
 
-### Is confabulous.dev free to use?
+### Is code.confabulous.dev free to use?
 
 Yes.
 

@@ -161,18 +161,18 @@ Sharing behavior and UI customization.
 | `ENABLE_SHARE_CREATION` | `false` | No | Enable share link creation |
 | `SHARE_DAILY_QUOTA` | `100` | No | Per-user cap on shares created in a rolling 24h window; the creation endpoint returns 429 once a user exceeds it. Set to `0` to disable the cap. |
 | `ENABLE_ORG_ANALYTICS` | `false` | No | Expose org-wide per-user analytics (`/admin/...`) to every authenticated user — same visibility model as `SHARE_ALL_SESSIONS_TO_AUTHENTICATED`. See [Organization Analytics in backend/API.md](backend/API.md#organization-analytics) for the privacy implications. |
-| `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright) and serve the confabulous.dev legal pages (`/policies`, `/terms`, `/privacy`, `/cookies`, `/disclaimer`, `/acceptable-use`; they 404 when off); off by default for self-hosted |
+| `ENABLE_SAAS_FOOTER` | `false` | No | Show the SaaS footer (GitHub, Discord, Help links, copyright) and serve the code.confabulous.dev legal pages (`/policies`, `/terms`, `/privacy`, `/cookies`, `/disclaimer`, `/acceptable-use`; they 404 when off); off by default for self-hosted |
 | `DISABLE_UPDATE_CHECK` | `false` | No | Suppress the in-product "Update available" badge (skips the periodic GitHub release check). Useful for air-gapped deployments. Implicitly `true` when `ENABLE_SAAS_FOOTER=true`, since SaaS users can't self-upgrade. |
 
 ## Model Pricing
 
 *Applies to: web server, worker*
 
-Model token prices are no longer baked into the build — the backend pulls the latest price table from confabulous.dev so a self-hosted instance picks up new prices (and new models within an existing provider) without a redeploy. The fetch is best-effort: if the source is unreachable, invalid, or older than the build's embedded table, the embedded table is used. The canonical SaaS instance auto-disables this (it is the source).
+Model token prices are no longer baked into the build — the backend pulls the latest price table from code.confabulous.dev so a self-hosted instance picks up new prices (and new models within an existing provider) without a redeploy. The fetch is best-effort: if the source is unreachable, invalid, or older than the build's embedded table, the embedded table is used. The canonical SaaS instance auto-disables this (it is the source).
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `PRICING_SOURCE_URL` | `https://confabulous.dev/api/v1/pricing` | No | Where to pull the latest model price table from. Set to empty (`PRICING_SOURCE_URL=`) to disable fetching and use the embedded table only (air-gapped deployments). |
+| `PRICING_SOURCE_URL` | `https://code.confabulous.dev/api/v1/pricing` | No | Where to pull the latest model price table from. Set to empty (`PRICING_SOURCE_URL=`) to disable fetching and use the embedded table only (air-gapped deployments). |
 | `PRICING_REFRESH_INTERVAL` | `2h` | No | How often to refresh the price table (Go duration, e.g. `2h`, `90m`). Failures are retried after 15 minutes. |
 
 ## Worker

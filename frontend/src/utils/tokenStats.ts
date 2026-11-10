@@ -54,7 +54,7 @@ export type PricingTable = Record<ProviderId, Record<string, ModelPricing>>;
 // The frontend bundles NO price data. The active table is fetched from this
 // app's own backend (GET /api/v1/pricing) once at bootstrap via
 // `setPricingTable`. The single source of truth is the backend's embedded
-// pricing.json (refreshable from confabulous.dev). Until the fetch lands the
+// pricing.json (refreshable from code.confabulous.dev). Until the fetch lands the
 // table is empty — getPricing then warns and bills $0, but cost UI renders
 // only after auth + session-data load, by which point the table is populated.
 // `cursor` is keyed but always empty: Cursor transcripts carry no token/cost

@@ -126,7 +126,7 @@ func NewServer(database *db.DB, store *storage.S3Storage, oauthConfig *auth.OAut
 		externalReadLimiter: ratelimit.NewInMemoryRateLimiter(30, 60, 20_000),
 		updateChecker:       updatecheck.NewChecker(build.Version, updateCheckDisabled),
 		// SaaS blanks the URL so the canonical instance serves its embedded
-		// table without fetching from itself; self-host pulls from confabulous.dev.
+		// table without fetching from itself; self-host pulls from code.confabulous.dev.
 		pricingSource: pricingsource.NewFromEnv(saasFooterEnabled),
 		buildInfo:     build,
 	}
@@ -332,7 +332,7 @@ func (s *Server) SetupRoutes() http.Handler {
 		r.Get("/version", withMaxBody(MaxBodyXS, s.handleVersion))
 
 		// Public model price table (no auth): the frontend reads it at bootstrap
-		// and downstream self-hosted backends pull it from confabulous.dev.
+		// and downstream self-hosted backends pull it from code.confabulous.dev.
 		r.Get("/pricing", withMaxBody(MaxBodyXS, s.handlePricing))
 
 		// Public capability probe (no auth, no external deps): advertises optional

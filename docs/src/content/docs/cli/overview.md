@@ -21,7 +21,7 @@ confab setup --backend-url https://your-confab-instance.example.com
 
 `--backend-url` is required — the CLI doesn't have a default backend. Pass the URL of the Confabulous instance you sign in to in the browser:
 
-- **Managed:** `--backend-url https://confabulous.dev`
+- **Managed:** `--backend-url https://code.confabulous.dev`
 - **Self-hosted:** `--backend-url https://confab.your-company.com`
 - **Local prototype:** `--backend-url http://localhost:8080`
 

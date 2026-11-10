@@ -5,9 +5,9 @@ description: Annotated, real-world deployments of Confabulous you can copy from.
 
 The Confabulous-maintained instances run on two different stacks. Both configurations are public and you can copy from them.
 
-## Fly.io — `confabulous.dev` (managed)
+## Fly.io — `code.confabulous.dev` (managed)
 
-The free managed instance at [confabulous.dev](https://confabulous.dev) runs on [Fly.io](https://fly.io/), using:
+The free managed instance at [code.confabulous.dev](https://code.confabulous.dev) runs on [Fly.io](https://fly.io/), using:
 
 - **App + worker** as separate Fly processes from a single image.
 - **Tigris** ([Fly Object Storage](https://fly.io/docs/reference/tigris/)) for S3-compatible session-blob storage.

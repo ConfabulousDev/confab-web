@@ -1793,7 +1793,7 @@ as `false`.
 GET /api/v1/pricing
 ```
 
-Returns the effective per-million-token model price table. No authentication required. The frontend reads it at bootstrap to cost out token usage client-side; downstream self-hosted backends pull it from confabulous.dev to refresh their own table without a redeploy.
+Returns the effective per-million-token model price table. No authentication required. The frontend reads it at bootstrap to cost out token usage client-side; downstream self-hosted backends pull it from code.confabulous.dev to refresh their own table without a redeploy.
 
 **Response:**
 ```json

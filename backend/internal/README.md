@@ -30,7 +30,7 @@ Internal packages for the Confab backend server. All packages live under
 | `logger` | Structured JSON logging (slog), request-scoped context logger | Changing log format, adding log fields |
 | `models` | Domain types shared across packages (`User`, `OAuthProvider`) and provider identity (`ProviderClaudeCode`, `ProviderCodex`, `LegacyAliases`, `AllowedProviders`, `NormalizeProvider`, `ExpandWithAliases` in `provider.go`) | Adding domain-wide types, adding/renaming a provider, or registering a permanent legacy alias |
 | `openai` | HTTP client for the OpenAI Responses API (smart recap vendor) | Changing OpenAI model calls, request parameters, or structured-output handling |
-| `pricingsource` | Owns the model price table: the embedded `pricing.json` (single source of truth) + a lazy, best-effort refresh from confabulous.dev with freshest-wins fallback. Serves `/api/v1/pricing`; feeds analytics cost compute | Changing the price data, the document schema, TTLs, the source URL, or the fallback semantics |
+| `pricingsource` | Owns the model price table: the embedded `pricing.json` (single source of truth) + a lazy, best-effort refresh from code.confabulous.dev with freshest-wins fallback. Serves `/api/v1/pricing`; feeds analytics cost compute | Changing the price data, the document schema, TTLs, the source URL, or the fallback semantics |
 | `ratelimit` | Rate limiter interface + in-memory token bucket implementation | Changing rate limit strategies, adding distributed limiter |
 | `recapquota` | Per-user monthly smart recap quota tracking | Changing quota rules, billing logic |
 | `storage` | MinIO/S3 client, chunk operations (download, merge, parse keys) | Changing object storage, chunk format |

@@ -3,7 +3,7 @@ title: Quickstart for end users
 description: Sign in to your Confabulous instance and connect the CLI to start syncing sessions.
 ---
 
-If your team or organization already runs a Confabulous instance — or you're using the managed instance at [confabulous.dev](https://confabulous.dev) — this is the only page you need.
+If your team or organization already runs a Confabulous instance — or you're using the managed instance at [code.confabulous.dev](https://code.confabulous.dev) — this is the only page you need.
 
 Setting up the instance itself is a separate job; see the [Quickstart for admins](/getting-started/admin-quickstart/) if you're the one running it.
 
@@ -11,7 +11,7 @@ Setting up the instance itself is a separate job; see the [Quickstart for admins
 
 Open your team's Confabulous URL in a browser and sign in. The URL depends on how your team has Confabulous set up:
 
-- **Managed instance:** [confabulous.dev](https://confabulous.dev)
+- **Managed instance:** [code.confabulous.dev](https://code.confabulous.dev)
 - **Self-hosted instance:** ask your admin — typically something like `https://confab.your-company.com`
 
 ## 2. Install the CLI
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/ConfabulousDev/confab/main/install.
 Run `confab setup` and pass the same backend URL you used to sign in:
 
 ```bash
-confab setup --backend-url https://confabulous.dev
+confab setup --backend-url https://code.confabulous.dev
 ```
 
 Or for a self-hosted instance:

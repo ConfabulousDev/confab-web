@@ -11,7 +11,7 @@ import (
 // handlePricing serves the effective model price table (embedded floor, or a
 // freshest valid remote pull). Public and unauthenticated: the frontend reads
 // it at bootstrap, and downstream self-hosted backends pull it from
-// confabulous.dev. Unlike most responses (respondJSON marks no-store), this is
+// code.confabulous.dev. Unlike most responses (respondJSON marks no-store), this is
 // cacheable for the refresh interval so an edge/CDN can absorb fan-out.
 func (s *Server) handlePricing(w http.ResponseWriter, r *http.Request) {
 	doc := s.pricingSource.Effective(r.Context())
