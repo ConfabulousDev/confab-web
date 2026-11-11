@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  Source for frontend/public/email-wordmark.png: the "Confabulous Code"
+  wordmark in the share-invitation email header (backend/internal/email,
+  <img src="{FRONTEND_URL}/email-wordmark.png" width="182" height="28">).
+  Rendered at 2x (364x56) and tightly cropped. The background is opaque white
+  so dark-mode mail clients can't put the dark text on a dark background.
+  Not served or bundled.
+
+  Re-render after editing (from frontend/, after `npm install` so the
+  self-hosted Lobster font below resolves):
+
+    npx playwright screenshot --channel chrome --viewport-size "364, 56" \
+      --wait-for-timeout 500 "file://$PWD/scripts/email-wordmark.html" public/email-wordmark.png
+
+  If the size changes, update width/height on the <img> in email.go to half
+  the new viewport.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Confabulous Code email wordmark</title>
+    <style>
+      @font-face {
+        font-family: 'Lobster';
+        font-weight: 400;
+        src: url('../node_modules/@fontsource/lobster/files/lobster-latin-400-normal.woff2') format('woff2');
+      }
+      html,
+      body {
+        margin: 0;
+        width: 364px;
+        height: 56px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+      svg {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Lobster ink spans 0.75em above the baseline to 0.25em below, so a
+         52px font with its baseline at y=41 fills 2..54 of the 56px height. -->
+    <svg width="364" height="56" viewBox="0 0 364 56" xmlns="http://www.w3.org/2000/svg">
+      <text x="3" y="41" font-family="Lobster" font-size="52" fill="#1a1a1a">Confabulous Code</text>
+    </svg>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<!--
+  Source for docs/public/og-image.png (the 1200x630 Open Graph / Twitter
+  link-preview image set as og:image in astro.config.mjs). Not served or
+  bundled. No hostname is baked in, so moving the docs host needs no re-render.
+
+  Re-render after editing (from docs/, after `npm install` so the self-hosted
+  Lobster font below resolves):
+
+    npx playwright screenshot --channel chrome --viewport-size "1200, 630" \
+      --wait-for-timeout 500 "file://$PWD/scripts/og-image.html" public/og-image.png
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Confabulous Code docs OG image</title>
+    <style>
+      @font-face {
+        font-family: 'Lobster';
+        font-weight: 400;
+        src: url('../node_modules/@fontsource/lobster/files/lobster-latin-400-normal.woff2') format('woff2');
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #f8fafc;
+      }
+      body {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .dot {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        margin: -2px 0 0 -2px;
+        border-radius: 50%;
+        background: #334155;
+        opacity: 0.4;
+      }
+      .name {
+        font-family: 'Lobster', cursive;
+        font-size: 116px;
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .tagline {
+        margin-top: 48px;
+        font-size: 34px;
+        color: #cbd5e1;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Decorative dot grid (same positions as the old og-image.svg). -->
+    <span class="dot" style="left: 80px; top: 80px"></span>
+    <span class="dot" style="left: 160px; top: 80px"></span>
+    <span class="dot" style="left: 240px; top: 80px"></span>
+    <span class="dot" style="left: 1040px; top: 550px"></span>
+    <span class="dot" style="left: 1120px; top: 550px"></span>
+    <span class="dot" style="left: 1040px; top: 470px"></span>
+    <span class="dot" style="left: 1120px; top: 470px"></span>
+
+    <div class="name">Confabulous Code</div>
+    <div class="tagline">Open-source analytics for your Claude Code and Codex sessions</div>
+  </body>
+</html>

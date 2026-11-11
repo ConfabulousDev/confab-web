@@ -410,6 +410,51 @@ func TestRenderHTMLTemplate(t *testing.T) {
 	})
 }
 
+// egn7: the email header shows the Lobster wordmark as a hosted PNG (served
+// from frontend/public at the FRONTEND_URL root) with styled alt text, in
+// place of the old Georgia-italic text span.
+func TestRenderHTMLTemplate_WordmarkImage(t *testing.T) {
+	params := ShareInvitationParams{
+		ToEmail:     "test@example.com",
+		SharerName:  "Alice",
+		SharerEmail: "alice@example.com",
+		ShareURL:    "https://example.com/share/abc123",
+	}
+
+	cases := []struct {
+		name        string
+		frontendURL string
+		wantSrc     string
+	}{
+		{"plain base URL", "https://example.com", `src="https://example.com/email-wordmark.png"`},
+		{"trailing slash is trimmed", "https://example.com/", `src="https://example.com/email-wordmark.png"`},
+		{"multiple trailing slashes are trimmed", "https://example.com//", `src="https://example.com/email-wordmark.png"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := renderHTMLTemplate(params, tc.frontendURL)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(result, "<img") {
+				t.Error("must render the wordmark as an <img>")
+			}
+			if !strings.Contains(result, tc.wantSrc) {
+				t.Errorf("must point the wordmark at %s; got HTML without it", tc.wantSrc)
+			}
+			if !strings.Contains(result, `alt="Confabulous Code"`) {
+				t.Error(`must give the wordmark alt="Confabulous Code"`)
+			}
+			if strings.Contains(result, `font-size: 22px; color: #1a1a1a;">Confabulous Code</span>`) {
+				t.Error("must no longer render the Georgia-italic text span wordmark")
+			}
+			if !strings.Contains(result, `href="https://example.com/unsubscribe"`) {
+				t.Error("must build the unsubscribe URL from the same trimmed base")
+			}
+		})
+	}
+}
+
 // providerWordingCases is the locked test matrix for CF-353. Each row asserts
 // that the rendered email (subject, plaintext body, HTML body) contains the
 // brand phrase matching params.Provider and that no other brand phrase leaks

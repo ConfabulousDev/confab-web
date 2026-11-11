@@ -1,9 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Lobster&amp;display=swap');
-    </style>
-  </defs>
-  <rect width="32" height="32" rx="6" fill="#1a1a1a"/>
-  <text x="16" y="24" font-family="Lobster, cursive" font-size="22" fill="#ffffff" text-anchor="middle">C</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#1a1a1a"/><path fill="#ffffff" d="M15.14 24.43Q12.66 24.43 11.49 23.17Q10.32 21.92 10.32 19.01Q10.32 16.70 11.11 14.04Q11.89 11.38 13.61 9.48Q15.34 7.57 18 7.57Q19.65 7.57 20.66 8.30Q21.68 9.03 21.68 10.52Q21.68 11.47 21.30 12.01Q20.93 12.55 20.14 12.55Q19.34 12.55 18.88 11.97Q19.28 11.78 19.59 11.18Q19.89 10.59 19.89 9.95Q19.89 9.36 19.57 8.98Q19.26 8.61 18.55 8.61Q17.39 8.61 16.33 10.20Q15.27 11.80 14.63 14.22Q13.98 16.64 13.98 18.88Q13.98 20.55 14.55 21.43Q15.12 22.31 16.62 22.31Q17.91 22.31 19.01 21.74Q20.11 21.17 20.91 20.11L21.41 20.33Q20.86 21.72 19.78 22.64Q18.71 23.57 17.47 24Q16.24 24.43 15.14 24.43"/></svg>

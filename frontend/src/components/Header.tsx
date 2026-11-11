@@ -14,7 +14,7 @@ function Logo() {
   const demoEmail = getDemoIdentity();
   return (
     <Link to="/" className={styles.logo}>
-      Confabulous <span className={styles.logoSuffix}>Code</span>
+      Confabulous Code
       {demoEmail !== null && <span className={styles.badge}>demo</span>}
     </Link>
   );
