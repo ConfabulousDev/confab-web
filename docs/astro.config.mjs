@@ -3,9 +3,9 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 const SITE = 'https://code-docs.confabulous.dev';
-// SVG by default; rasterize to /og-image.png for maximum social-preview
-// compatibility (Facebook/LinkedIn are picky about SVG).
-const OG_IMAGE = `${SITE}/og-image.svg`;
+// PNG for social-preview compatibility (Facebook/LinkedIn reject SVG).
+// Rendered from scripts/og-image.html; see its header for the command.
+const OG_IMAGE = `${SITE}/og-image.png`;
 
 /** @type {import('@astrojs/starlight/types').StarlightUserConfig['head']} */
 const head = [
@@ -43,6 +43,8 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Confabulous Code',
+      // Shared with the app: frontend/scripts/make-favicon.mjs writes it.
+      favicon: '/favicon.svg',
       description: 'Open-source analytics for your Claude Code, Codex, and OpenCode sessions — managed or self-hosted.',
       // Self-hosted Lobster for the wordmark (no third-party font requests).
       customCss: ['@fontsource/lobster/400.css', './src/styles/custom.css'],

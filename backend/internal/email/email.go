@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -262,12 +263,14 @@ func renderHTMLTemplate(params ShareInvitationParams, frontendURL string) (strin
 // provider phrase so SendShareInvitation logs unknown-provider errors only
 // once per send.
 func renderHTMLTemplateWithPhrase(params ShareInvitationParams, phrase, frontendURL string) (string, error) {
+	base := strings.TrimRight(frontendURL, "/")
 	data := templateData{
 		SharerName:     params.SharerName,
 		SharerEmail:    params.SharerEmail,
 		SessionTitle:   params.SessionTitle,
 		ShareURL:       params.ShareURL,
-		UnsubscribeURL: frontendURL + "/unsubscribe",
+		UnsubscribeURL: base + "/unsubscribe",
+		WordmarkURL:    base + "/email-wordmark.png",
 		ProviderPhrase: phrase,
 	}
 
@@ -324,6 +327,9 @@ type templateData struct {
 	ShareURL       string
 	ExpiresAt      string
 	UnsubscribeURL string
+	// WordmarkURL is the hosted Lobster wordmark PNG
+	// (frontend/public/email-wordmark.png, served at the FRONTEND_URL root).
+	WordmarkURL string
 	// ProviderPhrase is the resolved per-provider noun phrase used in the
 	// body line "shared a {{.ProviderPhrase}} transcript with you:".
 	// Examples: "Claude Code session" / "Codex session" / "session".
@@ -362,7 +368,7 @@ const htmlTemplate = `<!DOCTYPE html>
                     <!-- Header -->
                     <tr>
                         <td style="padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
-                            <span style="font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 22px; color: #1a1a1a;">Confabulous Code</span>
+                            <img src="{{.WordmarkURL}}" width="182" height="28" alt="Confabulous Code" style="display: block; border: 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 22px; color: #1a1a1a;">
                         </td>
                     </tr>
                     <!-- Content -->

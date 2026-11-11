@@ -2,7 +2,6 @@
 
 ## Pending
 
-- [ ] Create `/og-image.png` (1200x630px) for social sharing previews
 - [ ] Verify GitHub and Discord URLs in the footer match the current canonical project links
 - [ ] Create `/privacy` page or update link to external URL
 - [ ] Create `/terms` page or update link to external URL
@@ -14,6 +13,7 @@
 - [x] Add how it works section
 - [x] Add GitHub link to footer
 - [x] Create favicon
+- [x] Create `/og-image.png` (1200x630px) for social sharing previews
 - [x] Add Open Graph meta tags
 - [x] Make header sticky
 - [x] Add footer with Discord, Privacy, Terms links

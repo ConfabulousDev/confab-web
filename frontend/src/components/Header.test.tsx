@@ -74,6 +74,24 @@ describe('Header logo badge', () => {
     expect(screen.getByText('demo')).toBeInTheDocument();
   });
 
+  // egn7: the wordmark is one run of text in one typeface (no smaller
+  // "Code" suffix span in a second font).
+  it('renders the wordmark "Confabulous Code" as a single text run with no suffix span', () => {
+    renderHeader();
+    const link = screen.getByRole('link', { name: 'Confabulous Code' });
+    expect(link.querySelector('span')).toBeNull();
+    expect(link.textContent).toBe('Confabulous Code');
+  });
+
+  it('keeps the demo badge as the only span inside the wordmark link', () => {
+    window.__DEMO_IDENTITY__ = 'demo@confabulous.dev';
+    renderHeader();
+    const link = screen.getByRole('link', { name: /^Confabulous Code\s*demo$/ });
+    const spans = link.querySelectorAll('span');
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toHaveTextContent('demo');
+  });
+
   it('still renders no badge when window.__DEMO_IDENTITY__ is an empty string', () => {
     window.__DEMO_IDENTITY__ = '';
     renderHeader();

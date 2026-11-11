@@ -20,14 +20,6 @@
   flex-shrink: 0;
 }
 
-.logoSuffix {
-  font-family: system-ui, sans-serif;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-left: 0.125rem;
-  color: var(--color-text-secondary);
-}
-
 .logo:hover {
   color: var(--color-text-primary);
 }
@@ -227,8 +219,10 @@
     padding: 0 var(--spacing-md);
   }
 
-  .logoSuffix {
-    font-size: 0.75rem;
+  /* The all-Lobster wordmark is wider than the old mixed one; shrink it so
+     the header fits at 360px with the nav present. */
+  .logo {
+    font-size: 1.25rem;
   }
 
   .nav {

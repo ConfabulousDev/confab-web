@@ -27,7 +27,10 @@ See [`src/README.md`](src/README.md) for the module-by-module index and data-flo
 - `src/components/` — shared UI; session/cards live under `components/session/cards/`.
 - `src/providers/` — per-provider transcript adapters (Claude, Codex) behind a shared `ProviderAdapter` interface.
 - `src/utils/` — pure helpers (formatting, date ranges, pricing, providers).
-- `public/og-image.png` — the 1200×630 link-preview image; its source is `scripts/og-image.html` (re-render command in that file's header).
+- Generated brand assets in `public/` (all-Lobster "Confabulous Code" wordmark; regenerate by hand and commit the output, the command is in each source's header):
+  - `og-image.png` — the 1200×630 link-preview image, from `scripts/og-image.html` (Playwright screenshot).
+  - `email-wordmark.png` — the share-invitation email header image (364×56, shown at 182×28), from `scripts/email-wordmark.html` (Playwright screenshot).
+  - `favicon.svg` — the Lobster "C" as an SVG path (no font loading), from `scripts/make-favicon.mjs` (`npx -y -p opentype.js node scripts/make-favicon.mjs`). The docs site uses a copy at `docs/public/favicon.svg`.
 
 ## Development
 
