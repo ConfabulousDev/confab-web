@@ -35,9 +35,9 @@ export PRODUCTION_DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'
 ./deploy-to-fly.sh
 ```
 
-## Linode — `demo.confabulous.dev` (demo)
+## Linode — `code-demo.confabulous.dev` (demo)
 
-[demo.confabulous.dev](https://demo.confabulous.dev) runs on a ~$7/month [Linode](https://www.linode.com/) Nanode (1 GB + backups). The full infra-as-code lives in [`ConfabulousDev/confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — the [Deployment walkthrough](/self-hosting/deploy/) stack plus [Demo mode](/self-hosting/demo-mode/), Caddy for HTTPS, and `MAX_USERS=0`.
+[code-demo.confabulous.dev](https://code-demo.confabulous.dev) runs on a ~$7/month [Linode](https://www.linode.com/) Nanode (1 GB + backups). The full infra-as-code lives in [`ConfabulousDev/confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — the [Deployment walkthrough](/self-hosting/deploy/) stack plus [Demo mode](/self-hosting/demo-mode/), Caddy for HTTPS, and `MAX_USERS=0`.
 
 What's in the repo:
 

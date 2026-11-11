@@ -1,4 +1,4 @@
-This Cookie Policy explains how Confabulous Software LLC ("**Company**," "**we**," "**us**," and "**our**") uses cookies and similar technologies when you visit [https://code.confabulous.dev](https://code.confabulous.dev) (the "**Website**") and our documentation site at [https://docs.confabulous.dev](https://docs.confabulous.dev) (the "**Docs**"). It explains what these technologies are, which ones we use and why, and how you can control them.
+This Cookie Policy explains how Confabulous Software LLC ("**Company**," "**we**," "**us**," and "**our**") uses cookies and similar technologies when you visit [https://code.confabulous.dev](https://code.confabulous.dev) (the "**Website**") and our documentation site at [https://code-docs.confabulous.dev](https://code-docs.confabulous.dev) (the "**Docs**"). It explains what these technologies are, which ones we use and why, and how you can control them.
 
 ## What are cookies and similar technologies?
 
@@ -23,7 +23,7 @@ All of our cookies are sent only to code.confabulous.dev, are marked `HttpOnly` 
 | `expected_email` | Cookie | Checks that you sign in with the email address an invitation or share link was sent to. Set only when you follow such a link. | 5 minutes |
 | `cli_redirect` | Cookie | Completes sign-in for the Confabulous Code command-line tool (`confab`). | 5 minutes |
 
-On our public demo at [https://demo.confabulous.dev](https://demo.confabulous.dev), visitors share one read-only demo account, and `confab_session` identifies that shared demo session. There it lasts up to 100 years.
+On our public demo at [https://code-demo.confabulous.dev](https://code-demo.confabulous.dev), visitors share one read-only demo account, and `confab_session` identifies that shared demo session. There it lasts up to 100 years.
 
 ### Browser storage on the Website
 

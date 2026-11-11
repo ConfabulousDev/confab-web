@@ -1,6 +1,6 @@
 # Confabulous Code docs site
 
-The documentation site published at [docs.confabulous.dev](https://docs.confabulous.dev), built with [Starlight](https://starlight.astro.build/) (Astro).
+The documentation site published at [code-docs.confabulous.dev](https://code-docs.confabulous.dev), built with [Starlight](https://starlight.astro.build/) (Astro).
 
 ## Local development
 
@@ -91,12 +91,13 @@ The workflow triggers on:
 
 **6. Add the custom domain.**
 
-- **Cloudflare → Workers & Pages → confab-docs → Custom domains → Set up a custom domain** → `docs.confabulous.dev`.
+- **Cloudflare → Workers & Pages → confab-docs → Custom domains → Set up a custom domain** → `code-docs.confabulous.dev`.
 - Since `confabulous.dev` already lives on Cloudflare DNS, the CNAME and TLS cert are wired automatically.
+- The site used to live at `docs.confabulous.dev`. That domain was retired with no redirect, so old links to it no longer resolve.
 
 **7. Add Cloudflare Web Analytics.**
 
-- **Cloudflare → Analytics & Logs → Web Analytics → Add a site** → `docs.confabulous.dev`.
+- **Cloudflare → Analytics & Logs → Web Analytics → Add a site** → `code-docs.confabulous.dev`.
 - Copy the token (the value inside `data-cf-beacon='{"token":"..."}'`).
 - Update the `CF_ANALYTICS_TOKEN` GitHub secret with this value.
 - Trigger a redeploy (push or **Run workflow**) so the beacon ships with the build.

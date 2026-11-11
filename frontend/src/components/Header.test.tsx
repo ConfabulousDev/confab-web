@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Header from './Header';
 
-const DOCS_URL = 'https://docs.confabulous.dev';
+const DOCS_URL = 'https://code-docs.confabulous.dev';
 const GITHUB_ISSUES_URL = 'https://github.com/ConfabulousDev/confab-web/issues';
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn() }));

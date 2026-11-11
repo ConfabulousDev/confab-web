@@ -35,7 +35,7 @@ Localhost is for prototyping; a real Confabulous Code instance lives on real inf
 When you're ready, work through:
 
 - [Deployment walkthrough](/self-hosting/deploy/) — the full server-side setup, from `docker-compose.yml` through HTTPS, auth, and upgrades.
-- [Sample deployments](/self-hosting/examples/) — annotated configs for Fly.io and Linode that power `code.confabulous.dev` and `demo.confabulous.dev`.
+- [Sample deployments](/self-hosting/examples/) — annotated configs for Fly.io and Linode that power `code.confabulous.dev` and `code-demo.confabulous.dev`.
 - [Configuration reference](/self-hosting/configuration/) — every environment variable.
 
 ## 3. Onboard your team

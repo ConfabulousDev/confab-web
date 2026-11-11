@@ -15,7 +15,7 @@ Backend API is documented in `backend/API.md`. Keep it up to date when modifying
 Two audiences, two doc trees:
 
 - **Internal docs** (READMEs, `CLAUDE.md` files, `backend/API.md`, `CONFIGURATION.md`, `SELF-HOSTING.md`) — for contributors. When changing code, update the corresponding package/module README. Keep current: file lists, exported API descriptions, invariants, dependency lists, extension checklists. If a change spans multiple packages, also check the index READMEs (`backend/internal/README.md`, `frontend/src/README.md`) and this file.
-- **User-facing docs site** (`docs/` — Starlight, published at `docs.confabulous.dev`) — for end users and self-hosters. When changing user-visible behavior (new config var, new feature, changed CLI flow), update the corresponding page under `docs/src/content/docs/`. The sidebar tree is in `docs/astro.config.mjs`.
+- **User-facing docs site** (`docs/` — Starlight, published at `code-docs.confabulous.dev`) — for end users and self-hosters. When changing user-visible behavior (new config var, new feature, changed CLI flow), update the corresponding page under `docs/src/content/docs/`. The sidebar tree is in `docs/astro.config.mjs`.
 
 Documentation that contradicts the code is worse than no documentation.
 

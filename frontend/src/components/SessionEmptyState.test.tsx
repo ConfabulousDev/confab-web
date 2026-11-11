@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SessionEmptyState from './SessionEmptyState';
 
-const DOCS_URL = 'https://docs.confabulous.dev';
+const DOCS_URL = 'https://code-docs.confabulous.dev';
 
 // CF-571: the empty state nudges newcomers toward the docs site.
 describe('SessionEmptyState docs link (CF-571)', () => {

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://docs.confabulous.dev/sitemap-index.xml
+Sitemap: https://code-docs.confabulous.dev/sitemap-index.xml
