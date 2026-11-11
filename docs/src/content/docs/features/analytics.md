@@ -5,7 +5,7 @@ description: Cost, tokens, duration, and tool usage for a single session.
 
 Every session in Confabulous Code has an analytics summary surfaced alongside the transcript. The summary panel renders one card per dimension; together they answer "what did this session cost, how long did it take, and what did it do?"
 
-See it live on the [demo instance](https://demo.confabulous.dev/sessions/e8b54496-44f2-40f5-94c1-d786b5443901).
+See it live on the [demo instance](https://code-demo.confabulous.dev/sessions/e8b54496-44f2-40f5-94c1-d786b5443901).
 
 ## What it shows
 

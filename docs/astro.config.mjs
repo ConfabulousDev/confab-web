@@ -2,7 +2,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-const SITE = 'https://docs.confabulous.dev';
+const SITE = 'https://code-docs.confabulous.dev';
 // SVG by default; rasterize to /og-image.png for maximum social-preview
 // compatibility (Facebook/LinkedIn are picky about SVG).
 const OG_IMAGE = `${SITE}/og-image.svg`;

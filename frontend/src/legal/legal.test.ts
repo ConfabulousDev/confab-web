@@ -10,9 +10,14 @@ import { LEGAL_MARKDOWN } from './content';
 const FORMER_HOST = new RegExp('ter' + 'mly', 'i');
 
 // The managed service lives at code.confabulous.dev; the bare domain is the
-// company site. Subdomains (code., demo., docs., share.) and contact@ addresses
-// are fine; a bare `confabulous.dev` reference is not.
+// company site. Subdomains (code., code-demo., code-docs., share.) and contact@
+// addresses are fine; a bare `confabulous.dev` reference is not.
 const BARE_HOST = /(?<![\w@.-])confabulous\.dev/;
+
+// The retired docs and demo hosts (hard cutover to code-docs. / code-demo.,
+// no redirects). The lookbehind keeps code-docs. and code-demo. from matching;
+// the demo@confabulous.dev address never matches (no dot after `demo`).
+const OLD_SUBHOST = /(?<![\w.-])(?:docs|demo)\.confabulous\.dev/;
 
 // The retired San Jose mailing address. Every address must match the D-U-N-S
 // record (2108 N St, Ste N, Sacramento, CA 95816).
@@ -55,6 +60,10 @@ describe('legal documents', () => {
 
     it('never references the bare confabulous.dev host', () => {
       expect(linesMatching(markdown, BARE_HOST), `bare-host references in ${slug}`).toEqual([]);
+    });
+
+    it('never references the retired docs or demo host', () => {
+      expect(linesMatching(markdown, OLD_SUBHOST), `old-subhost references in ${slug}`).toEqual([]);
     });
 
     it('uses only the D-U-N-S mailing address', () => {

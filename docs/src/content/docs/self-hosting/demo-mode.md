@@ -3,7 +3,7 @@ title: Demo mode
 description: Configure a read-only demo identity for showcasing your Confabulous Code instance.
 ---
 
-Confabulous Code supports a **demo identity** — a read-only, shared-cookie user account that anyone can log in as without credentials. Useful for showcasing the product (this is what powers [demo.confabulous.dev](https://demo.confabulous.dev)).
+Confabulous Code supports a **demo identity** — a read-only, shared-cookie user account that anyone can log in as without credentials. Useful for showcasing the product (this is what powers [code-demo.confabulous.dev](https://code-demo.confabulous.dev)).
 
 ## Enabling
 
@@ -34,7 +34,7 @@ The demo cookie is HMAC-derived and shared across all visitors of the demo ident
 
 ## Reference deployment
 
-[`ConfabulousDev/confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) is the live stack behind [demo.confabulous.dev](https://demo.confabulous.dev). The combination that makes the site anonymous-readable and sign-ups-closed, from [`stack/docker-compose.yml`](https://github.com/ConfabulousDev/confab-demo-site/blob/main/stack/docker-compose.yml):
+[`ConfabulousDev/confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) is the live stack behind [code-demo.confabulous.dev](https://code-demo.confabulous.dev). The combination that makes the site anonymous-readable and sign-ups-closed, from [`stack/docker-compose.yml`](https://github.com/ConfabulousDev/confab-demo-site/blob/main/stack/docker-compose.yml):
 
 ```yaml
 DEMO_IDENTITY_EMAIL: demo@confabulous.dev

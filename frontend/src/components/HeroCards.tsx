@@ -13,8 +13,8 @@ interface HeroCard {
   docsLinks: DocsLink[];
 }
 
-const DEMO = 'https://demo.confabulous.dev';
-const DOCS = 'https://docs.confabulous.dev';
+const DEMO = 'https://code-demo.confabulous.dev';
+const DOCS = 'https://code-docs.confabulous.dev';
 const DEMO_SESSION = `${DEMO}/sessions/e8b54496-44f2-40f5-94c1-d786b5443901`;
 
 const cards: HeroCard[] = [

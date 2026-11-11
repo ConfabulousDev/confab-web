@@ -1,6 +1,6 @@
 # Docs site notes
 
-User-facing documentation site at [docs.confabulous.dev](https://docs.confabulous.dev), built with [Starlight](https://starlight.astro.build/) (Astro). Source lives under `docs/src/content/docs/`; sidebar tree is in `docs/astro.config.mjs`.
+User-facing documentation site at [code-docs.confabulous.dev](https://code-docs.confabulous.dev), built with [Starlight](https://starlight.astro.build/) (Astro). Source lives under `docs/src/content/docs/`; sidebar tree is in `docs/astro.config.mjs`.
 
 ## What belongs in this file
 
@@ -82,4 +82,4 @@ Config changes (`astro.config.mjs`, `src/content.config.ts`, `src/styles/custom.
 
 ## Deployment
 
-Hosted on Cloudflare Pages, built from `docs/` on push to `main`. Custom domain: `docs.confabulous.dev`. Search is Pagefind (built into Starlight, static, zero runtime cost).
+Hosted on Cloudflare Pages, built from `docs/` on push to `main`. Custom domain: `code-docs.confabulous.dev`. Search is Pagefind (built into Starlight, static, zero runtime cost).

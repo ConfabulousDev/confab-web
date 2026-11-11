@@ -6,7 +6,7 @@ description: Deploy Confabulous Code on your own infrastructure — from clone-a
 This guide walks through deploying Confabulous Code step by step. For the full environment-variable reference, see [Configuration](/self-hosting/configuration/). For real-world annotated configs, see [Sample deployments](/self-hosting/examples/).
 
 :::tip[Worked example]
-[`confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — live compose, Caddyfile, and OpenTofu behind [demo.confabulous.dev](https://demo.confabulous.dev) on a $7/mo Linode. Tracks this guide.
+[`confab-demo-site`](https://github.com/ConfabulousDev/confab-demo-site) — live compose, Caddyfile, and OpenTofu behind [code-demo.confabulous.dev](https://code-demo.confabulous.dev) on a $7/mo Linode. Tracks this guide.
 :::
 
 ## Prerequisites

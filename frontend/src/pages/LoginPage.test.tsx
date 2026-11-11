@@ -256,7 +256,7 @@ describe('LoginPage', () => {
       expect(screen.getByText('Continue with GitHub')).toBeInTheDocument();
     });
     const link = screen.getByRole('link', { name: 'Docs' });
-    expect(link).toHaveAttribute('href', 'https://docs.confabulous.dev');
+    expect(link).toHaveAttribute('href', 'https://code-docs.confabulous.dev');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Footer from './Footer';
 
-const DOCS_URL = 'https://docs.confabulous.dev';
+const DOCS_URL = 'https://code-docs.confabulous.dev';
 const GITHUB_ISSUES_URL = 'https://github.com/ConfabulousDev/confab-web/issues';
 
 vi.mock('@/hooks/useAppConfig', () => ({

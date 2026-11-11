@@ -12,19 +12,19 @@ describe('CTALinks', () => {
     expect(links[2]).toHaveTextContent(/^GitHub/);
   });
 
-  it('points Demo at demo.confabulous.dev', () => {
+  it('points Demo at code-demo.confabulous.dev', () => {
     render(<CTALinks />);
     expect(screen.getByRole('link', { name: /^Demo/ })).toHaveAttribute(
       'href',
-      'https://demo.confabulous.dev',
+      'https://code-demo.confabulous.dev',
     );
   });
 
-  it('points Docs at the Introduction page on docs.confabulous.dev', () => {
+  it('points Docs at the Introduction page on code-docs.confabulous.dev', () => {
     render(<CTALinks />);
     expect(screen.getByRole('link', { name: /^Docs/ })).toHaveAttribute(
       'href',
-      'https://docs.confabulous.dev/getting-started/introduction/',
+      'https://code-docs.confabulous.dev/getting-started/introduction/',
     );
   });
 
