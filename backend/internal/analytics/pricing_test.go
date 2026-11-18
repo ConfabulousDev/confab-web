@@ -137,7 +137,10 @@ func TestLookupPricing(t *testing.T) {
 		{"gpt-5.6-sol", true, 4.00},
 		{"gpt-5.6-terra", true, 2.00},
 		{"gpt-5.6-luna", true, 0.20},
+		{"gpt-6.2-astra", true, 8.00},
+		{"gpt-6.2-sol", true, 2.00},
 		{"gpt-6-astra", true, 10.00},
+		{"gpt-6-cyber", true, 20.00},
 		{"gpt-6.1-sol", true, 2.00},
 		{"gpt-6.1-terra", true, 1.00},
 		{"gpt-6-sol", true, 2.00},
@@ -605,7 +608,10 @@ func TestEmbeddedRates(t *testing.T) {
 		{"gpt-5.6-terra", 2.0, 12.0, 2.5, 0, 0.2},
 		{"gpt-5.6-luna", 0.2, 1.2, 0.25, 0, 0.02},
 		{"gpt-5.6-cyber", 12.5, 75.0, 15.625, 0, 1.25},
+		{"gpt-6.2-astra", 8.0, 40.0, 10.0, 0, 0.40}, // 0.05x cache read: documented exception
+		{"gpt-6.2-sol", 2.0, 10.0, 2.5, 0, 0.10},    // 0.05x cache read: documented exception
 		{"gpt-6-astra", 10.0, 50.0, 12.5, 0, 1.0},
+		{"gpt-6-cyber", 20.0, 100.0, 25.0, 0, 2.0},
 		{"gpt-6.1-sol", 2.0, 10.0, 2.5, 0, 0.10},   // 0.05x cache read: documented exception
 		{"gpt-6.1-terra", 1.0, 5.0, 1.25, 0, 0.05}, // 0.05x cache read: documented exception
 		{"gpt-6-sol", 2.0, 10.0, 2.5, 0, 0.20},
@@ -736,6 +742,34 @@ func TestGPT61TerraCacheReadException(t *testing.T) {
 	}
 	if want := decimal.NewFromFloat(0.05); !pricing.CacheRead.Equal(want) {
 		t.Errorf("gpt-6.1-terra CacheRead = %s, want %s (0.05x input, NOT the usual 0.1x)", pricing.CacheRead, want)
+	}
+}
+
+// TestGPT62CacheReadException pins the GPT-6.2 rows' cache-read rates at
+// 0.05x input, the same deliberate exception as the 6.1 rows. gpt-6.2-astra
+// in particular must not inherit gpt-6-astra's 0.1x ($1.00): normalizing
+// either row to 0.1x would silently double cache-read cost.
+func TestGPT62CacheReadException(t *testing.T) {
+	tests := []struct {
+		family           string
+		input, cacheRead float64
+	}{
+		{"gpt-6.2-astra", 8, 0.40},
+		{"gpt-6.2-sol", 2, 0.10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.family, func(t *testing.T) {
+			pricing, ok := LookupPricing(tt.family)
+			if !ok {
+				t.Fatalf("%s not found in embedded pricing", tt.family)
+			}
+			if want := decimal.NewFromFloat(tt.input); !pricing.Input.Equal(want) {
+				t.Errorf("%s Input = %s, want %s (the 0.05x cache-read claim is relative to this)", tt.family, pricing.Input, want)
+			}
+			if want := decimal.NewFromFloat(tt.cacheRead); !pricing.CacheRead.Equal(want) {
+				t.Errorf("%s CacheRead = %s, want %s (0.05x input, NOT the usual 0.1x)", tt.family, pricing.CacheRead, want)
+			}
+		})
 	}
 }
 
