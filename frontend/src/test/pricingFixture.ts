@@ -41,6 +41,8 @@ export const PRICING_FIXTURE: PricingTable = {
     'gpt-5.4-mini': { input: 0.75, output: 4.5, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0.075 },
     'gpt-5.5': { input: 5.0, output: 30.0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0.5 },
     'gpt-5.6-sol': { input: 4.0, output: 20.0, cacheWrite: 5.0, cacheWrite1h: 0, cacheRead: 0.4 },
+    'gpt-6.2-astra': { input: 8.0, output: 40.0, cacheWrite: 10.0, cacheWrite1h: 0, cacheRead: 0.4 },
+    'gpt-6.2-sol': { input: 2.0, output: 10.0, cacheWrite: 2.5, cacheWrite1h: 0, cacheRead: 0.1 },
     'gpt-6-astra': { input: 10.0, output: 50.0, cacheWrite: 12.5, cacheWrite1h: 0, cacheRead: 1.0 },
     'gpt-6.1-sol': { input: 2.0, output: 10.0, cacheWrite: 2.5, cacheWrite1h: 0, cacheRead: 0.1 },
     'gpt-6.1-terra': { input: 1.0, output: 5.0, cacheWrite: 1.25, cacheWrite1h: 0, cacheRead: 0.05 },

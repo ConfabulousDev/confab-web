@@ -45,7 +45,7 @@ Read these before adding or repricing a row.
   not write code that switches price on a timer. We shipped exactly that once —
   a Sonnet 5 increase encoded ahead of time, then cancelled by the vendor, which
   overcharged every Sonnet 5 session by 50% from the day the cutover fired.
-  Rates currently promotional: `gpt-5.6-sol` ($4/$20, ~Nov 21 2026) and
+  Rates currently promotional: `gpt-5.6-sol` ($4/$20, through Nov 30 2026) and
   `gemini-3.6/3.7/3.8-flash` ($0.75/$3.75 through Dec 31 2026, reverting to
   $1.50/$7.50 with a $0.15 cache read).
 - **Context-tiered models take the low/short-context tier.** Every Gemini Pro,
@@ -60,22 +60,26 @@ Read these before adding or repricing a row.
   $25/MTok cache write against the short-context $12.50. Fixing the class needs
   per-turn token accounting; tracked separately.
 - **Cache reads are 0.1x base input — except Fable and Mythos 5.1 and 5.2, Opus 5.5,
-  Sonnet 5.5, GPT-6.1 Sol and GPT-6.1 Terra.** Fable 5.1 and Mythos 5.1 bill
+  Sonnet 5.5, GPT-6.1 Sol, GPT-6.1 Terra, GPT-6.2 Astra and GPT-6.2 Sol.** Fable 5.1 and Mythos 5.1 bill
   cache hits at 0.025x ($0.25/MTok against $10 input), as do Fable 5.2 and
   Mythos 5.2 ($0.20/MTok against $8 input); Claude Opus 5.5 bills them at 0.05x
   ($0.20/MTok against $4 input); Claude Sonnet 5.5 bills them at 0.05x
   ($0.10/MTok against $2 input — halved from $0.20 on 2026-10-07, while
   `sonnet-5` stays at 0.1x); OpenAI's `gpt-6.1-sol` bills them at 0.05x
   ($0.10/MTok against $2 input — half of `gpt-6-sol`'s $0.20), and
-  `gpt-6.1-terra` likewise ($0.05/MTok against $1 input). The 5.0
+  `gpt-6.1-terra` likewise ($0.05/MTok against $1 input), as do
+  `gpt-6.2-astra` ($0.40/MTok against $8 input — `gpt-6-astra` stays at 0.1x,
+  $1.00) and `gpt-6.2-sol` ($0.10/MTok against $2 input). The 5.0
   generation (`fable-5`, `mythos-5`) stays at 0.1x ($1.00). Cache reads
   dominate token volume in agentic sessions, so "normalizing" any exception is
   a silent overcharge: 4x for the 5.1 rows at $1.00 and the 5.2 rows at $0.80, 2x for Opus 5.5 at $0.40
-  and for Sonnet 5.5 and `gpt-6.1-sol` at $0.20 and `gpt-6.1-terra` at $0.10.
+  and for Sonnet 5.5, `gpt-6.1-sol` and `gpt-6.2-sol` at $0.20, `gpt-6.1-terra`
+  at $0.10 and `gpt-6.2-astra` at $0.80.
   Pinned by tests in `internal/analytics/pricing_test.go`.
 - **OpenAI cache writes are 1.25x short-context input on the 5.6 and 6
   families** — the 30-minute retention tier, stored in `cacheWrite`
-  (`gpt-6-astra` $12.50, `gpt-6.1-sol` $2.50, `gpt-6.1-terra` $1.25,
+  (`gpt-6.2-astra` $10.00, `gpt-6.2-sol` $2.50, `gpt-6-astra` $12.50,
+  `gpt-6-cyber` $25.00, `gpt-6.1-sol` $2.50, `gpt-6.1-terra` $1.25,
   `gpt-6-sol` $2.50, `gpt-6-luna` $0.125, `gpt-5.6-sol` $5.00, `gpt-5.6-terra` $2.50,
   `gpt-5.6-luna` $0.25, `gpt-5.6-cyber` $15.625). Older OpenAI families publish
   no cache-write price and stay at 0 pending verification; the `-pro` models
