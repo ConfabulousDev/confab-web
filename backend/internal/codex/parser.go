@@ -143,6 +143,10 @@ type parser struct {
 	// skillsCatalogPopulated guards against capturing a second
 	// <skills_instructions> block (e.g. after compaction).
 	skillsCatalogPopulated bool
+	// prevTotal is the previous token_count's total_token_usage (nil before
+	// the first one). It detects re-emitted events and backs the total-only
+	// fallback in addTokenCount.
+	prevTotal *tokenCountTotals
 }
 
 type callRef struct {
@@ -779,16 +783,77 @@ type eventTokenCountPayload struct {
 	Info *tokenCountInfo `json:"info"`
 }
 
+// tokenCountInfo carries the thread's running total and the usage of the one
+// request that produced the event.
 type tokenCountInfo struct {
 	TotalTokenUsage *tokenCountTotals `json:"total_token_usage"`
+	LastTokenUsage  *tokenCountTotals `json:"last_token_usage"`
 }
 
+// tokenCountTotals must stay comparable: addTokenCount detects re-emitted
+// events with ==.
 type tokenCountTotals struct {
 	InputTokens           int64 `json:"input_tokens"`
 	CachedInputTokens     int64 `json:"cached_input_tokens"`
+	CacheWriteInputTokens int64 `json:"cache_write_input_tokens"`
 	OutputTokens          int64 `json:"output_tokens"`
 	ReasoningOutputTokens int64 `json:"reasoning_output_tokens"`
 	TotalTokens           int64 `json:"total_tokens"`
+}
+
+// sub returns t - o per field.
+func (t tokenCountTotals) sub(o tokenCountTotals) tokenCountTotals {
+	return tokenCountTotals{
+		InputTokens:           t.InputTokens - o.InputTokens,
+		CachedInputTokens:     t.CachedInputTokens - o.CachedInputTokens,
+		CacheWriteInputTokens: t.CacheWriteInputTokens - o.CacheWriteInputTokens,
+		OutputTokens:          t.OutputTokens - o.OutputTokens,
+		ReasoningOutputTokens: t.ReasoningOutputTokens - o.ReasoningOutputTokens,
+		TotalTokens:           t.TotalTokens - o.TotalTokens,
+	}
+}
+
+// anyNegative reports whether any field is below zero.
+func (t tokenCountTotals) anyNegative() bool {
+	return t.InputTokens < 0 || t.CachedInputTokens < 0 || t.CacheWriteInputTokens < 0 ||
+		t.OutputTokens < 0 || t.ReasoningOutputTokens < 0 || t.TotalTokens < 0
+}
+
+// addTokenCount adds one token_count event's own usage to out.TokenUsage.
+//
+// The running total is not trusted as the rollout's usage: a forked thread's
+// counter is seeded with its parent's total, and the counter restarts on
+// resume and compaction. The per-request last_token_usage is summed instead:
+//   - an event whose total equals the previous event's in every field is a
+//     re-emission and is skipped;
+//   - without last_token_usage the delta is this total minus the previous
+//     one, or the whole total for the first event or when any field went
+//     down (a restart).
+func (p *parser) addTokenCount(info *tokenCountInfo) {
+	if info == nil || info.TotalTokenUsage == nil {
+		return
+	}
+	total := *info.TotalTokenUsage
+	if p.prevTotal != nil && *p.prevTotal == total {
+		return
+	}
+	delta := total
+	if info.LastTokenUsage != nil {
+		delta = *info.LastTokenUsage
+	} else if p.prevTotal != nil {
+		if d := total.sub(*p.prevTotal); !d.anyNegative() {
+			delta = d
+		}
+	}
+	p.prevTotal = &total
+
+	u := &p.out.TokenUsage
+	u.InputTokens += delta.InputTokens
+	u.CachedInputTokens += delta.CachedInputTokens
+	u.CacheWriteInputTokens += delta.CacheWriteInputTokens
+	u.OutputTokens += delta.OutputTokens
+	u.ReasoningOutputTokens += delta.ReasoningOutputTokens
+	u.TotalTokens += delta.TotalTokens
 }
 
 type eventPatchApplyEndPayload struct {
@@ -845,16 +910,7 @@ func (p *parser) handleEventMsg(ts time.Time, raw json.RawMessage, lineNum int) 
 		if err := json.Unmarshal(raw, &tcnt); err != nil {
 			return
 		}
-		if tcnt.Info != nil && tcnt.Info.TotalTokenUsage != nil {
-			tt := tcnt.Info.TotalTokenUsage
-			p.out.TokenUsage = TokenUsage{
-				InputTokens:           tt.InputTokens,
-				CachedInputTokens:     tt.CachedInputTokens,
-				OutputTokens:          tt.OutputTokens,
-				ReasoningOutputTokens: tt.ReasoningOutputTokens,
-				TotalTokens:           tt.TotalTokens,
-			}
-		}
+		p.addTokenCount(tcnt.Info)
 	case "patch_apply_end":
 		var pae eventPatchApplyEndPayload
 		if err := json.Unmarshal(raw, &pae); err != nil {

@@ -15,9 +15,11 @@ import (
 //   - ReasoningOutputTokens is a subset of OutputTokens (CF-471); the wire's
 //     output_tokens already includes reasoning, so we surface it unchanged.
 //     Reasoning bills at the output rate implicitly.
-//   - CacheCreationTokens stays 0 because the rollout wire carries no cache-write
-//     count, not because the rate is zero: the 5.6 and 6 families do carry a real
-//     cache-write rate in pricing.json (md0z tracks surfacing the tokens).
+//   - CacheCreationTokens stays 0 and cache writes are not billed, deliberately:
+//     the parser carries the wire's count (TokenUsage.CacheWriteInputTokens), but
+//     whether it is a subset of input_tokens is undecided (md0z). The rate
+//     itself is not zero: the 5.6 and 6 families do carry a real cache-write
+//     rate in pricing.json.
 //
 // Pricing uses the main rollout's model.
 func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.ParsedRollout) {
@@ -54,7 +56,7 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 		agg.output += tu.OutputTokens
 		agg.cacheRead += tu.CachedInputTokens
 		agg.reasoning += tu.ReasoningOutputTokens
-		// Cache writes stay 0 (no count on the wire — see the header comment);
+		// Cache writes stay unbilled (see the header comment);
 		// reasoning is a subset of output (CF-471), so it bills implicitly at the
 		// output rate and is not added here.
 		agg.cost = agg.cost.Add(CalculateCost(pricing, uncached, tu.OutputTokens, 0, tu.CachedInputTokens))
