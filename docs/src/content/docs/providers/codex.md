@@ -40,7 +40,7 @@ When a Codex session spawns subagents, Confabulous Code aggregates the main thre
 
 - `cached_input_tokens` is a subset of `input_tokens` (not a separate count).
 - `reasoning_output_tokens` is a subset of `output_tokens` (billed at output rate).
-- Cache writes cost nothing today. OpenAI's GPT-5.6 and GPT-6 families do publish a cache-write rate, but Codex rollouts carry no cache-write token count, so there is nothing to bill.
+- Cache writes cost nothing today. OpenAI's GPT-5.6 and GPT-6 families do publish a cache-write rate, and Codex reports a cache-write token count, but that count has been zero in every session seen so far and Confabulous Code does not bill it yet.
 
 ## Other supported providers
 
