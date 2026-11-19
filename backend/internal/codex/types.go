@@ -170,8 +170,14 @@ type ToolCall struct {
 	Timestamp  time.Time
 }
 
-// TokenUsage is the final running token totals from the last non-null
-// event_msg.token_count.info.total_token_usage.
+// TokenUsage is the rollout's own token usage: the sum of each
+// event_msg.token_count's per-request last_token_usage, counting re-emitted
+// events once. It is not the wire's running total_token_usage, so it excludes
+// usage a forked thread inherited from its parent and survives the running
+// total restarting (resume, compaction). See the package README for the rule.
+//
+// CacheWriteInputTokens is carried from the wire but not billed or displayed
+// yet (md0z).
 //
 // CachedInputTokens is a subset of InputTokens (OpenAI's API semantics — not
 // a separate count). Callers that bill cached tokens at a different rate must
@@ -179,6 +185,7 @@ type ToolCall struct {
 type TokenUsage struct {
 	InputTokens           int64
 	CachedInputTokens     int64
+	CacheWriteInputTokens int64
 	OutputTokens          int64
 	ReasoningOutputTokens int64
 	TotalTokens           int64

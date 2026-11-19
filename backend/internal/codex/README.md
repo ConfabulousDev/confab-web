@@ -77,11 +77,43 @@ following rules:
    CLI resume, not analytics.
 7. **Encrypted reasoning**: increment `ReasoningCount` (per turn); no
    displayable text is recorded.
-8. **TokenUsage**: updated from every `event_msg.token_count` event whose
-   `info` is non-null. Final state is the last non-null
-   `info.total_token_usage`. CachedInputTokens is a SUBSET of InputTokens
-   (OpenAI semantics) — callers that bill cached tokens separately must
-   subtract before applying the uncached rate.
+8. **TokenUsage**: the rollout's **own** usage, summed per request — not the
+   wire's running `total_token_usage` (23h5). For each `event_msg.token_count`
+   whose `info` and `info.total_token_usage` are non-null (`addTokenCount`):
+   1. If the total equals the previous such event's total in **every** field,
+      skip it. Codex re-emits `token_count` with an unchanged total; counting
+      those would over-count.
+   2. Otherwise add `info.last_token_usage` (the usage of the one request
+      behind the event), per field. If `last_token_usage` is absent, add
+      `this total − previous total`; for the first event, or when any field
+      went down (a restart), add the whole total.
+   3. Remember this total as the previous one.
+
+   Why not the last running total:
+   - **Forks.** A forked user thread (`codex fork`, "branch in new chat";
+     `session_meta.forked_from_id`) has its counter seeded with the parent's
+     total. Sample (0.170.0): parent 17,270; the fork's only event has total
+     39,851 and last 22,581. The fork reports 22,581, so the parent's tokens
+     are not counted in both sessions. Subagent forks start at zero and are
+     unaffected.
+   - **Restarts.** The running total restarts on resume, and at a compaction
+     on 0.130.0 it becomes all-zero categories with `total_tokens` set to the
+     context window. The last total then under-reports (one resumed 0.153.2
+     rollout: 11,478,836 by last total, 15,201,231 by summed deltas).
+
+   When the total never restarts and the thread is not a fork, the sum equals
+   the final running total.
+
+   **Known gap:** an older Codex is reported to copy the parent's history,
+   `token_count` events included, into the fork's rollout instead of
+   referencing it via `history_base`. Those events would count as the fork's
+   own. Not reproduced and no sample exists (follow-up ticket filed from
+   23h5).
+
+   CachedInputTokens is a SUBSET of InputTokens (OpenAI semantics) — callers
+   that bill cached tokens separately must subtract before applying the
+   uncached rate. `CacheWriteInputTokens` is carried from
+   `cache_write_input_tokens` but nothing bills or displays it yet (`md0z`).
 9. **Developer-role messages**: dropped after first scanning for a
    `<skills_instructions>` block. The first such block populates
    `AvailableSkills` (parsed from `### Available skills` bullets); subsequent

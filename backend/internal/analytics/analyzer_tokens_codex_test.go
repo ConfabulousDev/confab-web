@@ -210,3 +210,32 @@ func TestComputeCodexTokens_V2Tree(t *testing.T) {
 		t.Errorf("totals input/output = %d/%d, want 7000/2300", v2.TotalInput, v2.TotalOutput)
 	}
 }
+
+// 23h5 / md0z: the parser carries cache_write_input_tokens, but the analyzer
+// deliberately leaves it out of the card and out of the billed path until
+// md0z settles how it relates to input_tokens.
+func TestComputeCodexTokens_CacheWriteParsedButNotBilled(t *testing.T) {
+	usage := codex.TokenUsage{
+		InputTokens:       100_000,
+		CachedInputTokens: 40_000,
+		OutputTokens:      2_000,
+		TotalTokens:       102_000,
+	}
+	base := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rolloutWithUsage(usage)})
+
+	usage.CacheWriteInputTokens = 25_000
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rolloutWithUsage(usage)})
+	if base == nil || out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.CacheCreationTokens != 0 {
+		t.Errorf("CacheCreationTokens = %d, want 0 (cache-write tokens must not be surfaced until md0z)", out.CacheCreationTokens)
+	}
+	if !out.EstimatedCostUSD.Equal(base.EstimatedCostUSD) {
+		t.Errorf("EstimatedCostUSD = %s, want %s (cache-write tokens must not be billed until md0z)", out.EstimatedCostUSD, base.EstimatedCostUSD)
+	}
+	if out.InputTokens != base.InputTokens || out.CacheReadTokens != base.CacheReadTokens || out.OutputTokens != base.OutputTokens {
+		t.Errorf("token totals changed with cache-write present: got in=%d read=%d out=%d, want in=%d read=%d out=%d",
+			out.InputTokens, out.CacheReadTokens, out.OutputTokens, base.InputTokens, base.CacheReadTokens, base.OutputTokens)
+	}
+}
