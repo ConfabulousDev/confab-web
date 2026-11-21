@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseClaudeJSONL, fetchNewClaudeTranscriptMessages, fetchParsedClaudeTranscript, reportClaudeTranscriptErrors, _resetReportedClaudeSessions } from './claudeTranscriptService';
-import type { TranscriptValidationError } from '@/schemas/claudeTranscript';
+import { isUnknownMessage, type TranscriptValidationError } from '@/schemas/claudeTranscript';
 import { isUserMessage, isSystemMessage } from '@/types';
 import * as api from './api';
 
@@ -314,6 +314,39 @@ ${createSystemMessage(2)}`;
         contextLength: 3,
       },
     },
+    // Per-model-response tool/plugin data-flow ledger (k5k1). Both record shapes
+    // seen in real session JSONL, plus the optional snapshot flag; values are fake.
+    {
+      typeName: 'data-flow-records (listed/response_id)',
+      payload: {
+        type: 'data-flow-records',
+        v: 1,
+        sessionId: 'abc-123',
+        records: [{ listed: ['msg_000000000000000000000001'], response_id: 'msg_000000000000000000000002' }],
+      },
+    },
+    {
+      typeName: 'data-flow-records (tool_name/event_id)',
+      payload: {
+        type: 'data-flow-records',
+        v: 1,
+        sessionId: 'abc-123',
+        records: [{ tool_name: 'Bash', event_id: 'evt_000000000000000000000001' }],
+      },
+    },
+    {
+      typeName: 'data-flow-records (snapshot)',
+      payload: {
+        type: 'data-flow-records',
+        v: 1,
+        sessionId: 'abc-123',
+        snapshot: true,
+        records: [
+          { listed: ['msg_000000000000000000000001'], response_id: 'msg_000000000000000000000002' },
+          { tool_name: 'Read', event_id: 'evt_000000000000000000000002' },
+        ],
+      },
+    },
   ])('skips $typeName messages silently', ({ payload }) => {
     const skippedLine = JSON.stringify(payload);
 
@@ -328,6 +361,64 @@ ${createSystemMessage(2)}`;
     expect(result.errorCount).toBe(0);
     expect(result.messages).toHaveLength(2);
     expect(result.totalLines).toBe(3); // All 3 lines counted in totalLines
+  });
+
+  it('skips data-flow-records rows between user and assistant turns without leaving an Unknown entry (k5k1)', () => {
+    const base = {
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/test',
+      sessionId: 'abc-123',
+      version: '2.1.400',
+      timestamp: '2026-11-20T00:00:00.000Z',
+    };
+    const userLine = JSON.stringify({
+      ...base,
+      type: 'user',
+      uuid: 'u-1',
+      message: { role: 'user', content: 'hello' },
+    });
+    const dataFlowLine = JSON.stringify({
+      type: 'data-flow-records',
+      v: 1,
+      sessionId: 'abc-123',
+      records: [
+        { listed: ['msg_000000000000000000000001'], response_id: 'msg_000000000000000000000002' },
+        { tool_name: 'Bash', event_id: 'evt_000000000000000000000001' },
+      ],
+    });
+    const snapshotLine = JSON.stringify({
+      type: 'data-flow-records',
+      v: 1,
+      sessionId: 'abc-123',
+      snapshot: true,
+      records: [{ tool_name: 'Read', event_id: 'evt_000000000000000000000002' }],
+    });
+    const assistantLine = JSON.stringify({
+      ...base,
+      type: 'assistant',
+      uuid: 'a-1',
+      parentUuid: 'u-1',
+      requestId: 'req_1',
+      message: {
+        model: 'claude-opus-5-5',
+        id: 'msg_000000000000000000000002',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hi' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    });
+
+    const result = parseClaudeJSONL([userLine, dataFlowLine, assistantLine, snapshotLine].join('\n'));
+
+    expect(result.errorCount).toBe(0);
+    expect(result.messages.map((m) => m.type)).toEqual(['user', 'assistant']);
+    expect(result.messages.filter(isUnknownMessage)).toHaveLength(0);
+    expect(result.totalLines).toBe(4);
   });
 
   it('parses user message with tool_result content block', () => {

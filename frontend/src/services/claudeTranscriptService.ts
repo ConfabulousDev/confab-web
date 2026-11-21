@@ -45,6 +45,10 @@ import { reportTranscriptErrors } from './transcriptErrorReporting';
 // `tools-used` ({tools[]}; running list of tool names), and `fork-context-ref`
 // ({agentId, parentSessionId, parentLastUuid, contextLength}; subagent files only,
 // links a forked subagent to its parent context).
+//
+// k5k1: `data-flow-records` ({v, records[], snapshot?}) — a per-model-response
+// tool/plugin data-flow ledger; each record is `{listed[], response_id}` or
+// `{tool_name, event_id}`. No reader-facing content.
 const SKIPPED_MESSAGE_TYPES = new Set([
   'progress',
   'permission-mode',
@@ -69,6 +73,7 @@ const SKIPPED_MESSAGE_TYPES = new Set([
   'session-owner',
   'tools-used',
   'fork-context-ref',
+  'data-flow-records',
 ]);
 
 // Track which sessions have already had errors reported (dedup across re-parses)
