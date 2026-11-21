@@ -5,7 +5,7 @@ import { CostAmount } from '@/components/CostAmount';
 import { formatTokenCount } from '@/utils/tokenStats';
 import {
   providerLabel,
-  getProviderMetadataOrFallback,
+  providerChartColor,
 } from '@/utils/providers';
 import { getAdapter, isTokensMeasurable } from '@/providers/registry';
 import type {
@@ -22,7 +22,6 @@ import {
 } from 'recharts';
 import styles from './TrendsTokensCard.module.css';
 
-const UNKNOWN_PROVIDER_COLOR = '#9ca3af';
 // Synthetic stack key used when no per-provider breakdown is available
 // (older wire payloads). Cannot collide with a canonical provider id.
 const FALLBACK_STACK_KEY = '__total__';
@@ -30,8 +29,7 @@ const FALLBACK_STACK_KEY = '__total__';
 function providerColor(providerId: string): string {
   // The synthetic single-stack bar uses the shared money green (fdp3).
   if (providerId === FALLBACK_STACK_KEY) return 'var(--color-cost)';
-  const meta = getProviderMetadataOrFallback(providerId, 'neutral');
-  return meta?.brandColor ?? UNKNOWN_PROVIDER_COLOR;
+  return providerChartColor(providerId);
 }
 
 interface TrendsTokensCardProps {

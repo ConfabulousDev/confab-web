@@ -33,6 +33,8 @@ import {
   CardInvalidationsListResponseSchema,
   CardTypesResponseSchema,
   UnpricedModelsResponseSchema,
+  ProviderShareResponseSchema,
+  SessionPointsResponseSchema,
   PrecomputeFailuresResponseSchema,
   ReleasePrecomputeFailuresResponseSchema,
   validateResponse,
@@ -67,6 +69,8 @@ import {
   type InvalidateCardsResponse,
   type CardInvalidationsListResponse,
   type UnpricedModelsResponse,
+  type ProviderShareResponse,
+  type SessionPointsResponse,
   type PrecomputeFailuresResponse,
   type ReleasePrecomputeFailuresResponse,
 } from '@/schemas/api';
@@ -727,6 +731,27 @@ export const orgReposAPI = {
   },
 };
 
+/** Filters shared by both Session Insights endpoints (c3ts). */
+export interface SessionInsightsParams {
+  /** RFC3339 range start; omitted together with `all` for the server's 30-day default. */
+  from?: string;
+  /** All time (no lower bound). Mutually exclusive with `from`. */
+  all?: boolean;
+  /** Canonical providers; empty means every provider. */
+  providers: string[];
+  userId?: number;
+}
+
+function sessionInsightsQuery(params: SessionInsightsParams): string {
+  const search = new URLSearchParams();
+  if (params.all) search.set('all', 'true');
+  else if (params.from) search.set('from', params.from);
+  for (const p of params.providers) search.append('provider', p);
+  if (params.userId !== undefined) search.set('user_id', String(params.userId));
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const adminAPI = {
   listUsers: (): Promise<AdminUserListResponse> =>
     api.getValidated('/admin/users', AdminUserListResponseSchema),
@@ -793,6 +818,13 @@ export const adminAPI = {
   // table — surfaces a newly-released unpriced model without grepping WARN logs.
   getUnpricedModels: (): Promise<UnpricedModelsResponse> =>
     api.getValidated('/admin/unpriced-models', UnpricedModelsResponseSchema),
+
+  // c3ts: instance-wide session metadata for the Session Insights tab.
+  getSessionInsightsProviderShare: (params: SessionInsightsParams): Promise<ProviderShareResponse> =>
+    api.getValidated(`/admin/session-insights/provider-share${sessionInsightsQuery(params)}`, ProviderShareResponseSchema),
+
+  getSessionInsightsPoints: (params: SessionInsightsParams): Promise<SessionPointsResponse> =>
+    api.getValidated(`/admin/session-insights/points${sessionInsightsQuery(params)}`, SessionPointsResponseSchema),
 
   // 6kbe: sessions the worker quarantined after repeated precompute failures.
   listPrecomputeFailures: (): Promise<PrecomputeFailuresResponse> =>

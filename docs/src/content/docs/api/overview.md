@@ -58,7 +58,7 @@ Login and callback URLs for GitHub, Google, and generic OIDC providers, plus pas
 
 ### Admin endpoints (super-admin only)
 
-User management (create, activate, deactivate, grant or revoke admin, delete), system shares, smart recap prompt settings, card invalidation, the unpriced-models report, and precompute failures (list and release quarantined sessions).
+User management (create, activate, deactivate, grant or revoke admin, delete), system shares, smart recap prompt settings, card invalidation, the unpriced-models report, precompute failures (list and release quarantined sessions), and session insights (instance-wide provider share and per-session size metrics).
 
 [Full admin reference →](https://github.com/ConfabulousDev/confab-web/blob/main/backend/API.md#admin-endpoints-super-admin-only)
 

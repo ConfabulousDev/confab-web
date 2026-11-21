@@ -95,3 +95,17 @@ func LoadSessionSyncFiles(ctx context.Context, d *DB, session *SessionDetail) er
 
 	return nil
 }
+
+// SessionTitleExpr returns the SQL expression for a session's display title,
+// given the sessions table alias: custom_title, then the Smart Recap
+// suggested_session_title, then summary, then first_user_message — the same
+// precedence (and empty-string skipping) the frontend's session list applies via
+// getSessionTitle. Nullable when all four are null or empty.
+func SessionTitleExpr(alias string) string {
+	cols := []string{"custom_title", "suggested_session_title", "summary", "first_user_message"}
+	parts := make([]string, len(cols))
+	for i, c := range cols {
+		parts[i] = "NULLIF(" + alias + "." + c + ", '')"
+	}
+	return "COALESCE(" + strings.Join(parts, ", ") + ")"
+}
