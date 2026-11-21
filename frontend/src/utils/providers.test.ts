@@ -81,9 +81,18 @@ describe('PROVIDER_METADATA', () => {
     expect(meta.label).toBe('Cursor');
     expect(meta.brandDisplayName).toBe('Cursor');
     expect(meta.icon).toBe(CursorIcon);
-    expect(meta.brandColor).toBe('#6b7280');
+    expect(meta.brandColor).toBe('#3b82f6');
     expect(meta.resumeCommand.idLabel).toBe('Copy Cursor ID');
     expect(meta.resumeCommand.commandHint).toBe('for cursor-agent resume');
+  });
+});
+
+// 5v5f: chart series are told apart by brandColor, so no two registry
+// entries may share one (OpenCode and Cursor were once near-identical greys).
+describe('brandColor uniqueness', () => {
+  it('gives every provider a distinct brandColor', () => {
+    const colors = Object.values(PROVIDER_METADATA).map((m) => m.brandColor.toLowerCase());
+    expect(new Set(colors).size).toBe(colors.length);
   });
 });
 

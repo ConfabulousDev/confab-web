@@ -108,10 +108,11 @@ export const PROVIDER_METADATA: Record<ProviderId, ProviderMetadata> = {
     icon: CursorIcon,
     // Cursor's brand mark is monochrome; the CursorIcon uses currentColor so it
     // adapts per theme. brandColor drives the Trends chart series, which recharts
-    // needs as a fixed hex (not currentColor / a CSS var), so it pins a neutral
-    // slate (#6b7280) — readable on both chart backgrounds and distinct from the
-    // #9ca3af unknown-provider gray and OpenCode's #656363.
-    brandColor: '#6b7280',
+    // needs as a fixed hex (not currentColor / a CSS var). OpenCode already owns
+    // the grey slot, so Cursor gets blue (#3b82f6): readable on both chart
+    // backgrounds and clearly apart from every other series (5v5f — the old
+    // slate #6b7280 was nearly identical to OpenCode's #656363).
+    brandColor: '#3b82f6',
     // The ingested Cursor session id is the agent-transcripts UUID. Cursor's only
     // real resume-by-id path is the agent CLI: `cursor-agent --resume=<id>`.
     resumeCommand: { idLabel: 'Copy Cursor ID', commandHint: 'for cursor-agent resume' },
