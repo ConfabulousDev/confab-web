@@ -1,8 +1,8 @@
 /* Floating navigation buttons for scroll containers */
 .navButtons {
   position: fixed;
-  bottom: var(--spacing-xl);
-  right: var(--spacing-xl);
+  bottom: calc(var(--spacing-xl) + var(--safe-bottom));
+  right: calc(var(--spacing-xl) + var(--safe-right));
   z-index: 100;
   display: flex;
   flex-direction: column;

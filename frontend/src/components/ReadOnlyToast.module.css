@@ -1,6 +1,6 @@
 .toast {
   position: fixed;
-  bottom: var(--spacing-lg);
+  bottom: calc(var(--spacing-lg) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
   padding: var(--spacing-sm) var(--spacing-lg);

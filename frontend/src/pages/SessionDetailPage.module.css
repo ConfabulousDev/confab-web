@@ -192,6 +192,7 @@
   max-width: 560px;
   width: 90%;
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }

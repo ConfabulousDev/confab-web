@@ -1,8 +1,8 @@
 .header {
   display: flex;
   align-items: center;
-  height: 48px;
-  padding: 0 var(--spacing-xl);
+  height: calc(48px + var(--safe-top));
+  padding: var(--safe-top) var(--spacing-xl) 0;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-primary);
   position: sticky;
@@ -216,7 +216,7 @@
 
 @media (max-width: 480px) {
   .header {
-    padding: 0 var(--spacing-md);
+    padding: var(--safe-top) var(--spacing-md) 0;
   }
 
   /* The all-Lobster wordmark is wider than the old mixed one; shrink it so
