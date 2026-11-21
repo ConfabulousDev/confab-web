@@ -59,6 +59,6 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		// Union: env super-admin OR the users.is_admin column (5k4v). Set on the
 		// outer MeResponse field, which JSON-shadows the embedded User.IsAdmin
 		// (`json:"-"`).
-		IsAdmin: admin.IsSuperAdmin(user.Email) || user.IsAdmin,
+		IsAdmin: admin.IsEffectiveAdmin(user),
 	})
 }

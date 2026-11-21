@@ -89,6 +89,9 @@ export const SessionDetailSchema = z.object({
   is_owner: z.boolean().optional(), // True if viewer is session owner (shared sessions only)
   shared_by_email: z.string().nullable().optional(), // Email of session owner (non-owner access only)
   owner_email: z.string(), // Email of session owner (always populated)
+  // How the viewer reached this session. 'admin' (xtrf) = an instance admin
+  // with no owner/share access: read-only, redacted like a share.
+  access_type: z.enum(['owner', 'recipient', 'system', 'public', 'admin']).optional(),
 });
 
 const SessionShareSchema = z.object({

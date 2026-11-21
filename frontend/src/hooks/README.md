@@ -10,7 +10,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | `useSessionsFetch.ts` | Paginated session list with server-side filtering and debounced search |
 | `useURLFilters.ts` | Generic URL-synced filter state hook (string, string[], boolean, dateRange fields) |
 | `useURLFilters.test.ts` | Tests for `useURLFilters` |
-| `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, providers, query) via `useURLFilters` |
+| `useSessionFilters.ts` | URL-synced session filter state (repos, branches, owners, providers, query, admin `scope`) via `useURLFilters` |
 | `useProviderTranscriptFilters.ts` | Shared machinery for the per-provider transcript filters (x5w2): owns the `?hide=` URL sync, derives typed `filterState` via the provider's `stateFromPaths`, and provides generic category (tri-state for hierarchical) + subcategory toggles. Toggles operate on the canonical hidden-path set so the generic never indexes the opaque state |
 | `useClaudeTranscriptFilters.ts` | URL-synced Claude transcript message category filters (thin `useProviderTranscriptFilters` wrapper); exports `pathsFromState`/`stateFromPaths`/`DEFAULT_HIDDEN` |
 | `useCodexTranscriptFilters.ts` | URL-synced Codex transcript category filters (CF-361) via `useProviderTranscriptFilters`. Shares the `?hide=` slot with the Claude/OpenCode hooks; foreign tokens are no-ops on read |
@@ -47,7 +47,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | Hook | Signature | Description |
 |------|-----------|-------------|
 | `useAuth` | `() => UseAuthReturn` | Auth state via React Query. Retries 5xx errors twice, never retries 401. |
-| `useSessionsFetch` | `(filters: SessionFilters) => UseSessionsFetchReturn` | Cursor-based paginated list. Debounces search query by 300ms. |
+| `useSessionsFetch` | `(filters: SessionFilters) => UseSessionsFetchReturn` | Cursor-based paginated list. Debounces search query by 300ms. Sends `scope` when set; a scope change resets the cursor like any filter change. |
 | `useLoadSession` | `({ fetchSession, deps }) => UseLoadSessionResult` | Loads a single session with typed error states (`not_found`, `expired`, `forbidden`, `auth_required`, `general`). |
 | `useAnalyticsPolling` | `(sessionId, enabled?) => UseAnalyticsPollingReturn` | Polls session analytics. Sends `as_of_line` for 304 Not Modified support. |
 | `useSmartPolling` | `(fetchFn, options?) => UseSmartPollingReturn<T>` | Generic polling: suspended (tab hidden), passive (idle, 60s), active (30s). Supports merge functions and interval overrides. |
@@ -60,7 +60,7 @@ Custom React hooks for the Confab frontend. Organized by responsibility: data fe
 | Hook | Signature | Description |
 |------|-----------|-------------|
 | `useURLFilters` | `<T>(config) => URLFiltersResult<T>` | Generic URL filter persistence. Supports string, string[], boolean, and dateRange fields. Provides `setFilter`, `setAll`, `toggleArrayValue`, `clearAll`, and `commitHistory`. |
-| `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, providers, query) to URL search params via `useURLFilters`. |
+| `useSessionFilters` | `() => SessionFilters & Actions` | Reads/writes session filter state (repos, branches, owners, providers, query) to URL search params via `useURLFilters`. Also the admin list `scope` (`?scope=all`, `setScope`, xtrf); `clearAll` clears the filter chips but keeps `scope`, which is a separate toggle. |
 | `useProviderTranscriptFilters` | `<TState>(config) => { filterState, setFilterState, toggleCategory, toggleSubcategory }` | x5w2 — shared `?hide=` URL sync + tri-state category / subcategory toggles for the per-provider transcript filters. `config` supplies `defaultState`, `pathsFromState`, `stateFromPaths`, and `hierarchicalKeys`. Backs the four hooks below. |
 | `useClaudeTranscriptFilters` | `() => ClaudeTranscriptFiltersResult` | Claude transcript message category visibility (URL `hide`), built on `useProviderTranscriptFilters`. Typed toggles for categories and subcategories (user/assistant/attachment). |
 | `useCodexTranscriptFilters` | `() => CodexTranscriptFiltersResult` | CF-361 — Codex parallel. Same `?hide=` URL slot with provider-specific token grammar (`user`, `assistant.commentary`, `tool_call.exec_command`, …). Default-hidden: `reasoning_hidden`. Toggles for `category`, `assistantSubcategory`, `toolCallSubcategory`. |

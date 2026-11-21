@@ -41,3 +41,7 @@ When you're ready, work through:
 ## 3. Onboard your team
 
 Once your instance is up and reachable, share its URL with your users and point them at the [Quickstart for end users](/getting-started/end-user-quickstart/). They sign in, run `confab setup --backend-url <your-instance-url>`, and they're done.
+
+## 4. Explore usage
+
+As an admin you can browse every session on the instance without asking anyone to share it: turn on **All sessions** on the Sessions page and open any session. The view is read-only and redacted like a shared session. See [Admin access](/features/sharing/#admin-access).

@@ -9,6 +9,7 @@ import { RelativeTime } from '@/components/RelativeTime';
 import PageHeader from '@/components/PageHeader';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
+import SessionScopeToggle from '@/components/SessionScopeToggle';
 import ScrollNavButtons from '@/components/ScrollNavButtons';
 import Alert from '@/components/Alert';
 import Quickstart from '@/components/Quickstart';
@@ -38,15 +39,18 @@ function SessionsPage() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const {
-    repos, branches, owners, providers, query,
+    repos, branches, owners, providers, query, scope,
     toggleRepo, toggleBranch, toggleOwner, toggleProvider,
-    setQuery, clearAll, commitHistory,
+    setQuery, setScope, clearAll, commitHistory,
   } = useSessionFilters();
+  const { user } = useAuth();
+  // xtrf: the "All sessions" scope is admin-only; never send it otherwise
+  // (the backend 403s a non-admin scope=all).
+  const isAdmin = user?.is_admin === true;
 
   const { sessions, hasMore, filterOptions, loading, error, refetch, goNext, goPrev, canGoPrev } = useSessionsFetch({
-    repos, branches, owners, providers, query,
+    repos, branches, owners, providers, query, scope: isAdmin ? scope : '',
   });
-  const { user } = useAuth();
   const { message: successMessage, fading: successFading } = useSuccessMessage();
 
   const ownersExceptSelf = owners.filter((o: string) => o !== user?.email);
@@ -63,6 +67,9 @@ function SessionsPage() {
           leftContent={<h1 className={styles.title}>Sessions</h1>}
           actions={
             <div className={styles.toolbarActions}>
+              {isAdmin && (
+                <SessionScopeToggle scope={scope ?? ''} onScopeChange={setScope} disabled={loading} />
+              )}
               <Pagination
                 hasMore={hasMore}
                 canGoPrev={canGoPrev}

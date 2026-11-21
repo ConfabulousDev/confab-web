@@ -144,7 +144,44 @@ describe('useSessionFilters', () => {
       const { result } = renderHook(() => useSessionFilters());
       act(() => result.current.clearAll());
 
-      expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
+      expect(currentParams.toString()).toBe('');
+      expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+    });
+
+    it('keeps the admin scope when clearing filter chips (xtrf)', () => {
+      setParams({ repo: 'confab-web', scope: 'all' });
+      const { result } = renderHook(() => useSessionFilters());
+      act(() => result.current.clearAll());
+
+      expect(currentParams.toString()).toBe('scope=all');
+    });
+  });
+
+  // xtrf: admin "All sessions" scope
+  describe('scope (xtrf)', () => {
+    it('defaults to the empty (mine & shared) scope', () => {
+      const { result } = renderHook(() => useSessionFilters());
+      expect(result.current.scope).toBe('');
+    });
+
+    it('reads scope=all from the URL', () => {
+      setParams({ scope: 'all' });
+      const { result } = renderHook(() => useSessionFilters());
+      expect(result.current.scope).toBe('all');
+    });
+
+    it('ignores unknown scope values in the URL', () => {
+      setParams({ scope: 'everything' });
+      const { result } = renderHook(() => useSessionFilters());
+      expect(result.current.scope).toBe('');
+    });
+
+    it('setScope writes and removes the scope param', () => {
+      const { result } = renderHook(() => useSessionFilters());
+      act(() => result.current.setScope('all'));
+      expect(currentParams.get('scope')).toBe('all');
+      act(() => result.current.setScope(''));
+      expect(currentParams.has('scope')).toBe(false);
     });
   });
 
@@ -195,7 +232,7 @@ describe('useSessionFilters', () => {
       const { result } = renderHook(() => useSessionFilters());
       act(() => result.current.clearAll());
 
-      expect(mockSetSearchParams).toHaveBeenCalledWith({}, { replace: true });
+      expect(currentParams.toString()).toBe('');
     });
   });
 });

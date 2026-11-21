@@ -117,6 +117,33 @@ describe('useSessionsFetch', () => {
     });
   });
 
+  // xtrf: admin "All sessions" toggle
+  it('adds scope=all to the request when the scope is all', async () => {
+    const { result } = renderHook(() => useSessionsFetch({ ...defaultFilters, scope: 'all' }));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(sessionsAPI.list).toHaveBeenCalledWith({ scope: 'all' });
+  });
+
+  it('refetches with scope=all when the scope toggles on', async () => {
+    const { result, rerender } = renderHook(
+      ({ filters }: { filters: SessionFilters }) => useSessionsFetch(filters),
+      { initialProps: { filters: defaultFilters } },
+    );
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(sessionsAPI.list).toHaveBeenLastCalledWith(undefined);
+
+    rerender({ filters: { ...defaultFilters, scope: 'all' } });
+    await waitFor(() => {
+      expect(sessionsAPI.list).toHaveBeenLastCalledWith({ scope: 'all' });
+    });
+  });
+
   it('handles fetch errors', async () => {
     const error = new Error('Network error');
     vi.mocked(sessionsAPI.list).mockRejectedValue(error);

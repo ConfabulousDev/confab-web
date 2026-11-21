@@ -416,7 +416,7 @@ Authorization: Bearer <api_key>
 }
 ```
 
-**Access rules:** Follows the canonical access model (CF-132). Owner always has access. Recipient shares, system shares, and public shares also grant access. The `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` env var (on-prem) is respected.
+**Access rules:** Follows the canonical access model (CF-132). Owner always has access. Recipient shares, system shares, and public shares also grant access, and so does admin status (`SUPER_ADMIN_EMAILS` or `users.is_admin`, read-only and redacted). The `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` env var (on-prem) is respected.
 
 **Error responses:**
 - `400` — Invalid `max_chars` value
@@ -503,7 +503,7 @@ Endpoints used by the web dashboard. All require [session cookie authentication]
 | `POST` | `/api/v1/keys` | Session | Create an API key from `{"name": "..."}` (default `"API Key"`). The raw `key` appears only in this response. `409` on a duplicate name or the per-user key limit. |
 | `GET` | `/api/v1/keys` | Session | List the caller's API keys (`id`, `user_id`, `name`, `created_at`, `last_used_at`; never the key). |
 | `DELETE` | `/api/v1/keys/{id}` | Session | Delete one of the caller's API keys. `204`; `404` if not found. |
-| `GET` | `/api/v1/sessions` | Session | Cursor-paginated list of sessions visible to the caller (owned, recipient-shared, system-shared, or all sessions with `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true`), plus filter options. Query: `repo`, `branch`, `owner`, `pr`, `provider` (comma-separated), `q`, `cursor`. |
+| `GET` | `/api/v1/sessions` | Session | Cursor-paginated list of sessions visible to the caller (owned, recipient-shared, system-shared, or all sessions with `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true`), plus filter options. Query: `repo`, `branch`, `owner`, `pr`, `provider` (comma-separated), `q`, `cursor`, `scope`. `scope=all` (admins only: `SUPER_ADMIN_EMAILS` or `users.is_admin`) lists and builds filter options from every session on the instance, exactly like share-all mode: rows the caller doesn't own carry `access_type: "system_share"` (or `private_share` when the caller is a recipient). A non-admin `scope=all` returns `403`, any other `scope` value `400`. With `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true` it changes nothing. |
 | `PATCH` | `/api/v1/sessions/{id}/title` | Session, owner | Set `custom_title` (max 255 chars), or `null` to revert to the derived title. Returns the updated session detail. |
 | `DELETE` | `/api/v1/sessions/{id}` | Session, owner | Delete a session, its stored transcript chunks, and dependent rows (sync files, shares). |
 | `POST` | `/api/v1/sessions/{id}/share` | Session, owner | Create a share from `is_public`, `recipients` (required unless public), `expires_in_days`, `skip_notifications`. Emails recipients unless skipped. `403` when `ENABLE_SHARE_CREATION` is off; `429` on the daily share or email quota. |
@@ -866,13 +866,15 @@ These endpoints accept either a session cookie or an `Authorization: Bearer` API
 
 ## Canonical Session Access (Optional Auth)
 
-Session reads that serve owners, share recipients, and anonymous viewers of public shares from one URL. Authentication is [optional](#4-optional-authentication-canonical-session-access). Access resolves in order: owner, then recipient share, then system share (any authenticated user; every session when `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true`), then public share. The [External API](#external-api-endpoints-api-key-auth) endpoints use the same model with API key auth.
+Session reads that serve owners, share recipients, and anonymous viewers of public shares from one URL. Authentication is [optional](#4-optional-authentication-canonical-session-access). Access resolves in order: owner, then recipient share, then system share (any authenticated user; every session when `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true`), then public share, then admin (an authenticated `SUPER_ADMIN_EMAILS` or `users.is_admin` user with none of the above). The [External API](#external-api-endpoints-api-key-auth) endpoints use the same model with API key auth.
 
-Unless noted, a caller without access gets `401` ("Sign in to view this session") when the session has non-public shares that signing in could unlock, otherwise `404`. A session whose owner is deactivated returns `403`.
+Admin access is always on, with no config flag, and read-only: write endpoints keep their owner checks. An admin gets the same redacted view as a system-share viewer, including `owner_email` and `shared_by_email`. An admin who is also the owner or a share recipient keeps that access type, and under `SHARE_ALL_SESSIONS_TO_AUTHENTICATED=true` admins get `system` like everyone else. Admin views are not audit-logged.
+
+Unless noted, a caller without access gets `401` ("Sign in to view this session") when the session has non-public shares that signing in could unlock, otherwise `404`. A session whose owner is deactivated returns `403`, except to admins.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/sessions/{id}` | Optional | Session detail: metadata, git info, and `files` (sync files with `last_synced_line`). `hostname`, `username`, `cwd`, and `transcript_path` are owner-only; public-share viewers don't receive `owner_email`. |
+| `GET` | `/api/v1/sessions/{id}` | Optional | Session detail: metadata, git info, and `files` (sync files with `last_synced_line`). `hostname`, `username`, `cwd`, and `transcript_path` are owner-only; public-share viewers don't receive `owner_email`. `access_type` says how the caller reached the session: `owner`, `recipient`, `system`, `public`, or `admin`. |
 | `GET` | `/api/v1/sessions/{id}/sync/file` | Optional | Raw JSONL of one sync file as `text/plain`. Query: `file_name` (required), `line_offset` (return only lines whose absolute line number is greater than it; every returned line ends in `\n`). No access returns `404`. |
 | `GET` | `/api/v1/sessions/{id}/analytics` | Optional | Computed session analytics. See [Get Session Analytics](#get-session-analytics). |
 | `GET` | `/api/v1/sessions/{id}/github-links` | Optional | `{"links": [...]}` for anyone with session access; `404` otherwise. |

@@ -24,6 +24,7 @@ function buildParams(filters: SessionFilters, cursor: string): Record<string, st
   if (filters.owners.length > 0) params.owner = filters.owners.join(',');
   if (filters.providers.length > 0) params.provider = filters.providers.join(',');
   if (filters.query) params.q = filters.query;
+  if (filters.scope) params.scope = filters.scope;
   if (cursor) params.cursor = cursor;
   return params;
 }
@@ -80,6 +81,7 @@ export function useSessionsFetch(filters: SessionFilters): UseSessionsFetchRetur
     branches: filters.branches,
     owners: filters.owners,
     providers: filters.providers,
+    scope: filters.scope ?? '',
   });
 
   // Reset cursor when filters change

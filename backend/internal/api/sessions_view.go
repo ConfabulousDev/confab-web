@@ -111,6 +111,27 @@ func HandleListSessions(database *db.DB) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), DatabaseTimeout)
 		defer cancel()
 
+		// scope=all (xtrf): admins list every session on the instance. Explicit
+		// 403 for non-admins rather than silently falling back to the default.
+		switch scope := r.URL.Query().Get("scope"); scope {
+		case "":
+		case "all":
+			isAdmin, err := viewerAdminCheck(database, &userID)(ctx)
+			if err != nil {
+				log.Error("Failed to check admin status", "error", err)
+				respondError(w, http.StatusInternalServerError, "Failed to list sessions")
+				return
+			}
+			if !isAdmin {
+				respondError(w, http.StatusForbidden, "scope=all requires admin")
+				return
+			}
+			params.AllSessions = true
+		default:
+			respondError(w, http.StatusBadRequest, "scope must be 'all' or omitted")
+			return
+		}
+
 		// Get cursor-paginated sessions with filter options
 		result, err := sessionStore.ListUserSessionsPaginated(ctx, userID, params)
 		if err != nil {

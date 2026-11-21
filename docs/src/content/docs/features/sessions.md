@@ -5,6 +5,8 @@ description: Browse, search, and inspect every session you've ever run.
 
 The **Sessions** page lists every session you own or have access to, with filters for provider, repo, owner, date range, and more.
 
+Admins also get a **Mine & shared** / **All sessions** toggle. **All sessions** lists every session on the instance; opening one shows a read-only, redacted view marked **Viewing as admin**. See [Admin access](/features/sharing/#admin-access).
+
 ## Session viewer
 
 Clicking a session opens a three-pane view:

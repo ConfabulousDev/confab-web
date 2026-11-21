@@ -165,6 +165,18 @@ export const SharedSession: Story = {
   },
 };
 
+// xtrf: an admin viewing another user's session (no share). The
+// "Viewing as admin" badge names the owner; owner-only controls stay hidden.
+export const ViewingAsAdmin: Story = {
+  args: {
+    ...SharedSession.args,
+    sessionId: 'session-admin',
+    ownerEmail: 'carol@example.com',
+    sharedByEmail: 'carol@example.com',
+    viewingAsAdmin: true,
+  },
+};
+
 export const SharedSessionWithoutEmail: Story = {
   args: {
     sessionId: 'session-456-legacy',

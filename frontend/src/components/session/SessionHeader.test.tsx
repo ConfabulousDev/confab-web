@@ -16,6 +16,43 @@ describe('SessionHeader', () => {
     ownerEmail: 'owner@example.com',
   };
 
+  // xtrf: admin viewing another user's session
+  describe('viewing as admin', () => {
+    it('shows the "Viewing as admin" badge with the owner email', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} isOwner={false} isShared={true} viewingAsAdmin={true} />
+      );
+      expect(screen.getByText('Viewing as admin')).toBeInTheDocument();
+      // Owner email appears in the badge (it may also appear in the owner chip).
+      const badge = screen.getByText('Viewing as admin').parentElement!;
+      expect(within(badge).getByText('owner@example.com')).toBeInTheDocument();
+      expect(screen.queryByText('Shared Session')).not.toBeInTheDocument();
+    });
+
+    it('hides owner-only controls for admin viewers', () => {
+      renderWithRouter(
+        <SessionHeader
+          {...defaultProps}
+          isOwner={false}
+          isShared={true}
+          viewingAsAdmin={true}
+          onShare={() => {}}
+          onDelete={() => {}}
+        />
+      );
+      expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    });
+
+    it('shows the regular shared indicator when not an admin view', () => {
+      renderWithRouter(
+        <SessionHeader {...defaultProps} isOwner={false} isShared={true} />
+      );
+      expect(screen.getByText('Shared Session')).toBeInTheDocument();
+      expect(screen.queryByText('Viewing as admin')).not.toBeInTheDocument();
+    });
+  });
+
   describe('UUID chip', () => {
     it('renders truncated backend UUID as a chip', () => {
       renderWithRouter(

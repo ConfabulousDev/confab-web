@@ -129,13 +129,21 @@ func (s *Store) buildSharedWithMeQuery() string {
 	`
 }
 
+// showAllSessions reports whether the list should use the share-all
+// visibility CTE: instance-wide ShareAllSessions, or an admin's scope=all
+// (xtrf). In both, non-owned rows without a private share are tagged
+// system_share.
+func (s *Store) showAllSessions(params db.SessionListParams) bool {
+	return s.DB.ShareAllSessions || params.AllSessions
+}
+
 // ListUserSessionsPaginated returns filtered, cursor-paginated sessions with pre-materialized filter options.
 func (s *Store) ListUserSessionsPaginated(ctx context.Context, userID int64, params db.SessionListParams) (*db.SessionListResult, error) {
 	if params.PageSize == 0 {
 		params.PageSize = db.DefaultPageSize
 	}
 
-	filterOptions, err := s.queryFilterOptions(ctx, userID)
+	filterOptions, err := s.queryFilterOptions(ctx, userID, s.showAllSessions(params))
 	if err != nil {
 		return nil, err
 	}
@@ -162,9 +170,9 @@ func (s *Store) ListUserSessionsPaginated(ctx context.Context, userID int64, par
 // UNION-ALL duplicates emitted by the helper (e.g. a recipient who also has a
 // system share to the same session). The listable set is materialized once so
 // the per-session listability probe runs once rather than per dropdown.
-func (s *Store) queryFilterOptions(ctx context.Context, userID int64) (db.SessionFilterOptions, error) {
+func (s *Store) queryFilterOptions(ctx context.Context, userID int64, allSessions bool) (db.SessionFilterOptions, error) {
 	query := `
-		WITH ` + db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,
+		WITH ` + db.VisibleSessionsCTE(allSessions) + `,
 		visible AS (
 			SELECT DISTINCT vs.id, vs.user_id, vs.owner_email FROM visible_sessions vs
 		),
@@ -384,11 +392,11 @@ func (s *Store) buildFilteredSessionsQuery(userID int64, params db.SessionListPa
 	commonFilters, ownerFilter, searchJoin := buildPushdownFilters(pb, params)
 	limitP := pb.add(params.PageSize + 1)
 
-	visibleCTEs := db.VisibleSessionsCTE(s.DB.ShareAllSessions) + `,` + dedupedVisibleCTE
+	visibleCTEs := db.VisibleSessionsCTE(false) + `,` + dedupedVisibleCTE
 	from := `
 			FROM deduped_visible d
 			JOIN sessions s ON d.id = s.id`
-	if s.DB.ShareAllSessions {
+	if s.showAllSessions(params) {
 		visibleCTEs = db.VisibleSessionsCTE(true)
 		from = visibleSessionsLateral
 	}

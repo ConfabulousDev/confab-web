@@ -45,7 +45,7 @@ Each sub-package depends on the root `db` package for the `DB` handle, shared ty
 ## Key Types
 
 - **`DB`** -- Wraps `*sql.DB` with a `ShareAllSessions` flag for on-prem deployments where all sessions are visible to all authenticated users.
-- **`SessionAccessType`/`SessionAccessInfo`** -- Enum + struct describing how a user can access a session (owner, recipient, system, public, none) and whether authentication would help.
+- **`SessionAccessType`/`SessionAccessInfo`** -- Enum + struct describing how a user can access a session (owner, recipient, system, public, admin, none) and whether authentication would help. `SessionDetail.AccessType` carries it on the wire (`access_type`, canonical path only). `SessionListParams.AllSessions` switches the list to the share-all CTE (admin `scope=all`, xtrf).
 - **`SessionDetail.RedactForSharing()`** -- Strips PII fields (hostname, username, cwd, transcript path) for non-owner access. Does NOT touch `git_info` (it runs before the git_info unmarshal and only nils `*string` fields) — that JSONB blob is sanitized separately via `SanitizeGitInfoForSharing`.
 - **`SanitizeGitInfoForSharing(raw)`** -- Redacts the unmarshaled `git_info` for non-owner access: keeps `branch` + a host/credential-free `owner/repo` display name, drops everything else (d29s).
 

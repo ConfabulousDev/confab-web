@@ -159,7 +159,7 @@ Sharing behavior and UI customization.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `false` | No | Make every session visible to every authenticated user; useful for small teams that want full transparency |
+| `SHARE_ALL_SESSIONS_TO_AUTHENTICATED` | `false` | No | Make every session visible to every authenticated user; useful for small teams that want full transparency. Independently of this flag, admins can always view every session (read-only, redacted); there is no flag to turn that off. See [Admin access](/features/sharing/#admin-access). |
 | `ENABLE_SHARE_CREATION` | `false` | No | Enable share link creation |
 | `SHARE_DAILY_QUOTA` | `100` | No | Per-user cap on shares created in a rolling 24h window; the creation endpoint returns 429 once a user exceeds it. Set to `0` to disable the cap. |
 | `ENABLE_ORG_ANALYTICS` | `false` | No | Enable the [Organization Analytics view](/features/organization-analytics/) — per-user aggregated cost and usage across the whole org. **Every authenticated user can see every other user's totals**, so only enable for trusted-team deployments. |
