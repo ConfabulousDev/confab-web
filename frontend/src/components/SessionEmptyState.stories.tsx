@@ -9,7 +9,7 @@ const meta: Meta<typeof SessionEmptyState> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '600px', background: 'var(--color-bg-primary)', borderRadius: '8px' }}>
+      <div style={{ width: '600px', maxWidth: '100%', background: 'var(--color-bg-primary)', borderRadius: '8px' }}>
         <Story />
       </div>
     ),

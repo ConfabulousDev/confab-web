@@ -32,8 +32,12 @@
 }
 
 .text {
+  /* Block so text-overflow applies: long values end in an ellipsis inside the
+     chip instead of running past it (7grf). */
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .copiedText {

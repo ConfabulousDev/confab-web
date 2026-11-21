@@ -7,7 +7,7 @@ const meta: Meta<typeof RedactionsCard> = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div style={{ width: '280px' }}>
+      <div style={{ width: '280px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

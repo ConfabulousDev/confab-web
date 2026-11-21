@@ -10,7 +10,7 @@ const meta: Meta<typeof SmartRecapCard> = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div style={{ width: '560px' }}>
+      <div style={{ width: '560px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

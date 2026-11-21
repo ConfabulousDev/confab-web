@@ -221,3 +221,35 @@ describe('ThreadListDropdown / selection, filter and keyboard', () => {
     expect(button).toHaveFocus();
   });
 });
+
+describe('ThreadListDropdown / viewport clamping (7grf)', () => {
+  function stubPopoverRect(left: number, width: number) {
+    return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      // Only the popover is measured; it reports its untranslated position.
+      const shift = Number.parseFloat(this.style.translate || '0');
+      return DOMRect.fromRect({ x: left + shift, y: 0, width, height: 200 });
+    });
+  }
+
+  it('shifts a popover that would pass the right edge of a phone screen back inside it', async () => {
+    vi.stubGlobal('innerWidth', 375);
+    const rect = stubPopoverRect(100, 343);
+    const { button } = renderDropdown();
+    await userEvent.click(button);
+    const popover = screen.getByRole('listbox').parentElement!;
+    // 375 - 8 margin - 343 width = 24 → shift left by 76.
+    expect(popover.style.translate).toBe('-76px 0');
+    rect.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('leaves a popover that fits untouched', async () => {
+    vi.stubGlobal('innerWidth', 1280);
+    const rect = stubPopoverRect(100, 360);
+    const { button } = renderDropdown();
+    await userEvent.click(button);
+    expect(screen.getByRole('listbox').parentElement!.style.translate).toBe('');
+    rect.mockRestore();
+    vi.unstubAllGlobals();
+  });
+});

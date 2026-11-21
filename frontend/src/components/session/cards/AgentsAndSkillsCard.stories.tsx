@@ -7,7 +7,7 @@ const meta: Meta<typeof AgentsAndSkillsCard> = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div style={{ width: '380px' }}>
+      <div style={{ width: '380px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

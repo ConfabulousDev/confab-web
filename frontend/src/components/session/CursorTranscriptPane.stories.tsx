@@ -13,7 +13,7 @@ const meta: Meta<typeof CursorTranscriptPane> = {
   parameters: { layout: 'fullscreen' },
   decorators: [
     (Story) => (
-      <div style={{ height: '600px', width: '720px', border: '1px solid var(--color-border)' }}>
+      <div style={{ height: '600px', width: '720px', maxWidth: '100%', border: '1px solid var(--color-border)' }}>
         <Story />
       </div>
     ),

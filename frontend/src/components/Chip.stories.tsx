@@ -87,7 +87,7 @@ export const AllVariants: Story = {
 
 export const SessionListExample: Story = {
   render: () => (
-    <div style={{ display: 'flex', gap: '24px' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
       <div>
         <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px', textTransform: 'uppercase' }}>Git</div>
         <div style={{ display: 'flex', gap: '4px' }}>

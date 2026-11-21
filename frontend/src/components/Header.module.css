@@ -216,7 +216,7 @@
 
 @media (max-width: 480px) {
   .header {
-    padding: var(--safe-top) var(--spacing-md) 0;
+    padding: var(--safe-top) var(--spacing-sm) 0;
   }
 
   /* The all-Lobster wordmark is wider than the old mixed one; shrink it so
@@ -225,12 +225,31 @@
     font-size: 1.25rem;
   }
 
+  .badge {
+    margin-left: 3px;
+  }
+
+  /* With the demo badge or the Organization link the nav can't fit beside the
+     logo and avatar; it shrinks and scrolls sideways instead of pushing the
+     header past the screen (7grf). */
   .nav {
-    margin-left: var(--spacing-md);
-    gap: var(--spacing-md);
+    margin-left: var(--spacing-xs);
+    gap: var(--spacing-sm);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .navLink {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .actions {
-    margin-right: var(--spacing-sm);
+    margin-right: 0;
   }
 }

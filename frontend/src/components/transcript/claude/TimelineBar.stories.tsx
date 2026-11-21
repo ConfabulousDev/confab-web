@@ -305,7 +305,7 @@ function SmallDemo() {
         Use the slider to simulate scroll position.
       </p>
 
-      <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'flex-start' }}>
         <div style={{
           height: '400px',
           width: '200px',

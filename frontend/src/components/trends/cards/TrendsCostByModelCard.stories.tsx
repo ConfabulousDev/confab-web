@@ -10,7 +10,7 @@ const meta: Meta<typeof TrendsCostByModelCard> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '480px' }}>
+      <div style={{ width: '480px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

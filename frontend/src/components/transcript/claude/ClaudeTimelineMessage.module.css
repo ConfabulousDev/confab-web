@@ -354,6 +354,13 @@
     flex-wrap: wrap;
   }
 
+  /* Cost-mode pills + actions wrap instead of pushing past a phone screen. */
+  .headerRight {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
   .agentBadge {
     max-width: 80px;
   }

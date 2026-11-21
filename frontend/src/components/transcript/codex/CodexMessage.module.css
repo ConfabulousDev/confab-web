@@ -147,3 +147,11 @@
 .cachePill {
   composes: cachePill from '@/styles/badges.module.css';
 }
+
+/* Phone widths: cost-mode pills + row actions wrap to a second line instead of
+   pushing the header past the screen (7grf). */
+@media (max-width: 768px) {
+  .header {
+    flex-wrap: wrap;
+  }
+}

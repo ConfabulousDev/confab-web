@@ -13,7 +13,7 @@ const meta: Meta<typeof TrendsCostDistributionCard> = {
     // The card spans 2 grid columns in situ; widen the isolated frame so the
     // wider histogram and slanted x-axis labels render at a representative size.
     (Story) => (
-      <div style={{ width: '760px' }}>
+      <div style={{ width: '760px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

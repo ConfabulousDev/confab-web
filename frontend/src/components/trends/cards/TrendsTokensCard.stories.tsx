@@ -11,7 +11,7 @@ const meta: Meta<typeof TrendsTokensCard> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '480px' }}>
+      <div style={{ width: '480px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

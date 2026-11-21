@@ -54,8 +54,11 @@
 /* Dimension buttons row */
 .dimensionButtons {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-xs);
-  flex-shrink: 0;
+  /* Shrinks (and wraps its buttons) only once it already sits on its own
+     line, so phones don't scroll sideways (7grf). */
+  min-width: 0;
 }
 
 /* Individual dimension button + dropdown */
