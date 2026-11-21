@@ -40,3 +40,12 @@ export function formatBytes(bytes: number): string {
 	const i = Math.floor(Math.log(bytes) / Math.log(k));
 	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
+
+/**
+ * Left edge for a box of `width` so it stays `margin` px inside a viewport of
+ * `viewportWidth`. A box wider than the space between the margins pins to the
+ * left margin. Used by floating UI (tooltips, popovers) on phone screens.
+ */
+export function clampToViewportX(left: number, width: number, viewportWidth: number, margin: number): number {
+  return Math.max(margin, Math.min(left, viewportWidth - width - margin));
+}

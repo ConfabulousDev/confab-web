@@ -9,7 +9,7 @@ const meta: Meta<typeof TokensCard> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '280px' }}>
+      <div style={{ width: '280px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

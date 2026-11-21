@@ -9,7 +9,7 @@ const meta: Meta<typeof TrendsUtilizationCard> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '320px' }}>
+      <div style={{ width: '320px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

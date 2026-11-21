@@ -23,7 +23,7 @@ type Story = StoryObj<typeof Quickstart>;
 export const Embedded: Story = {
   decorators: [
     (Story) => (
-      <div style={{ width: '600px', background: 'var(--color-bg-primary)', borderRadius: '8px' }}>
+      <div style={{ width: '600px', maxWidth: '100%', background: 'var(--color-bg-primary)', borderRadius: '8px' }}>
         <Story />
       </div>
     ),
@@ -34,7 +34,7 @@ export const Landing: Story = {
   args: { variant: 'landing' },
   decorators: [
     (Story) => (
-      <div style={{ width: '1100px', background: 'var(--color-bg-secondary)', padding: '24px' }}>
+      <div style={{ width: '1100px', maxWidth: '100%', background: 'var(--color-bg-secondary)', padding: '24px' }}>
         <Story />
       </div>
     ),

@@ -5,9 +5,11 @@ const meta: Meta<typeof TokensV2Card> = {
   title: 'Session/Cards/TokensV2Card',
   component: TokensV2Card,
   parameters: { layout: 'centered' },
+  // The card requires a provider; SessionSummaryPanel injects it at runtime.
+  args: { provider: 'claude-code' },
   decorators: [
     (Story) => (
-      <div style={{ width: '280px' }}>
+      <div style={{ width: '280px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),
@@ -46,7 +48,7 @@ const multiProvider: TokensV2CardData = {
 };
 
 export const Default: Story = {
-  args: { loading: false, data: multiProvider },
+  args: { loading: false, data: multiProvider, provider: 'opencode' },
 };
 
 export const SingleProvider: Story = {
@@ -64,7 +66,7 @@ export const SingleProvider: Story = {
 };
 
 export const MultiProvider: Story = {
-  args: { loading: false, data: multiProvider },
+  args: { loading: false, data: multiProvider, provider: 'opencode' },
 };
 
 // hp73: deep multi-provider × multi-model case — the whole point of the
@@ -73,6 +75,7 @@ export const MultiProvider: Story = {
 // nest visibly under the uppercase provider header.
 export const DeepMultiProviderMultiModel: Story = {
   args: {
+    provider: 'opencode',
     loading: false,
     data: {
       total_cost_usd: '12.40',
@@ -186,6 +189,7 @@ export const ClaudeWithFastVariant: Story = {
 
 export const CodexWithReasoning: Story = {
   args: {
+    provider: 'codex',
     loading: false,
     data: {
       total_cost_usd: '2.15',

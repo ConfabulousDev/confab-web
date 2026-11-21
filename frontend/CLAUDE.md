@@ -25,7 +25,12 @@ All new or modified components get a story (`Component.stories.tsx` next to `Com
 ```bash
 npm run build-storybook   # verify stories build
 npm run storybook         # local preview
+npm run check:mobile      # build Storybook + fail on horizontal overflow at 375px (CI gate)
 ```
+
+### Mobile overflow gate
+
+CI renders every story at 375px and fails when any element passes the screen's right edge (`scripts/check-mobile-overflow.mjs`). iOS Safari pans the page sideways even though the app shell sets `overflow: hidden`, so don't rely on clipping. Make rows wrap (`flex-wrap: wrap`, `min-width: 0` on flex children) or truncate text with an ellipsis; put intentionally wide content (tables, code) in an `overflow-x: auto` scroller. Don't hide content to pass it. Story decorators use `width: 'Npx', maxWidth: '100%'`, never a bare fixed width. Allowlist entries (`scripts/mobile-overflow-allowlist.json`) need a reason. The first run needs `npx playwright-core install --only-shell chromium`.
 
 ## Code intelligence (TS LSP)
 

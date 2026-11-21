@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatBytes, stripAnsi } from './utils';
+import { clampToViewportX, formatBytes, stripAnsi } from './utils';
 import { formatDateString, formatRelativeTime } from './formatting';
 
 describe('formatBytes', () => {
@@ -110,5 +110,28 @@ describe('stripAnsi', () => {
     // This is how it appears in JSON strings
     const input = 'prefix\x1b[32mgreen\x1b[0msuffix';
     expect(stripAnsi(input)).toBe('prefixgreensuffix');
+  });
+});
+
+describe('clampToViewportX', () => {
+  // 7grf: popovers and tooltips must stay inside a phone-width viewport.
+  it('keeps a left edge that already fits', () => {
+    expect(clampToViewportX(20, 100, 375, 8)).toBe(20);
+  });
+
+  it('pulls a box that passes the right edge back inside the margin', () => {
+    expect(clampToViewportX(100, 300, 375, 8)).toBe(67);
+  });
+
+  it('pushes a box that starts left of the margin to the margin', () => {
+    expect(clampToViewportX(-30, 100, 375, 8)).toBe(8);
+  });
+
+  it('pins a box wider than the viewport to the left margin', () => {
+    expect(clampToViewportX(50, 500, 375, 8)).toBe(8);
+  });
+
+  it('accepts a box exactly as wide as the space between the margins', () => {
+    expect(clampToViewportX(100, 359, 375, 8)).toBe(8);
   });
 });

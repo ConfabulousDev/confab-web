@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { MemoryRouter } from 'react-router-dom';
 import QuickstartModal from './QuickstartModal';
 
 const meta: Meta<typeof QuickstartModal> = {
@@ -7,6 +8,13 @@ const meta: Meta<typeof QuickstartModal> = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <Story />
+      </MemoryRouter>
+    ),
+  ],
 };
 
 export default meta;

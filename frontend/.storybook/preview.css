@@ -1,0 +1,9 @@
+/* Storybook's centered layout makes #storybook-root a flex item with
+   min-width: auto, so it never shrinks below a story's fixed-width decorator
+   and `maxWidth: '100%'` on that decorator has nothing narrower to resolve
+   against. Letting the root shrink renders stories at phone widths the way
+   the app does (7grf; scripts/check-mobile-overflow.mjs). */
+.sb-main-centered #storybook-root {
+  min-width: 0;
+  max-width: 100%;
+}

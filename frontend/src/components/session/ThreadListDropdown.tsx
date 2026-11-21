@@ -3,18 +3,20 @@
 // subagent path's sibling segments and "Launched here (n)". Rows show status,
 // full label and details; a filter appears once a list has more than 8 threads.
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useDropdown } from '@/hooks';
 import { CheckIcon, ChevronIcon } from '@/components/icons';
 import { formatDuration } from '@/components/transcript/timelineFormat';
 import type { TranscriptThreadRef } from '@/providers/types';
-import { cx } from '@/utils/utils';
+import { clampToViewportX, cx } from '@/utils/utils';
 import ThreadStatusGlyph from './ThreadStatusGlyph';
 import { THREAD_STATUS_LABEL, threadMatchesQuery, threadStatus } from './threadDetails';
 import styles from './ThreadDropdown.module.css';
 
 /** More threads than this get a filter input. */
 const FILTER_THRESHOLD = 8;
+/** Gap kept between the popover and the viewport's edges. */
+const VIEWPORT_MARGIN_PX = 8;
 
 interface ThreadListDropdownProps {
   threads: readonly TranscriptThreadRef[];
@@ -63,6 +65,7 @@ export default function ThreadListDropdown({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
   const showFilter = threads.length > FILTER_THRESHOLD;
@@ -77,6 +80,16 @@ export default function ThreadListDropdown({
   // Focus moves into the popover on open: the filter when present, else the list.
   useEffect(() => {
     if (isOpen) (inputRef.current ?? listRef.current)?.focus();
+  }, [isOpen]);
+
+  // 7grf: the popover lines up with its trigger, which can sit far enough right
+  // on a phone that the popover would pass the screen edge; nudge it back in.
+  useLayoutEffect(() => {
+    const el = popoverRef.current;
+    if (!isOpen || !el) return;
+    const { left, width } = el.getBoundingClientRect();
+    const shift = clampToViewportX(left, width, window.innerWidth, VIEWPORT_MARGIN_PX) - left;
+    if (shift !== 0) el.style.translate = `${shift}px 0`;
   }, [isOpen]);
 
   useEffect(() => {
@@ -151,6 +164,7 @@ export default function ThreadListDropdown({
 
       {isOpen && (
         <div
+          ref={popoverRef}
           className={cx(styles.popover, styles.listPopover, align === 'start' && styles.listPopoverStart)}
           onKeyDown={handleKeyDown}
         >

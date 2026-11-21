@@ -44,8 +44,11 @@ npm run lint         # ESLint (must have 0 errors)
 npm test             # Vitest unit tests
 npm run storybook    # local Storybook
 npm run build-storybook
+npm run check:mobile # build Storybook, then fail on any story overflowing a 375px screen
 npm run knip         # dead-code detection
 ```
+
+`check:mobile` (CI runs it after `build-storybook`) renders every story at 375×812 with `scripts/check-mobile-overflow.mjs` and fails on any element that passes the right edge, since iOS Safari pans the whole page sideways. Horizontal scrollers (`overflow-x: auto|scroll`) and `pre`/`code` are skipped; anything else intended goes in `scripts/mobile-overflow-allowlist.json` with a reason. It needs the Playwright headless shell once: `npx playwright-core install --only-shell chromium`.
 
 Always run `npm run build && npm run lint && npm test` before declaring work done; see `./CLAUDE.md` for the frontend-specific commands, Storybook expectations, and theming rules, and `../CLAUDE.md` for project-wide conventions.
 

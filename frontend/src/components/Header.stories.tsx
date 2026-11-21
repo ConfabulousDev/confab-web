@@ -3,6 +3,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Header from './Header';
+import { AppConfigContext } from '@/contexts/AppConfigContext';
+import { defaultAppConfig } from '@/contexts/appConfigDefaults';
 
 // Mock user for authenticated state
 const mockUser = {
@@ -71,6 +73,20 @@ export const LoggedInNoAvatar: Story = {
       <QueryClientProvider client={createQueryClient({ ...mockUser, avatar_url: '' })}>
         <Story />
       </QueryClientProvider>
+    ),
+  ],
+};
+
+// Org analytics adds an Organization nav link; on phones the nav scrolls
+// sideways rather than pushing the avatar off screen (7grf).
+export const LoggedInWithOrganization: Story = {
+  decorators: [
+    (Story) => (
+      <AppConfigContext.Provider value={{ ...defaultAppConfig, orgAnalyticsEnabled: true }}>
+        <QueryClientProvider client={createQueryClient(mockUser)}>
+          <Story />
+        </QueryClientProvider>
+      </AppConfigContext.Provider>
     ),
   ],
 };

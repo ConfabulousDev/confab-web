@@ -54,7 +54,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -86,6 +86,16 @@ jobs:
       - name: Build Storybook
         working-directory: frontend
         run: npm run build-storybook
+
+      # 7grf: every story at 375px must not overflow sideways (iOS Safari pans
+      # the page). Reuses the Storybook build above.
+      - name: Install Chromium headless shell
+        working-directory: frontend
+        run: npx playwright-core install --with-deps --only-shell chromium
+
+      - name: Mobile overflow check
+        working-directory: frontend
+        run: npm run check:mobile:scan
 
   backend-unit:
     needs: changes

@@ -9,7 +9,7 @@ const meta: Meta<typeof FormField> = {
   },
   decorators: [
     (Story) => (
-      <div style={{ width: '300px' }}>
+      <div style={{ width: '300px', maxWidth: '100%' }}>
         <Story />
       </div>
     ),

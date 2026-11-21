@@ -20,6 +20,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { clampToViewportX } from '@/utils/utils';
 import styles from './Tooltip.module.css';
 
 const HOVER_DELAY_MS = 300;
@@ -73,7 +74,7 @@ export default function Tooltip({ content, children, disabled = false }: Tooltip
     if (!visible || !el || !anchor) return;
     const { width, height } = el.getBoundingClientRect();
     const centered = anchor.left + anchor.width / 2 - width / 2;
-    const left = Math.max(VIEWPORT_MARGIN_PX, Math.min(centered, window.innerWidth - width - VIEWPORT_MARGIN_PX));
+    const left = clampToViewportX(centered, width, window.innerWidth, VIEWPORT_MARGIN_PX);
     const below = anchor.bottom + GAP_PX;
     const fitsBelow = below + height <= window.innerHeight - VIEWPORT_MARGIN_PX;
     el.style.left = `${left}px`;
