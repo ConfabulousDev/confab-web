@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/admin"
+	"github.com/ConfabulousDev/confab-web/internal/models"
+	"github.com/ConfabulousDev/confab-web/internal/testutil"
 )
 
 func TestIsSuperAdmin(t *testing.T) {
@@ -80,6 +82,31 @@ func TestIsSuperAdmin(t *testing.T) {
 			got := admin.IsSuperAdmin(tt.email)
 			if got != tt.wantResult {
 				t.Errorf("IsSuperAdmin(%q) = %v, want %v", tt.email, got, tt.wantResult)
+			}
+		})
+	}
+}
+
+// TestIsEffectiveAdmin pins the admin union (env SUPER_ADMIN_EMAILS ∪
+// users.is_admin) shared by Middleware, /me and session access (xtrf).
+func TestIsEffectiveAdmin(t *testing.T) {
+	testutil.SetEnvForTest(t, "SUPER_ADMIN_EMAILS", "env@example.com")
+
+	tests := []struct {
+		name string
+		user *models.User
+		want bool
+	}{
+		{"nil user is not admin", nil, false},
+		{"env super-admin", &models.User{Email: "env@example.com"}, true},
+		{"env super-admin, case-insensitive", &models.User{Email: "ENV@example.com"}, true},
+		{"is_admin column", &models.User{Email: "db@example.com", IsAdmin: true}, true},
+		{"neither", &models.User{Email: "plain@example.com"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := admin.IsEffectiveAdmin(tt.user); got != tt.want {
+				t.Errorf("IsEffectiveAdmin(%v) = %v, want %v", tt.user, got, tt.want)
 			}
 		})
 	}

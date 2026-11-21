@@ -3,6 +3,7 @@ import Chip from '@/components/Chip';
 import PageHeader from '@/components/PageHeader';
 import FilterChipsBar from '@/components/FilterChipsBar';
 import Pagination from '@/components/Pagination';
+import SessionScopeToggle from '@/components/SessionScopeToggle';
 import { RepoIcon, BranchIcon, GitHubIcon, DurationIcon, PRIcon, RefreshIcon } from '@/components/icons';
 import { getProviderIcon } from '@/components/providerIcon';
 import { formatRelativeTime, formatDuration } from '@/utils';
@@ -246,11 +247,13 @@ interface SessionsPageChromeProps {
     providers: string[];
     query: string;
   };
+  /** xtrf: render the admin-only scope toggle with this scope. */
+  adminScope?: '' | 'all';
 }
 
 const emptyFilters = { repos: [], branches: [], owners: [], providers: [], query: '' };
 
-function SessionsPageChrome({ sessions, filters = emptyFilters }: SessionsPageChromeProps) {
+function SessionsPageChrome({ sessions, filters = emptyFilters, adminScope }: SessionsPageChromeProps) {
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.mainContent}>
@@ -258,6 +261,9 @@ function SessionsPageChrome({ sessions, filters = emptyFilters }: SessionsPageCh
           leftContent={<h1 className={styles.title}>Sessions</h1>}
           actions={
             <div className={styles.toolbarActions}>
+              {adminScope !== undefined && (
+                <SessionScopeToggle scope={adminScope} onScopeChange={() => {}} />
+              )}
               <Pagination hasMore canGoPrev onNext={() => {}} onPrev={() => {}} />
               <button
                 className={styles.refreshBtn}
@@ -473,4 +479,11 @@ export const FullPageWithActiveFilters: Story = {
       }}
     />
   ),
+};
+
+// xtrf: an admin sees the "Mine & shared" / "All sessions" toggle in the
+// toolbar; "All sessions" lists other users' sessions with their owner chip.
+export const FullPageAdminAllSessions: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <SessionsPageChrome sessions={mockSessions} adminScope="all" />,
 };

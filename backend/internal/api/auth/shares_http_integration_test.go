@@ -303,7 +303,7 @@ func TestSystemShare_HTTP_Integration(t *testing.T) {
 		otherUser := testutil.CreateTestUser(t, env, "other@example.com", "Other User")
 
 		// Other user should be able to access via canonical access
-		accessInfo, err := accessStore.GetSessionAccessType(env.Ctx, sessionID, &otherUser.ID)
+		accessInfo, err := accessStore.GetSessionAccessType(env.Ctx, sessionID, &otherUser.ID, nil)
 		if err != nil {
 			t.Fatalf("authenticated user should be able to access system share: %v", err)
 		}
@@ -327,7 +327,7 @@ func TestSystemShare_HTTP_Integration(t *testing.T) {
 		}
 
 		// Unauthenticated access should fail
-		accessInfo, err := accessStore.GetSessionAccessType(env.Ctx, sessionID, nil)
+		accessInfo, err := accessStore.GetSessionAccessType(env.Ctx, sessionID, nil, nil)
 		if err != nil {
 			t.Fatalf("GetSessionAccessType failed: %v", err)
 		}

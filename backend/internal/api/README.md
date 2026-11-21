@@ -21,7 +21,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 | `deletes.go` | `DELETE /api/v1/sessions/{id}` -- deletes session from S3 and database (owner-only) |
 | `github_links.go` | GitHub link CRUD: `POST /api/v1/sessions/{id}/github-links`, `GET /api/v1/sessions/{id}/github-links`, `DELETE /api/v1/sessions/{id}/github-links/{linkID}`. Also contains `ParseGitHubURL` and `extractPRLinkFromLine` for transcript-based PR link extraction |
 | `external.go` | External API endpoints (API key auth + dedicated rate limiter): condensed transcript (`GET /sessions/{id}/condensed-transcript`), session file list (`GET /sessions/{id}/files`), session file download (`GET /sessions/{id}/files/download`, streamed like sync/file). Shared helpers: `serveCondensedTranscript`, `serveSessionFiles`, `serveSessionFileDownload` |
-| `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, and `RespondCanonicalAccessError` -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, and GitHub links |
+| `access.go` | `CheckCanonicalAccess`, `RequireCanonicalRead`, `RespondCanonicalAccessError`, and `viewerAdminCheck` (lazy, per-request admin lookup handed to `db/access`) -- shared canonical access control logic (CF-132) used by session detail, sync file read, analytics, and GitHub links |
 | `auth_config.go` | `GET /api/v1/auth/config` -- public endpoint returning enabled auth providers, feature flags, and a `version` object (current build, latest GitHub release, `update_available`, `update_severity`). Holds the `UpdateChecker` interface so tests can inject a canned `updatecheck.Status` without GitHub round-trips |
 | `version.go` | `GET /api/v1/version` -- public, dependency-free build-info endpoint (no DB / update-checker / network). Returns `version` (or `"dev"`), `go_version`, and optional `commit` / `build_time`. Defines the `BuildInfo` type passed into `NewServer` and stored on `Server.buildInfo` |
 | `client_errors.go` | `POST /api/v1/client-errors` -- accepts frontend error reports for server-side logging/observability |
@@ -34,7 +34,7 @@ HTTP API layer for Confab. Defines all routes, middleware, and request handlers 
 ## Key Types
 
 - **`Server`** -- holds all dependencies (DB, S3 storage, OAuth config, email service, rate limiters, feature flags). Created by `NewServer`, routes configured by `SetupRoutes`.
-- **`CanonicalAccessResult`** -- result of `CheckCanonicalAccess`: viewer identity, access type (owner/recipient/system/public/none), and session detail.
+- **`CanonicalAccessResult`** -- result of `CheckCanonicalAccess`: viewer identity, access type (owner/recipient/system/public/admin/none), and session detail.
 - **`SmartRecapConfig`** -- configuration for LLM-powered smart recap generation (API key, model, quota, lock timeout).
 - **Request/Response types** -- `SyncInitRequest`, `SyncChunkRequest`, `SyncEventRequest`, `CreateShareRequest`, `CreateAPIKeyRequest`, etc. Each handler file defines its own request/response structs.
 
@@ -73,7 +73,7 @@ Add it to the middleware chain in `SetupRoutes`. Order matters -- see the number
 - **CSRF protection is applied to all web session routes.** API key routes skip CSRF because the `Authorization` header cannot be set cross-origin without CORS approval. The `csrfWhenSession` wrapper handles hybrid endpoints.
 - **Content-Type validation is enforced on all `/api/v1` POST/PUT/PATCH requests.** Must be `application/json`.
 - **Auth checks happen in middleware, not handlers.** Handlers assume `auth.GetUserID(ctx)` will work if reached. The exception is `OptionalAuth` routes where handlers check the return value.
-- **Canonical access model (CF-132) is the single access control path for session data.** All session read endpoints (detail, sync file, analytics, GitHub links) go through `CheckCanonicalAccess`, which checks owner > recipient > system > public > none.
+- **Canonical access model (CF-132) is the single access control path for session data.** All session read endpoints (detail, sync file, analytics, GitHub links) go through `CheckCanonicalAccess`, which checks owner > recipient > system > public > admin > none. Admin access is read-only because write handlers do their own owner checks. `GET /sessions?scope=all` is the admin list counterpart (403 for non-admins).
 - **JSON responses always use `respondJSON`** which sets `Content-Type: application/json` and `Cache-Control: no-store`. It delegates to `httputil.RespondJSON` (shared with `admin`), so the two packages cannot drift.
 - **Errors use `respondError`** which returns `{"error": "message"}` format (delegates to `httputil.RespondError`).
 - **Rate limiting is layered.** Global limiter (100 req/s) applies to all requests. Auth endpoints get a stricter limiter (1 req/s burst 30). Uploads are rate-limited per user ID (not IP). Validation and client error endpoints have their own limiters.

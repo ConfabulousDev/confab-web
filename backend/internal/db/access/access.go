@@ -9,11 +9,34 @@ import (
 	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
+// AdminCheck reports whether the authenticated viewer is an instance admin
+// (SUPER_ADMIN_EMAILS ∪ users.is_admin). The API layer builds it, since this
+// package cannot import internal/admin (admin imports db/access). It is
+// called lazily, only when owner/share access does not already settle the
+// answer, so ordinary reads pay no extra lookup. A nil AdminCheck means
+// "not an admin" (xtrf).
+type AdminCheck func(ctx context.Context) (bool, error)
+
+// isAdmin evaluates check for an authenticated viewer; anonymous viewers and
+// a nil check are never admins.
+func isAdmin(ctx context.Context, viewerUserID *int64, check AdminCheck) (bool, error) {
+	if viewerUserID == nil || check == nil {
+		return false, nil
+	}
+	ok, err := check(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check admin status: %w", err)
+	}
+	return ok, nil
+}
+
 // GetSessionAccessType determines how a user can access a session.
-// Checks in order of specificity: owner, recipient, system, public.
+// Checks in order of specificity: owner, share-all (system), recipient,
+// system, public, admin. Admin is the fallback before none, so an admin who
+// also has owner or share access keeps those semantics.
 // Returns the access type and the share ID (if applicable).
 // viewerUserID can be nil for unauthenticated users.
-func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64) (*db.SessionAccessInfo, error) {
+func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, viewerUserID *int64, adminCheck AdminCheck) (*db.SessionAccessInfo, error) {
 	// First, check if session exists and get owner
 	var ownerUserID int64
 	err := s.conn().QueryRowContext(ctx,
@@ -73,7 +96,7 @@ func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, view
 
 	if err == sql.ErrNoRows {
 		// No shares exist for this session
-		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone}, nil
+		return adminOrNone(ctx, viewerUserID, adminCheck, false)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to check share access: %w", err)
@@ -88,15 +111,30 @@ func (s *Store) GetSessionAccessType(ctx context.Context, sessionID string, view
 		return &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}, nil
 	default:
 		// "none" - has shares but viewer has no access
-		return &db.SessionAccessInfo{AccessType: db.SessionAccessNone, AuthMayHelp: authMayHelp}, nil
+		return adminOrNone(ctx, viewerUserID, adminCheck, authMayHelp)
 	}
+}
+
+// adminOrNone is the last step of GetSessionAccessType: admin access when the
+// viewer is an admin, otherwise none.
+func adminOrNone(ctx context.Context, viewerUserID *int64, adminCheck AdminCheck, authMayHelp bool) (*db.SessionAccessInfo, error) {
+	ok, err := isAdmin(ctx, viewerUserID, adminCheck)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return &db.SessionAccessInfo{AccessType: db.SessionAccessAdmin}, nil
+	}
+	return &db.SessionAccessInfo{AccessType: db.SessionAccessNone, AuthMayHelp: authMayHelp}, nil
 }
 
 // GetSessionDetailWithAccess returns session details for any user with access.
 // Unlike session.Store.GetSessionDetail, this works for shared access (not just owners).
 // Hostname and username are only returned for owners.
 // Updates last_accessed_at on the share if accessed via share.
-func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *db.SessionAccessInfo) (*db.SessionDetail, error) {
+// A deactivated owner blocks every non-owner viewer except admins; adminCheck
+// is consulted only in that case (xtrf).
+func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string, viewerUserID *int64, accessInfo *db.SessionAccessInfo, adminCheck AdminCheck) (*db.SessionDetail, error) {
 	// Check owner's status to block access if deactivated
 	var session db.SessionDetail
 	var gitInfoBytes []byte
@@ -131,10 +169,18 @@ func (s *Store) GetSessionDetailWithAccess(ctx context.Context, sessionID string
 	}
 	session.Provider = models.NormalizeProvider(session.Provider)
 
-	// Check if session owner is deactivated
-	if ownerStatus == models.UserStatusInactive {
-		return nil, db.ErrOwnerInactive
+	// Check if session owner is deactivated. Admins bypass the block, whether
+	// they arrived via admin access or via a share / share-all.
+	if ownerStatus == models.UserStatusInactive && accessInfo.AccessType != db.SessionAccessAdmin {
+		ok, err := isAdmin(ctx, viewerUserID, adminCheck)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, db.ErrOwnerInactive
+		}
 	}
+	session.AccessType = accessInfo.AccessType
 
 	// Only include PII fields for owners; redact for all shared access.
 	// Hostname/Username/CWD/TranscriptPath were scanned directly into

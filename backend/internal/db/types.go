@@ -52,6 +52,11 @@ type SessionListParams struct {
 	Providers []string // canonical agent identifiers ("claude-code", "codex"); multi-select
 	Query     *string  // search across titles + commit SHA prefix
 
+	// AllSessions widens visibility to every session on the instance (the
+	// share-all CTE). The handler sets it only for admins on scope=all (xtrf);
+	// it is a no-op when ShareAllSessions is already on.
+	AllSessions bool
+
 	Cursor   string // opaque cursor for keyset pagination (empty = first page)
 	PageSize int    // fixed 50
 }
@@ -96,6 +101,10 @@ type SessionDetail struct {
 	IsOwner               *bool            `json:"is_owner,omitempty"`                     // True if viewer is session owner (shared sessions only)
 	SharedByEmail         *string          `json:"shared_by_email,omitempty"`              // Email of session owner (non-owner access only)
 	OwnerEmail            string           `json:"owner_email"`                            // Email of session owner (always populated)
+	// AccessType is how the viewer reached this session (owner, recipient,
+	// system, public, admin). Set only on the canonical access path
+	// (access.GetSessionDetailWithAccess); not a DB column.
+	AccessType SessionAccessType `json:"access_type,omitempty"`
 }
 
 // RedactForSharing strips PII fields that should not be visible to non-owners.
@@ -196,6 +205,11 @@ const (
 	SessionAccessPublic    SessionAccessType = "public"
 	SessionAccessSystem    SessionAccessType = "system"
 	SessionAccessRecipient SessionAccessType = "recipient"
+	// SessionAccessAdmin: an instance admin (SUPER_ADMIN_EMAILS ∪ users.is_admin)
+	// with no owner or share access. Lowest-priority non-none type: an admin who
+	// is also owner/recipient/system/public keeps that type. Read-only and
+	// redacted like a share (xtrf).
+	SessionAccessAdmin SessionAccessType = "admin"
 )
 
 // SessionAccessInfo contains information about how a user can access a session

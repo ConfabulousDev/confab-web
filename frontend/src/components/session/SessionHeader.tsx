@@ -71,6 +71,9 @@ interface SessionHeaderProps {
   isOwner?: boolean;
   isShared?: boolean;
   sharedByEmail?: string | null; // Email of session owner (for non-owner access)
+  /** xtrf: the viewer is an admin with no owner/share access. Replaces the
+   *  "Shared Session" indicator with a "Viewing as admin" badge naming the owner. */
+  viewingAsAdmin?: boolean;
   /** Provider-specific filter dropdown rendered into the header's actions row.
    *  SessionViewer composes the right one via the active provider's adapter;
    *  SessionHeader stays agnostic. Pass `null` to hide. */
@@ -96,6 +99,7 @@ function SessionHeader({
   onSessionUpdate,
   isOwner = true,
   isShared = false,
+  viewingAsAdmin = false,
   filterSlot,
   isCostMode,
   onToggleCostMode,
@@ -267,7 +271,12 @@ function SessionHeader({
           </button>
         )}
         {filterSlot}
-        {isShared ? (
+        {viewingAsAdmin && !isOwner ? (
+          <div className={styles.adminIndicator} title={`Owned by ${ownerEmail}`}>
+            <span>Viewing as admin</span>
+            <span className={styles.adminIndicatorOwner}>{ownerEmail}</span>
+          </div>
+        ) : isShared ? (
           isOwner ? (
             // Owner viewing their own share link - clickable to switch to owner view
             <Link to={`/sessions/${sessionId}`} className={styles.sharedIndicatorLink} title="Switch to owner view">

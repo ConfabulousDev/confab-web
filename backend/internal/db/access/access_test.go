@@ -33,7 +33,7 @@ func TestGetSessionAccessType_Owner(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestGetSessionAccessType_PublicShare_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated access (nil viewerUserID)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestGetSessionAccessType_PublicShare_Authenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Authenticated non-owner should get public access (not owner access)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestGetSessionAccessType_SystemShare_Authenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Any authenticated user should get system access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestGetSessionAccessType_SystemShare_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated should get no access (system shares require auth)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestGetSessionAccessType_RecipientShare_Authorized(t *testing.T) {
 	ctx := context.Background()
 
 	// Recipient should get recipient access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestGetSessionAccessType_RecipientShare_NotAuthorized(t *testing.T) {
 	ctx := context.Background()
 
 	// Non-recipient should get no access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &nonRecipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &nonRecipient.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestGetSessionAccessType_RecipientShare_NotAuthorized(t *testing.T) {
 	}
 
 	// Verify actual recipient still has access
-	accessInfo, err = store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err = store.GetSessionAccessType(ctx, sessionID, &recipient.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestGetSessionAccessType_RecipientShare_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated should get no access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestGetSessionAccessType_NoAccess(t *testing.T) {
 	ctx := context.Background()
 
 	// Stranger should get no access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &stranger.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &stranger.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestGetSessionAccessType_SessionNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	// Non-existent session should return ErrSessionNotFound
-	_, err := store.GetSessionAccessType(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID)
+	_, err := store.GetSessionAccessType(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID, nil)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -340,7 +340,7 @@ func TestGetSessionAccessType_InvalidUUID(t *testing.T) {
 	ctx := context.Background()
 
 	// Invalid UUID should return ErrSessionNotFound
-	_, err := store.GetSessionAccessType(ctx, "not-a-uuid", &viewer.ID)
+	_, err := store.GetSessionAccessType(ctx, "not-a-uuid", &viewer.ID, nil)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -366,7 +366,7 @@ func TestGetSessionAccessType_ExpiredPublicShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Expired share should not grant access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -397,7 +397,7 @@ func TestGetSessionAccessType_ExpiredSystemShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Expired share should not grant access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestGetSessionAccessType_ExpiredRecipientShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Expired share should not grant access even to recipient
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestGetSessionAccessType_AccessPrecedence(t *testing.T) {
 	ctx := context.Background()
 
 	// Owner should get owner access, not public access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -491,7 +491,7 @@ func TestGetSessionAccessType_MultipleShares(t *testing.T) {
 	ctx := context.Background()
 
 	// Recipient should get access through the valid private share, not the expired public one
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestGetSessionAccessType_SystemTakesPrecedenceOverPublic(t *testing.T) {
 	ctx := context.Background()
 
 	// Should get system access (more specific than public)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -559,7 +559,7 @@ func TestGetSessionAccessType_RecipientTakesPrecedenceOverSystem(t *testing.T) {
 	ctx := context.Background()
 
 	// Should get recipient access (more specific than system)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &recipient.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -592,7 +592,7 @@ func TestGetSessionDetailWithAccess_Owner(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
-	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -632,7 +632,7 @@ func TestGetSessionDetailWithAccess_SharedAccess(t *testing.T) {
 
 	shareID := int64(1)
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -683,7 +683,7 @@ func TestGetSessionDetailWithAccess_InactiveOwner(t *testing.T) {
 
 	shareID := int64(1)
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	_, err = store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	_, err = store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo, nil)
 	if err != db.ErrOwnerInactive {
 		t.Errorf("expected ErrOwnerInactive, got %v", err)
 	}
@@ -720,7 +720,7 @@ func TestGetSessionDetailWithAccess_UpdatesLastAccessedAt(t *testing.T) {
 
 	// Access the session
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	_, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	_, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -787,7 +787,7 @@ func TestSessionDetailReaders_Equivalent(t *testing.T) {
 			}
 
 			ownerAccess := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
-			fromAccess, err := accessStore.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, ownerAccess)
+			fromAccess, err := accessStore.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, ownerAccess, nil)
 			if err != nil {
 				t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 			}
@@ -801,12 +801,16 @@ func TestSessionDetailReaders_Equivalent(t *testing.T) {
 			}
 
 			// Normalize the access-path-only fields before structural compare.
-			// IsOwner and SharedByEmail are *intentional* divergences: the access
-			// path computes them; the owner-only path doesn't. Everything else
-			// must match.
+			// IsOwner, SharedByEmail and AccessType (xtrf) are *intentional*
+			// divergences: the access path computes them; the owner-only path
+			// doesn't. Everything else must match.
+			if fromAccess.AccessType != db.SessionAccessOwner {
+				t.Errorf("GetSessionDetailWithAccess: AccessType = %q, want owner", fromAccess.AccessType)
+			}
 			cmpAccess := *fromAccess
 			cmpAccess.IsOwner = nil
 			cmpAccess.SharedByEmail = nil
+			cmpAccess.AccessType = ""
 
 			if !reflect.DeepEqual(*fromSession, cmpAccess) {
 				t.Errorf("SessionDetail mismatch between readers:\n"+
@@ -833,7 +837,7 @@ func TestGetSessionDetailWithAccess_SessionNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic}
-	_, err := store.GetSessionDetailWithAccess(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID, accessInfo)
+	_, err := store.GetSessionDetailWithAccess(ctx, "00000000-0000-0000-0000-000000000000", &viewer.ID, accessInfo, nil)
 	if err != db.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
@@ -864,7 +868,7 @@ func TestGetSessionAccessType_AuthMayHelp_RecipientShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=true
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -897,7 +901,7 @@ func TestGetSessionAccessType_AuthMayHelp_SystemShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=true
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -927,7 +931,7 @@ func TestGetSessionAccessType_AuthMayHelp_NoShares(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=false (no shares exist)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -960,7 +964,7 @@ func TestGetSessionAccessType_AuthMayHelp_OnlyPublicShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get public access (not "no access")
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -993,7 +997,7 @@ func TestGetSessionAccessType_AuthMayHelp_AuthenticatedNoAccess(t *testing.T) {
 	ctx := context.Background()
 
 	// Authenticated user (not the recipient) should get AuthMayHelp=false
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &otherUser.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &otherUser.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1028,7 +1032,7 @@ func TestGetSessionAccessType_AuthMayHelp_ExpiredShare(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated user should get AuthMayHelp=false (share is expired)
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1061,7 +1065,7 @@ func TestGetSessionDetailWithAccess_OwnerNoSharedByEmail(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessOwner}
-	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &owner.ID, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -1097,7 +1101,7 @@ func TestGetSessionDetailWithAccess_PublicShareHidesOwnerEmail(t *testing.T) {
 
 	// Unauthenticated access via public share
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessPublic, ShareID: &shareID}
-	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, nil, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, nil, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -1133,7 +1137,7 @@ func TestGetSessionDetailWithAccess_SystemShareHasSharedByEmail(t *testing.T) {
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessSystem, ShareID: &shareID}
-	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &viewer.ID, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -1169,7 +1173,7 @@ func TestGetSessionDetailWithAccess_RecipientShareHasSharedByEmail(t *testing.T)
 	ctx := context.Background()
 
 	accessInfo := &db.SessionAccessInfo{AccessType: db.SessionAccessRecipient, ShareID: &shareID}
-	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &recipient.ID, accessInfo)
+	session, err := store.GetSessionDetailWithAccess(ctx, sessionID, &recipient.ID, accessInfo, nil)
 	if err != nil {
 		t.Fatalf("GetSessionDetailWithAccess failed: %v", err)
 	}
@@ -1211,7 +1215,7 @@ func TestGetSessionAccessType_ShareAllSessions_Authenticated(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1246,7 +1250,7 @@ func TestGetSessionAccessType_ShareAllSessions_Unauthenticated(t *testing.T) {
 	ctx := context.Background()
 
 	// Unauthenticated (nil viewerUserID) should still get no access
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1276,7 +1280,7 @@ func TestGetSessionAccessType_ShareAllSessions_OwnerStillOwner(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &owner.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}
@@ -1305,7 +1309,7 @@ func TestGetSessionAccessType_ShareAllSessions_Disabled(t *testing.T) {
 
 	ctx := context.Background()
 
-	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID)
+	accessInfo, err := store.GetSessionAccessType(ctx, sessionID, &viewer.ID, nil)
 	if err != nil {
 		t.Fatalf("GetSessionAccessType failed: %v", err)
 	}

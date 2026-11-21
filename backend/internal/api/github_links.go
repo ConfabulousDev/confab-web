@@ -200,7 +200,7 @@ func HandleListGitHubLinks(database *db.DB) http.HandlerFunc {
 			viewerPtr = &viewerUserID
 		}
 
-		accessInfo, err := accessStore.GetSessionAccessType(ctx, sessionID, viewerPtr)
+		accessInfo, err := accessStore.GetSessionAccessType(ctx, sessionID, viewerPtr, viewerAdminCheck(database, viewerPtr))
 		if err != nil {
 			if errors.Is(err, db.ErrSessionNotFound) {
 				respondError(w, http.StatusNotFound, "Session not found")

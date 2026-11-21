@@ -336,6 +336,25 @@ export const SharedSession: Story = {
 };
 
 /**
+ * xtrf: an admin viewing another user's session without a share
+ * (access_type 'admin'). Redacted like a share, with a "Viewing as admin" badge.
+ */
+export const AdminAccess: Story = {
+  args: {
+    ...SharedSession.args,
+    session: {
+      ...mockSession,
+      is_owner: false,
+      hostname: null,
+      username: null,
+      owner_email: 'carol@example.com',
+      shared_by_email: 'carol@example.com',
+      access_type: 'admin',
+    },
+  },
+};
+
+/**
  * Session with a custom title set by the user.
  */
 export const WithCustomTitle: Story = {

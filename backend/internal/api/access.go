@@ -5,10 +5,13 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/ConfabulousDev/confab-web/internal/admin"
 	"github.com/ConfabulousDev/confab-web/internal/auth"
 	"github.com/ConfabulousDev/confab-web/internal/db"
 	dbaccess "github.com/ConfabulousDev/confab-web/internal/db/access"
+	dbuser "github.com/ConfabulousDev/confab-web/internal/db/user"
 	"github.com/ConfabulousDev/confab-web/internal/logger"
+	"github.com/ConfabulousDev/confab-web/internal/models"
 )
 
 // CanonicalAccessResult contains the result of checking canonical session access.
@@ -33,7 +36,8 @@ type CanonicalAccessResult struct {
 //  2. Recipient - user is named in a private share
 //  3. System - any authenticated user via system share
 //  4. Public - anyone via public share
-//  5. None - no access
+//  5. Admin - an instance admin with none of the above (read-only, redacted)
+//  6. None - no access
 //
 // Returns the access result. Callers should check:
 //   - err != nil: Database error occurred
@@ -53,7 +57,8 @@ func CheckCanonicalAccess(
 
 	// Step 2: Determine access type based on ownership and shares
 	accessStore := &dbaccess.Store{DB: database}
-	accessInfo, err := accessStore.GetSessionAccessType(ctx, sessionID, result.ViewerUserID)
+	adminCheck := viewerAdminCheck(database, result.ViewerUserID)
+	accessInfo, err := accessStore.GetSessionAccessType(ctx, sessionID, result.ViewerUserID, adminCheck)
 	if err != nil {
 		return nil, err
 	}
@@ -65,13 +70,38 @@ func CheckCanonicalAccess(
 	}
 
 	// Step 4: Get session with privacy filtering based on access type
-	session, err := accessStore.GetSessionDetailWithAccess(ctx, sessionID, result.ViewerUserID, accessInfo)
+	session, err := accessStore.GetSessionDetailWithAccess(ctx, sessionID, result.ViewerUserID, accessInfo, adminCheck)
 	if err != nil {
 		return nil, err
 	}
 	result.Session = session
 
 	return result, nil
+}
+
+// viewerAdminCheck returns a lazy, memoized dbaccess.AdminCheck for the
+// viewer: it loads the user once on first call and applies
+// admin.IsEffectiveAdmin, so a read that owner/share access already settles
+// never pays the lookup. Returns nil for anonymous viewers (never admins).
+// Build one per request; the memo is not safe for concurrent use.
+func viewerAdminCheck(database *db.DB, viewerUserID *int64) dbaccess.AdminCheck {
+	if viewerUserID == nil {
+		return nil
+	}
+	var (
+		done   bool
+		result bool
+		err    error
+	)
+	return func(ctx context.Context) (bool, error) {
+		if !done {
+			var user *models.User
+			user, err = (&dbuser.Store{DB: database}).GetUserByID(ctx, *viewerUserID)
+			result = err == nil && admin.IsEffectiveAdmin(user)
+			done = true
+		}
+		return result, err
+	}
 }
 
 // RequireCanonicalRead checks canonical session access and writes the appropriate error response.

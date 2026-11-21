@@ -300,6 +300,7 @@ function SessionViewer({
           isOwner={isOwner}
           isShared={isShared}
           sharedByEmail={session.shared_by_email}
+          viewingAsAdmin={session.access_type === 'admin'}
           isCostMode={showTranscriptControls ? isCostMode : undefined}
           onToggleCostMode={showTranscriptControls ? toggleCostMode : undefined}
           filterSlot={

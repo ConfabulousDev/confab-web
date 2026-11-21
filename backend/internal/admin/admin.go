@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/ConfabulousDev/confab-web/internal/models"
 	"github.com/ConfabulousDev/confab-web/internal/validation"
 )
 
@@ -82,6 +83,14 @@ func IsSuperAdmin(email string) bool {
 	parsed, _ := ParseSuperAdminEmails(os.Getenv("SUPER_ADMIN_EMAILS"))
 	_, ok := parsed[norm]
 	return ok
+}
+
+// IsEffectiveAdmin is the single definition of "this user is an admin": the
+// UNION of SUPER_ADMIN_EMAILS (env) and the users.is_admin column (5k4v).
+// Used by Middleware, /me, and the canonical session-access admin check (xtrf).
+// A nil user is never an admin.
+func IsEffectiveAdmin(user *models.User) bool {
+	return user != nil && (IsSuperAdmin(user.Email) || user.IsAdmin)
 }
 
 // wouldOrphanLastAdmin is the pure decision behind the last-effective-admin

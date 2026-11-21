@@ -6,8 +6,8 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 
 | File | Role |
 |------|------|
-| `admin.go` | Super-admin handling: `ParseSuperAdminEmails` (validate + normalize + dedup, returning warnings), `SetSuperAdmins` (install the startup-validated cached set), `SuperAdminEmails` (sorted list), `IsSuperAdmin` (reads the cached set; falls back to a live `SUPER_ADMIN_EMAILS` parse when uninitialized), and `wouldOrphanLastAdmin` (the pure last-effective-admin guard decision). The set is validated + logged once at startup in `cmd/server/main.go` (g0bq). |
-| `admin_test.go` / `admin_internal_test.go` | Unit tests for `IsSuperAdmin`, the env parser, and the last-admin guard decision |
+| `admin.go` | Super-admin handling: `ParseSuperAdminEmails` (validate + normalize + dedup, returning warnings), `SetSuperAdmins` (install the startup-validated cached set), `SuperAdminEmails` (sorted list), `IsSuperAdmin` (reads the cached set; falls back to a live `SUPER_ADMIN_EMAILS` parse when uninitialized), `IsEffectiveAdmin` (the admin union, see below), and `wouldOrphanLastAdmin` (the pure last-effective-admin guard decision). The set is validated + logged once at startup in `cmd/server/main.go` (g0bq). |
+| `admin_test.go` / `admin_internal_test.go` | Unit tests for `IsSuperAdmin`, `IsEffectiveAdmin`, the env parser, and the last-admin guard decision |
 | `api_handlers.go` | JSON API handlers for user CRUD, activate/deactivate, grant/revoke-admin (5k4v), delete, system shares, and smart recap prompt settings. Revoke/deactivate/delete run `guardLastAdmin` — 409 Conflict if the action would orphan the last effective admin (g0bq); for delete the guard runs before the S3 wipe. Deactivate (body `confirm`) and delete (`?confirm=` query param) additionally require a typed-confirmation echo of the target email, checked after the guard via `verifyConfirmation` (kyrr). |
 | `api_handlers_test.go` | Full HTTP stack integration tests for admin API endpoints |
 | `audit.go` | Structured audit logging for all admin actions |
@@ -36,6 +36,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 ## Key API
 
 - **`IsSuperAdmin(email string) bool`** -- Checks the comma-separated `SUPER_ADMIN_EMAILS` env var (case-insensitive, trimmed).
+- **`IsEffectiveAdmin(user *models.User) bool`** -- The single definition of "admin": `IsSuperAdmin(user.Email) || user.IsAdmin`; nil is never an admin. Used by `Middleware`, `/me` (`is_admin`), and canonical session access (admins can read any session, xtrf).
 - **`Middleware(database *db.DB)`** -- Returns a `func(http.Handler) http.Handler` that rejects non-super-admins with 403.
 - **`AuditLog` / `AuditLogFromRequest`** -- Logs admin actions with admin identity, action type, and arbitrary detail key-value pairs. All log lines include `"audit", true` for filtering.
 - **`NewHandlers(database, store, frontendURL, allowedDomains, sharesEnabled)`** -- Constructor that wires up dependencies. Internally creates `settingsStore` (`dbadminsettings.Store`) and `analyticsStore` (`analytics.Store`).

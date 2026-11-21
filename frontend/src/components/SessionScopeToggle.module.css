@@ -1,0 +1,35 @@
+/* xtrf: admin "Mine & shared" / "All sessions" segmented control. */
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+}
+
+.option {
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  line-height: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.option:hover:not(:disabled),
+.option[aria-pressed='true'] {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.option:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
