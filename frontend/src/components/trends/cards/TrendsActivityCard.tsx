@@ -4,7 +4,7 @@ import { CodeIcon, FileIcon, PlusIcon, MinusIcon } from '@/components/icons';
 import type { TrendsActivityCard as TrendsActivityCardData } from '@/schemas/api';
 import {
   providerLabel,
-  getProviderMetadataOrFallback,
+  providerChartColor,
 } from '@/utils/providers';
 import {
   BarChart,
@@ -16,7 +16,6 @@ import {
 } from 'recharts';
 import styles from './TrendsActivityCard.module.css';
 
-const UNKNOWN_PROVIDER_COLOR = '#9ca3af';
 // Synthetic single-stack key used when no per_provider breakdown is on the
 // wire (older backends emit `{}` for every day). Cannot collide with a
 // canonical provider id.
@@ -50,8 +49,7 @@ function formatChartDate(dateStr: string): string {
 
 function providerColor(providerId: string): string {
   if (providerId === FALLBACK_STACK_KEY) return 'var(--color-accent)';
-  const meta = getProviderMetadataOrFallback(providerId, 'neutral');
-  return meta?.brandColor ?? UNKNOWN_PROVIDER_COLOR;
+  return providerChartColor(providerId);
 }
 
 interface ChartRow {

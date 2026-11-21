@@ -12,6 +12,7 @@ const AdminSettingsPage = lazy(() => import('./AdminSettingsPage'));
 const AdminCardInvalidationsPage = lazy(() => import('./AdminCardInvalidationsPage'));
 const AdminUnpricedModelsPage = lazy(() => import('./AdminUnpricedModelsPage'));
 const AdminPrecomputeFailuresPage = lazy(() => import('./AdminPrecomputeFailuresPage'));
+const AdminSessionInsightsPage = lazy(() => import('./AdminSessionInsightsPage'));
 
 const UsersIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -62,6 +63,14 @@ const PrecomputeFailuresIcon = (
   </svg>
 );
 
+const InsightsIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="18" y1="20" x2="18" y2="10" />
+    <line x1="12" y1="20" x2="12" y2="4" />
+    <line x1="6" y1="20" x2="6" y2="14" />
+  </svg>
+);
+
 function AdminPage() {
   useDocumentTitle('Admin');
   const location = useLocation();
@@ -79,6 +88,8 @@ function AdminPage() {
     currentTab = 'unpriced-models';
   } else if (location.pathname.includes('/admin/precompute-failures')) {
     currentTab = 'precompute-failures';
+  } else if (location.pathname.includes('/admin/session-insights')) {
+    currentTab = 'session-insights';
   }
 
   return (
@@ -130,6 +141,13 @@ function AdminPage() {
           onClick={() => navigate('/admin/precompute-failures')}
           collapsed={false}
         />
+        <SidebarItem
+          icon={InsightsIcon}
+          label="Session Insights"
+          active={currentTab === 'session-insights'}
+          onClick={() => navigate('/admin/session-insights')}
+          collapsed={false}
+        />
       </PageSidebar>
 
       <div className={styles.mainContent}>
@@ -145,6 +163,7 @@ function AdminPage() {
               <Route path="cards" element={<AdminCardInvalidationsPage />} />
               <Route path="unpriced-models" element={<AdminUnpricedModelsPage />} />
               <Route path="precompute-failures" element={<AdminPrecomputeFailuresPage />} />
+              <Route path="session-insights" element={<AdminSessionInsightsPage />} />
             </Routes>
           </Suspense>
         </div>

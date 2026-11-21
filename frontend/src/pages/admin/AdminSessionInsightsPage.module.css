@@ -1,0 +1,195 @@
+/* Admin Session Insights page (c3ts) */
+
+.card {
+  composes: card from './adminShared.module.css';
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.card h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-sm);
+}
+
+.cardHeader h3 {
+  margin: 0;
+}
+
+.description {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.5;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.segment {
+  background: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  border: none;
+  border-right: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.segment:last-child {
+  border-right: none;
+}
+
+.segment:hover {
+  background: var(--color-bg-hover);
+}
+
+.segment[aria-pressed='true'] {
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  font-weight: var(--font-semibold);
+}
+
+.inlineLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.select {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-sm);
+  max-width: 260px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.legendCount {
+  color: var(--color-text-muted);
+}
+
+.glyph {
+  flex-shrink: 0;
+}
+
+.chart {
+  width: 100%;
+  margin-bottom: var(--spacing-md);
+}
+
+.note {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.status {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  padding: var(--spacing-md) 0;
+}
+
+.tableWrapper {
+  composes: tableWrapper from './adminShared.module.css';
+}
+
+.table {
+  composes: table from './adminShared.module.css';
+}
+
+.tooltip {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-xs);
+  color: var(--color-text-primary);
+  max-width: 320px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.tooltipTitle {
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--spacing-xs);
+  overflow-wrap: anywhere;
+}
+
+.tooltipMeta {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.tooltipMetrics {
+  margin: var(--spacing-xs) 0 0 0;
+}
+
+.tooltipMetrics dt,
+.tooltipMetrics dd {
+  margin: 0;
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.tooltipValue {
+  margin-left: auto;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}

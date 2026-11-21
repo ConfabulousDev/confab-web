@@ -161,3 +161,15 @@ export function getProviderMetadataOrFallback(
 export function providerLabel(value: string): string {
   return isProviderId(value) ? PROVIDER_METADATA[value].label : value;
 }
+
+/** Chart-series color for a provider with no registry entry. */
+const UNKNOWN_PROVIDER_CHART_COLOR = '#9ca3af';
+
+/**
+ * Chart-series fill for any provider string: the registry brandColor, or a
+ * neutral gray for unknown values. Recharts needs a fixed hex, so this never
+ * returns currentColor.
+ */
+export function providerChartColor(provider: string): string {
+  return getProviderMetadataOrFallback(provider, 'neutral')?.brandColor ?? UNKNOWN_PROVIDER_CHART_COLOR;
+}

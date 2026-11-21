@@ -19,6 +19,8 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `unpriced_models_test.go` | Integration tests for the unpriced-models handler (auth 401/403, gap content, empty-when-all-priced) |
 | `precompute_failures.go` | Worker quarantine surface (6kbe): `HandleListPrecomputeFailures` (`GET /admin/precompute-failures`), `HandleReleasePrecomputeFailure` (`POST /admin/precompute-failures/release`, body `{session_id, bucket}`; `session_id` must be a UUID and `bucket` an `analytics.IsPrecomputeBucket` value, else 400), `HandleReleaseAllPrecomputeFailures` (`POST /admin/precompute-failures/release-all`). Thin handlers over `analytics.Store` `ListQuarantined` / `ReleaseQuarantined` / `ReleaseAllQuarantined`; both releases are audited. |
 | `precompute_failures_test.go` | Integration tests for the precompute-failures handlers (auth 401/403, list wire shape, empty array, release scope + audit, input validation, release-all + audit) |
+| `session_insights.go` | Session Insights tab (c3ts): `HandleSessionInsightsProviderShare` (`GET /admin/session-insights/provider-share`) and `HandleSessionInsightsPoints` (`GET /admin/session-insights/points`). Thin read-only handlers over `analytics.Store` `AdminProviderShare` / `AdminSessionPoints`, sharing `parseSessionInsightsFilter` (`from`/`to` as RFC3339 or `YYYY-MM-DD`, `all=true`, repeatable/comma `provider` validated via `validation.ValidateProvider`, positive `user_id`; 400 otherwise). Points are capped at `analytics.SessionInsightsPointLimit`. |
+| `session_insights_test.go` | Integration tests for the Session Insights handlers (auth 401/403, 400 cases, wire shape incl. legacy fold, filters, `all=true`, nulls, sanitized repo, empty arrays) |
 | `handlers.go` | `Handlers` struct and `NewHandlers` constructor (dependency holder) |
 | `middleware.go` | Chi middleware that gates routes to admins — the union of `SUPER_ADMIN_EMAILS` (env) OR the `users.is_admin` column (5k4v). Logs every access decision: `log.Warn("Admin access denied", reason=not_admin, …)` on the 403 and `log.Info("Admin access granted", …)` on the pass, each with `user_id`, `email`, `client_ip`, `method`, `path` (xr71). |
 
@@ -31,6 +33,7 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 - **`SmartRecapPromptResponse`**, **`SetSmartRecapPromptRequest`**, **`SetSmartRecapPromptResponse`**, **`DeleteSmartRecapPromptResponse`** -- JSON request/response types for smart recap prompt settings.
 - **`InvalidateCardsRequest`**, **`InvalidateCardsResponse`**, **`CardInvalidationRow`**, **`CardInvalidationsListResponse`** -- JSON request/response types for card invalidations (CF-343).
 - **`PrecomputeFailuresResponse`**, **`PrecomputeFailureJSON`**, **`ReleasePrecomputeFailureRequest`**, **`ReleasePrecomputeFailuresResponse`** -- JSON types for the precompute-failures surface (6kbe). `PrecomputeFailureJSON.Provider` is canonical; `QuarantinedAt` is RFC3339 UTC.
+- **`ProviderShareResponse`**, **`ProviderShareBucketJSON`**, **`SessionPointsResponse`**, **`SessionPointJSON`** -- JSON response types for Session Insights (c3ts). Timestamps are RFC3339 UTC; card-derived point metrics are `null` until the card exists.
 - **`UnpricedModelsResponse`**, **`UnpricedModelJSON`** -- JSON response types for the unpriced-models surface (axk2). `LastSeen` is RFC3339; it is the most recent analytics recompute time, a proxy for "last seen" rather than a true ingestion time.
 
 ## Key API
@@ -66,6 +69,8 @@ Admin API handlers, middleware, and audit logging for super-admin user managemen
 | `HandleListPrecomputeFailures` | `GET /api/v1/admin/precompute-failures` | Lists sessions the worker quarantined from a precompute bucket (6kbe), newest first |
 | `HandleReleasePrecomputeFailure` | `POST /api/v1/admin/precompute-failures/release` | Deletes one quarantined (session, bucket) row so the worker retries it; audited as `precompute.release` |
 | `HandleReleaseAllPrecomputeFailures` | `POST /api/v1/admin/precompute-failures/release-all` | Deletes every quarantined row (outage recovery); audited as `precompute.release_all` |
+| `HandleSessionInsightsProviderShare` | `GET /api/v1/admin/session-insights/provider-share` | Instance-wide session counts per UTC time bucket (day/week/month by range span) and provider, plus uncapped totals, over every listable session. Read-only (c3ts) |
+| `HandleSessionInsightsPoints` | `GET /api/v1/admin/session-insights/points` | One point per listable session (lines, tokens, cost, user turns, duration, sanitized repo, owner email, title), capped at 5,000 by a stable `md5(id)` sample with `total`/`returned`. Read-only (c3ts) |
 
 ## How to Extend
 

@@ -1580,6 +1580,84 @@ An empty `models` array means every model family in stored session data is price
 
 ---
 
+### Session Insights: Provider Share
+```
+GET /api/v1/admin/session-insights/provider-share
+```
+
+Instance-wide session counts per time bucket and provider, for the admin Session Insights tab (c3ts). Covers every **listable** session on the instance (synced lines plus a summary or first user message), regardless of owner or sharing; `SHARE_ALL` makes no difference. Sessions are bucketed by `first_seen` in UTC. Never capped. Legacy `Claude Code` rows count as `claude-code`.
+
+**Query parameters** (shared with the points endpoint):
+
+| Param | Description |
+|-------|-------------|
+| `from` | Range start, inclusive: RFC3339 with a timezone, or `YYYY-MM-DD` (UTC midnight). Default: 30 days before `to`. |
+| `to` | Range end, exclusive: RFC3339 with a timezone, or `YYYY-MM-DD`, which includes that whole day. Default: now. |
+| `all` | `true` for all time (no lower bound). Cannot be combined with `from`. |
+| `provider` | Canonical provider (`claude-code`, `codex`, `opencode`, `cursor`), case-insensitive. Repeatable and/or comma-separated. Omitted means every provider. |
+| `user_id` | Narrow to one owner's sessions. Positive integer. |
+
+`bucket_size` follows the range span: `day` up to 31 days, `week` (Monday starts) up to 366 days, `month` beyond. For `all=true` the span, and the response `from`, start at the earliest matching session (`to` when nothing matches). `buckets` lists only non-empty buckets in ascending order, so clients zero-fill from `from` to `to`. `totals` covers the whole range.
+
+**Response:**
+```json
+{
+  "from": "2026-03-01T00:00:00Z",
+  "to": "2026-03-08T00:00:00Z",
+  "bucket_size": "day",
+  "buckets": [
+    { "start": "2026-03-02T00:00:00Z", "counts": { "claude-code": 6, "codex": 2 } }
+  ],
+  "totals": { "claude-code": 6, "codex": 2 }
+}
+```
+
+**Errors:** `400` for an unknown provider (including the legacy `Claude Code` form), an unparseable or timezone-less date, `from` not before `to`, a non-positive `user_id`, an invalid `all`, or `all` with `from`.
+
+**Auth:** admin only (`SUPER_ADMIN_EMAILS` or `users.is_admin`).
+
+---
+
+### Session Insights: Session Points
+```
+GET /api/v1/admin/session-insights/points
+```
+
+One point per matching session for the Session Insights size scatter. Same scope and query parameters as provider share. When more than `limit` (5,000) sessions match, it returns a deterministic sample (ordered by `md5(id)`), which is stable for a given filter set. `total` counts every matching session, and `returned` is the number of points. Points are ordered by `first_seen`.
+
+Per point: `title` uses the session list's precedence (custom title, suggested title, summary, first user message; empty when none). `repo` is the sanitized `owner/repo` form with no host or credentials. `lines` is the synced transcript line count. `tokens` is input + output from the tokens card, as on Trends, and `cost_usd` is that card's estimated cost. `user_turns` comes from the conversation card and `duration_ms` from the session card. Each card-derived metric is `null` until the session has that card.
+
+**Response:**
+```json
+{
+  "total": 12840,
+  "returned": 5000,
+  "limit": 5000,
+  "points": [
+    {
+      "id": "2a6f42e3-0000-4000-8000-000000000001",
+      "first_seen": "2026-03-02T10:00:00Z",
+      "provider": "claude-code",
+      "title": "Refactor the sync worker",
+      "owner_email": "ada@example.com",
+      "repo": "acme/widgets",
+      "branch": "main",
+      "lines": 420,
+      "tokens": 120000,
+      "cost_usd": 1.85,
+      "user_turns": 12,
+      "duration_ms": 1800000
+    }
+  ]
+}
+```
+
+**Errors:** as for provider share.
+
+**Auth:** admin only (`SUPER_ADMIN_EMAILS` or `users.is_admin`).
+
+---
+
 ### List Precompute Failures
 ```
 GET /api/v1/admin/precompute-failures

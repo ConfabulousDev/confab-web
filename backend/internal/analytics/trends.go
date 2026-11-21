@@ -691,7 +691,7 @@ func (s *Store) aggregateTopSessions(ctx context.Context, tq trendsQuery, limit 
 			fs.id,
 			s.external_id,
 			fs.session_type,
-			COALESCE(s.custom_title, s.suggested_session_title, s.summary, s.first_user_message) AS title,
+			` + db.SessionTitleExpr("s") + ` AS title,
 			NULLIF(regexp_replace(regexp_replace(COALESCE(s.git_info->>'repo_url', ''), '\.git$', ''), '^.*[/:]([^/:]+/[^/:]+)$', '\1'), '') AS git_repo,
 			` + costExpr + `,
 			sess.duration_ms

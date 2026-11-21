@@ -904,6 +904,49 @@ export const UnpricedModelsResponseSchema = z.object({
 });
 export type UnpricedModelsResponse = z.infer<typeof UnpricedModelsResponseSchema>;
 
+// Session Insights (c3ts): GET /admin/session-insights/{provider-share,points}.
+// Instance-wide (every listable session), bucketed by first_seen in UTC.
+// Buckets hold only non-empty buckets; the client zero-fills from..to.
+const ProviderShareBucketSchema = z.object({
+  start: z.string(),
+  counts: z.record(z.string(), z.number()),
+});
+
+export const ProviderShareResponseSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  bucket_size: z.enum(['day', 'week', 'month']),
+  buckets: z.array(ProviderShareBucketSchema),
+  totals: z.record(z.string(), z.number()),
+});
+export type ProviderShareResponse = z.infer<typeof ProviderShareResponseSchema>;
+
+// One session on the size scatter. Card-derived metrics are null until the
+// session has that card; repo is the sanitized owner/repo display form.
+const SessionPointSchema = z.object({
+  id: z.string(),
+  first_seen: z.string(),
+  provider: z.string(),
+  title: z.string(),
+  owner_email: z.string(),
+  repo: z.string().nullable(),
+  branch: z.string().nullable(),
+  lines: z.number(),
+  tokens: z.number().nullable(),
+  cost_usd: z.number().nullable(),
+  user_turns: z.number().nullable(),
+  duration_ms: z.number().nullable(),
+});
+export type SessionPoint = z.infer<typeof SessionPointSchema>;
+
+export const SessionPointsResponseSchema = z.object({
+  total: z.number(),
+  returned: z.number(),
+  limit: z.number(),
+  points: z.array(SessionPointSchema),
+});
+export type SessionPointsResponse = z.infer<typeof SessionPointsResponseSchema>;
+
 // Precompute failures (6kbe): GET /admin/precompute-failures. Sessions the
 // worker quarantined from one precompute bucket after repeated failures.
 const PrecomputeFailureRowSchema = z.object({

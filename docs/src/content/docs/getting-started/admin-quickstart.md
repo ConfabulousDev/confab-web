@@ -45,3 +45,10 @@ Once your instance is up and reachable, share its URL with your users and point 
 ## 4. Explore usage
 
 As an admin you can browse every session on the instance without asking anyone to share it: turn on **All sessions** on the Sessions page and open any session. The view is read-only and redacted like a shared session. See [Admin access](/features/sharing/#admin-access).
+
+For an instance-wide view of who uses what, open **Admin → Session Insights**. It covers every listable session on the instance, whoever owns it and whether or not it is shared:
+
+- **Provider share** stacks session counts per provider over time, with a count or percent toggle and a totals table. Buckets are UTC days for ranges up to 31 days, weeks up to a year, and months beyond.
+- **Session size distribution** plots one point per session by start time on a log scale. Pick the size measure: transcript lines, tokens (input + output), estimated cost, user turns, or duration. Hover a point for its title, owner, provider, repository, and every measure; click it to open the session. Above 5,000 sessions the chart shows a stable sample and says so.
+
+Filter both charts by date range (7d, 30d, 90d, 1y, all), provider, and owner.

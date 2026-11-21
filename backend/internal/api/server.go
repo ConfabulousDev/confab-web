@@ -455,6 +455,11 @@ func (s *Server) SetupRoutes() http.Handler {
 				// without grepping the "unknown model for pricing" WARN logs.
 				r.Get("/unpriced-models", withMaxBody(MaxBodyXS, adminHandlers.HandleUnpricedModels))
 
+				// c3ts: instance-wide session metadata for the Session Insights tab
+				// (provider share over time + one point per session for the size scatter).
+				r.Get("/session-insights/provider-share", withMaxBody(MaxBodyXS, adminHandlers.HandleSessionInsightsProviderShare))
+				r.Get("/session-insights/points", withMaxBody(MaxBodyXS, adminHandlers.HandleSessionInsightsPoints))
+
 				// 6kbe: sessions the worker quarantined after repeated precompute
 				// failures, with per-row and bulk release.
 				r.Get("/precompute-failures", withMaxBody(MaxBodyXS, adminHandlers.HandleListPrecomputeFailures))
