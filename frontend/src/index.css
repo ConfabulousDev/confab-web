@@ -83,6 +83,8 @@ html, body {
   margin: 0;
   min-width: 320px;
   height: 100%;
+  /* Dynamic viewport: tracks mobile Safari's toolbar instead of the large viewport. */
+  height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -94,6 +96,9 @@ html, body {
 
 .app-container {
   height: 100%;
+  /* viewport-fit=cover lets the page extend under the notch and home indicator;
+     keep the shell's content out of those areas. The header handles --safe-top. */
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
   display: flex;
   flex-direction: column;
   overflow: hidden;

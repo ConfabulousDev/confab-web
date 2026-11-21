@@ -112,6 +112,14 @@
   --page-padding-x: var(--spacing-xl);
   --page-padding-y: var(--spacing-lg);
 
+  /* Safe-area insets: notch, home indicator, and mobile Safari's toolbar.
+     Non-zero only because index.html sets viewport-fit=cover; 0px elsewhere.
+     Use these tokens instead of calling env() directly. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
   /* Border Radius */
   --radius-sm: 3px;
   --radius-md: 4px;

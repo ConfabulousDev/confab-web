@@ -117,6 +117,7 @@ components/     →  renders typed SessionDetail
 - Every component uses a co-located `.module.css` file for scoped styles.
 - Colors and spacing use CSS custom properties from `styles/variables.css`.
 - The `[data-theme="dark"]` selector drives dark mode. Never hardcode colors.
+- Mobile Safari: `index.html` sets `viewport-fit=cover`, so the page extends under the notch, home indicator and toolbar. Anything `position: fixed` against a viewport edge adds the matching `--safe-top/right/bottom/left` token (e.g. `bottom: calc(var(--spacing-xl) + var(--safe-bottom))`). Viewport-height sizing pairs a `vh` fallback with a `dvh` override (`max-height: 90vh; max-height: 90dvh;`). `styles/safeArea.test.ts` guards both.
 
 ### Browser storage and third-party requests
 
