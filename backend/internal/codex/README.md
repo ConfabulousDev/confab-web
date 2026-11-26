@@ -22,12 +22,14 @@ backend pipelines.
 
 | File | Role |
 |------|------|
-| `parser.go` | `ParseRollout([]byte) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, skill / `<skills_instructions>` / `<subagent_notification>` extraction, and the >=0.149.1 `item_completed` item dispatch (`handleItemCompleted`). |
+| `parser.go` | `ParseRollout([]byte) (*ParsedRollout, error)` plus the streaming state machine, line dispatch, tool-call pairing, exec_command output-preamble parsing, subagent spawn/wait routing, `<skills_instructions>` catalog and `<skill>` invocation extraction, per-block dropping of injected context from user messages (`dropContextBlocks`), and the >=0.149.1 `item_completed` item dispatch (`handleItemCompleted`). |
+| `contextblocks.go` | `isContextBlock(text) bool` (z63s) — true when one user-role `input_text` block is context Codex injected rather than typed by the human. Port of `CONTEXTUAL_USER_FRAGMENT_MATCHERS` in openai/codex @ `rust-v0.172.0` (`codex-rs/core/src/context/contextual_user_message.rs`, generic `matches_marked_text` in `codex-rs/context-fragments/src/fragment.rs`). Also `isSkillBlock`, used to record `SkillInvocation`s. Kept equivalent to the frontend's `isCodexContextBlock` (`frontend/src/services/codexContextBlocks.ts`). |
+| `contextblocks_test.go` | Parity table against the repo-root `testdata/codex_contextual_user_blocks.json` (also loaded by the frontend's `codexContextBlocks.test.ts`, so the two classifiers can't drift), plus parser-level cases: the AGENTS.md + env-context first message yields no user message, each context kind is dropped, a prompt block next to a `<skill>` block survives while the skill is still recorded, and assistant text is never classified. |
 | `types.go` | `ParsedRollout`, `Turn`, `Message`, `ToolCall`, `TokenUsage`, `CompactionEvent`, `ValidationError`, plus `SubagentSource`, `SkillInvocation`, `SubagentSpawn`, `SkillAvailable` (CF-443) and `FileEdit` (m2ky). Pure data types — no imports beyond `time`. |
 | `firstuser.go` | `EventMsgUserText(json.RawMessage) string` and `UserMessageFromLine(string) string` — extract the human-typed prompt from an `event_msg` line across both wire eras (`user_message` on <=0.130.0, `item_completed` → `UserMessage` on >=0.149.1). Reads the event_msg stream only; the user-role `response_item` stream is injected context (`<environment_context>`, AGENTS.md), never the prompt. Returns `""` for anything underivable. |
 | `firstuser_test.go` | Unit tests for the two extractors against wire shapes captured from real rollouts: both eras, mixed `text`/`skill` content parts, and the response_item / non-UserMessage lines that must yield `""`. |
 | `itemcompleted_test.go` | Unit tests for the >=0.149.1 `item_completed` dispatch (m2ky): FileChange → sorted `FileEdits`, CommandExecution → `ParsedCommandKinds`, Extension `web.search` → synthesized tool call, unobserved Extension kinds and unhandled item types skipped, UserMessage/AgentMessage deliberately not double-recorded, a mixed-era rollout, and malformed items. Fixture lines reproduce real captured wire shapes. |
-| `parser_test.go` | Unit tests against the fixtures below. Covers the legacy parser scenarios plus CF-443 (session_meta source variants, `<skills_instructions>` catalog, `<skill>` invocation extraction + stripping, `spawn_agent` / `wait_agent` routing, `<subagent_notification>` stripping, depth>1, completion-text truncation). |
+| `parser_test.go` | Unit tests against the fixtures below. Covers the legacy parser scenarios plus CF-443 (session_meta source variants, `<skills_instructions>` catalog, `<skill>` invocation extraction + dropping, `spawn_agent` / `wait_agent` routing, `<subagent_notification>` stripping, depth>1, completion-text truncation). |
 | `parser_lines_test.go` | Unit tests for line splitting and the 32 MiB line cap (e9qd): a 5 MiB tool output parses in full, a line one byte over the cap is skipped as one `ValidationError` while later lines still parse, a line exactly at the cap is kept, and CRLF / no-trailing-newline / blank-line / empty inputs keep the old scanner's counts and line numbers. |
 | `testdata/sample_rollout.jsonl` | Legacy fixture: session_meta, three completed turns (turn 3 carries an inline-failed `custom_tool_call` per CF-438), function_call + custom_tool_call, web_search_call, encrypted reasoning, non-null `token_count.info`, a compacted line, an unknown top-level type (forward-compat), and a trailing orphan `function_call_output`. |
 | `testdata/sample_rollout_with_skill_invocation.jsonl` | CF-443: developer message with `<skills_instructions>` catalog plus a user message wrapping a single `<skill>` invocation. |
@@ -118,11 +120,19 @@ following rules:
    `<skills_instructions>` block. The first such block populates
    `AvailableSkills` (parsed from `### Available skills` bullets); subsequent
    blocks are ignored.
-10. **`<environment_context>`, `<skill>`, `<subagent_notification>`**:
-    stripped from user messages (non-greedy regex). `<skill>` blocks
-    additionally append a `SkillInvocation`. `<subagent_notification>` is
-    stripped only — the structured data is sourced from `wait_agent` output
-    instead. If stripping leaves an empty string, the message is dropped.
+10. **Injected context in user messages** (z63s): every user-role
+    `input_text` block that `isContextBlock` classifies as Codex-injected
+    context (AGENTS.md, `<environment_context>`, `<skill>`, `<turn_aborted>`,
+    `<user_shell_command>`, `<subagent_notification>`,
+    `<codex_internal_context>`, …) is dropped before the remaining blocks are
+    joined. Classification is per block, as upstream does it: a wrapper
+    embedded inside a block the human typed stays in the text. Each dropped
+    `<skill>` block appends one `SkillInvocation` per wrapper.
+    `<subagent_notification>` data is sourced from `wait_agent` output
+    instead. If nothing but whitespace remains, the message is dropped, so
+    AGENTS.md no longer counts toward `UserMessages`, the Session card's
+    prompt counts, recap or search text. Cards computed before z63s keep the
+    old counts until they recompute for another reason (no card-version bump).
 11. **`spawn_agent` / `wait_agent` function_calls** (CF-443): routed out of
     `Turn.ToolCalls`. `spawn_agent` appends a `SubagentSpawn` with
     `agent_type`, `message`, `reasoning_effort`, `fork_context`; its

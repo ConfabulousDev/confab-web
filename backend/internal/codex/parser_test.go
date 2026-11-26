@@ -582,13 +582,15 @@ func TestParseRollout_DeveloperMessage_SecondSkillsInstructions_Ignored(t *testi
 }
 
 // TestParseRollout_UserMessage_SkillBlock_ExtractedAndStripped verifies that
-// a <skill>...</skill> user message produces a SkillInvocation entry and that
-// the <skill> wrapper is stripped from the surfaced UserMessages[].Text.
+// a <skill>...</skill> content block produces a SkillInvocation entry and is
+// dropped from the surfaced UserMessages[].Text. Codex emits the skill prompt
+// as its own input_text block next to the human's blocks (z63s classifies per
+// block, as upstream does).
 func TestParseRollout_UserMessage_SkillBlock_ExtractedAndStripped(t *testing.T) {
 	jsonl := strings.Join([]string{
 		`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.130.0"}}`,
 		`{"timestamp":"2026-05-13T01:00:00.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t1","started_at":1,"model":"gpt-5"}}`,
-		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hey, run this:\n<skill>\n<name>audit-documentation</name>\n<path>/a/SKILL.md</path>\n---\nname: audit-documentation\n---\nbody text\n</skill>\nthanks"}]}}`,
+		`{"timestamp":"2026-05-13T01:00:00.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hey, run this:"},{"type":"input_text","text":"<skill>\n<name>audit-documentation</name>\n<path>/a/SKILL.md</path>\n---\nname: audit-documentation\n---\nbody text\n</skill>"},{"type":"input_text","text":"thanks"}]}}`,
 		`{"timestamp":"2026-05-13T01:00:02.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t1","completed_at":2,"duration_ms":1900}}`,
 	}, "\n")
 	rollout, err := ParseRollout([]byte(jsonl))

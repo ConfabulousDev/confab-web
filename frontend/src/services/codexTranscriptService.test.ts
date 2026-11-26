@@ -1523,3 +1523,104 @@ describe('normalizeCodexLines — newly persisted record types (kpqz)', () => {
     });
   });
 });
+
+describe('normalizeCodexLines — injected context blocks in user messages (z63s)', () => {
+  const ts = '2026-11-25T10:00:00.000Z';
+  const agentsMd =
+    '# AGENTS.md instructions for /home/dev/example\n\n<INSTRUCTIONS>\n## Development\nRun make ci.\n</INSTRUCTIONS>';
+  const envContext = '<environment_context>\n  <cwd>/home/dev/example</cwd>\n</environment_context>';
+  const skill =
+    '<skill>\n<name>demo-skill</name>\n<path>/home/dev/.codex/skills/demo/SKILL.md</path>\n---\nbody\n</skill>';
+
+  function message(role: string, blocks: Array<Record<string, unknown>>) {
+    return JSON.stringify({
+      timestamp: ts,
+      type: 'response_item',
+      payload: { type: 'message', role, content: blocks },
+    });
+  }
+  const userText = (...texts: string[]) =>
+    message('user', texts.map((text) => ({ type: 'input_text', text })));
+
+  it('must make the human prompt the first user row, not the injected AGENTS.md', () => {
+    const result = items([userText(agentsMd, envContext), userText('fix the flaky test')].join('\n'));
+    const users = result.filter((i) => i.kind === 'user');
+    expect(users).toHaveLength(1);
+    expect(users[0]).toMatchObject({ kind: 'user', text: 'fix the flaky test' });
+    expect(JSON.stringify(result)).not.toContain('AGENTS.md instructions');
+  });
+
+  it('must keep only the prompt blocks when a message mixes a prompt and a <skill> block', () => {
+    const result = items(userText('hey, run this:', skill, 'thanks'));
+    expect(result).toEqual([{ kind: 'user', lineId: '0', timestamp: ts, text: 'hey, run this:\nthanks' }]);
+  });
+
+  it('must produce no user row for a <turn_aborted>-only message, leaving the event_msg divider intact', () => {
+    const jsonl = [
+      userText('<turn_aborted>\nThe user interrupted the previous turn on purpose.\n</turn_aborted>'),
+      JSON.stringify({
+        timestamp: ts,
+        type: 'event_msg',
+        payload: { type: 'turn_aborted', reason: 'interrupted', duration_ms: 5 },
+      }),
+    ].join('\n');
+    const result = items(jsonl);
+    expect(result.filter((i) => i.kind === 'user')).toEqual([]);
+    expect(result.filter((i) => i.kind === 'turn_aborted')).toHaveLength(1);
+  });
+
+  it.each([
+    ['user_shell_command', '<user_shell_command>\n<command>ls</command>\n</user_shell_command>'],
+    ['subagent_notification', '<subagent_notification>\n{}\n</subagent_notification>'],
+    ['codex_internal_context', '<codex_internal_context source="goal">\nkeep going\n</codex_internal_context>'],
+    ['external additional context', '<external_demo_open_page>{"page_id":42}</external_demo_open_page>'],
+  ])('must produce no row for a %s-only user message', (_name, text) => {
+    expect(items(userText(text))).toEqual([]);
+  });
+
+  it('must drop a message whose only non-context block is whitespace', () => {
+    expect(items(userText(agentsMd, '  \n '))).toEqual([]);
+  });
+
+  it('must keep a prompt that merely mentions <skill> verbatim', () => {
+    const prompt = 'run this for me: <skill>x</skill>';
+    expect(items(userText(prompt))).toEqual([{ kind: 'user', lineId: '0', timestamp: ts, text: prompt }]);
+  });
+
+  it('must keep an image-only row when the text blocks are all context (CF-388)', () => {
+    const result = items(
+      message('user', [
+        { type: 'input_text', text: envContext },
+        { type: 'input_image', image_url: 'data:image/png;base64,AAAA' },
+      ]),
+    );
+    expect(result).toEqual([
+      { kind: 'user', lineId: '0', timestamp: ts, text: '', images: ['data:image/png;base64,AAAA'] },
+    ]);
+  });
+
+  it('must leave assistant text that looks like a context block untouched', () => {
+    const text = '<turn_aborted>\nnot really\n</turn_aborted>';
+    const result = items(message('assistant', [{ type: 'output_text', text }]));
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ kind: 'assistant', text });
+  });
+
+  it('must not filter context-looking text out of an agent_message', () => {
+    const text = '<turn_aborted>\nrelayed\n</turn_aborted>';
+    const result = items(
+      JSON.stringify({
+        timestamp: ts,
+        type: 'response_item',
+        payload: {
+          type: 'agent_message',
+          author: '/root/worker',
+          recipient: '/root',
+          content: [{ type: 'input_text', text }],
+        },
+      }),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ kind: 'agent_message', text });
+  });
+});

@@ -9,6 +9,7 @@ API client and business logic services. All HTTP communication with the backend 
 | `api.ts` | Centralized API client with Zod-validated endpoints, error classes, and auth handling |
 | `claudeTranscriptService.ts` | Claude Code transcript: fetching, JSONL parsing, validation, caching, incremental updates |
 | `codexTranscriptService.ts` | Codex rollout transcript: parses the Codex JSONL shape, normalizes raw lines into render items, and mirrors the Claude fetch / poll surface. CF-574: each fall-through that produces a `CodexUnknownItem` now sets `reason` (`CodexUnknownReason`) + the precise `unrecognizedType` for the "Report bug" affordance |
+| `codexContextBlocks.ts` | `isCodexContextBlock(text)` (z63s) — true when one user-role `input_text` block is context Codex injected into the model history rather than typed by the human. Port of `CONTEXTUAL_USER_FRAGMENT_MATCHERS` in openai/codex @ `rust-v0.172.0` (`codex-rs/core/src/context/contextual_user_message.rs`): AGENTS.md (`# AGENTS.md instructions` … `</INSTRUCTIONS>`), `<environment_context>`, `<external_KEY>`, `<agent_message_board_notification>`, `<skill>`, `<user_shell_command>`, `<turn_aborted>`, `<subagent_notification>`, `<codex_internal_context source="…">` / legacy `<goal_context>`, `<recommended_plugins>`, and three legacy `Warning: …` texts. Uses Rust `str::trim` whitespace and ASCII-only case folding. Kept equivalent to the backend's `isContextBlock` (`backend/internal/codex/contextblocks.go`); both table-test against the repo-root `testdata/codex_contextual_user_blocks.json` |
 | `opencodeTranscriptService.ts` | OpenCode transcript: parses the per-message `{ info, parts }` JSONL, normalizes into `OpenCodeRenderItem[]`, and mirrors the Claude/Codex fetch / poll surface. CF-574: the accumulated stream is `OpenCodeRawEntry[]` (`RawOpenCodeLine \| OpenCodeInvalidLine`) — malformed lines are kept (not dropped) and, alongside unrecognized message roles and unrecognized part types (outside `KNOWN_OPENCODE_PART_TYPES`), surface as `kind:'unknown'` render items. Non-terminal tool statuses and known-but-ignored part types are deliberate skips, not unknowns |
 | `cursorTranscriptService.ts` | Cursor transcript: parses the two-shape Cursor JSONL (`{role, message:{content[]}}` / `{type:'turn_ended', …}`), normalizes into `CursorRenderItem[]`, and mirrors the fetch / poll surface. `parseCursorJSONL` keeps malformed lines as `CursorInvalidLine` so line offsets stay aligned for incremental fetch; the normalizer drops `turn_ended` and invalid entries (Cursor MVP has no `unknown` render row), emits one `assistant` item per line plus one `tool` item per `tool_use` block (no output — Cursor records inputs only), and assigns synthetic line-based ids (`${lineIndex}` / `${lineIndex}-${blockIndex}`) since the wire format has no stable id. `cleanCursorAssistantText` (exported, fa3h) strips Cursor's native bare `[REDACTED]` placeholder from assistant text — a trailing bare suffix is removed and a block whose whole content was `[REDACTED]` becomes `""`, so a `[REDACTED]`-only tool turn drops its assistant bubble while its tool rows still render; Confab CLI `[REDACTED:TYPE]` markers are never touched. `parseCursorUserText` (exported, nfbe) splits a user `text` block into `{ prompt, sections }`: `prompt` is the concatenated, trimmed `<user_query>` content (falling back to the raw text when no well-formed envelope is present, so content is never dropped); `sections` is every other recognized top-level tagged block (injected context — rules / attached files / manually attached skills) carried for the collapsible-context UI (0rcv). The normalizer emits the user row with `text = prompt` (envelope tags never render) and `sections` attached; an empty query emits no row. `attachCursorTimestamps` (exported, ce79) attaches ESTIMATED per-row `timestamp`s (ISO 8601) by linear interpolation over `CursorTimestampBounds` (`start` = session `firstSeen`, `end` = `lastSyncAt`): each distinct wire line is one conversation row spaced evenly across `[start, end]` (first row = start, last = end), tool items inherit their parent line's time (shared line-index prefix on the synthetic id), a single row gets `start`, and a missing/unparseable/inverted bound returns the items unchanged (no `timestamp` → row header omits the time). `extractCursorModel()` is always `undefined` |
 | `claudeMessageParser.ts` | Extracts display-ready data from raw Claude transcript messages |
@@ -124,8 +125,13 @@ without re-fetching:
      (handles multi-API-call turns: each `token_count` binds to its own
      assistant message). No-op if the delta is missing or no assistant has
      been emitted yet.
-   - Strip `<environment_context>…</environment_context>` blocks from user
-     message text.
+   - **z63s — injected context in user messages.** For `role: user`
+     messages only, drop every `input_text` block `isCodexContextBlock`
+     classifies as injected context (AGENTS.md, `<environment_context>`,
+     `<skill>`, `<turn_aborted>`, `<user_shell_command>`, …) before joining
+     the rest. A message left with no text and no images emits no row, so the
+     first `user` row is the human's real prompt. Assistant messages and
+     `response_item.agent_message` are not filtered.
    - Strip the Codex exec output preamble (`Chunk ID:`, `Wall time:`,
      `Process exited with code:`) and surface the parsed exit code + wall
      time as `execMetadata`.
@@ -224,6 +230,7 @@ Key exports:
 - `api.test.ts` -- API client error handling, auth flow, response validation
 - `claudeTranscriptService.test.ts` -- JSONL parsing, validation error handling, incremental fetch
 - `codexTranscriptService.test.ts` -- Codex JSONL parsing + normalization, fixture-driven (`src/test-fixtures/codex-rollout.jsonl`)
+- `codexContextBlocks.test.ts` -- `isCodexContextBlock` parity table against the repo-root `testdata/codex_contextual_user_blocks.json`, which the backend's `contextblocks_test.go` also loads (z63s)
 - `claudeMessageParser.test.ts` -- Message parsing for all message types, text extraction
 
 ## Dependencies
