@@ -6,7 +6,8 @@
 // gracefully.
 //
 // Codex tokens emitted by this hook:
-//   - flat:    `user`, `reasoning_hidden`, `compacted`, `turn_separator`, `unknown`
+//   - flat:    `user`, `reasoning_hidden`, `compacted`, `turn_separator`,
+//              `turn_aborted`, `agent_message`, `unknown`
 //   - assistant subs: `assistant.commentary`, `assistant.final`
 //   - tool_call subs: `tool_call.exec_command`, `tool_call.apply_patch`,
 //                     `tool_call.web_search`, `tool_call.generic`
@@ -43,6 +44,7 @@ const FLAT_KEYS = [
   'compacted',
   'turn_separator',
   'turn_aborted',
+  'agent_message',
   'unknown',
 ] as const satisfies readonly Exclude<CodexCategory, 'assistant' | 'tool_call'>[];
 
@@ -79,6 +81,7 @@ export function stateFromPaths(paths: string[]): CodexFilterState {
     compacted: visible('compacted'),
     turn_separator: visible('turn_separator'),
     turn_aborted: visible('turn_aborted'),
+    agent_message: visible('agent_message'),
     unknown: visible('unknown'),
   };
 }

@@ -32,6 +32,7 @@ import { useFirstVisibleIndex } from '../useFirstVisibleIndex';
 import { CostBar } from '../CostBar';
 import { TimeSeparator } from '../TimeSeparator';
 import CodexUserMessage from './CodexUserMessage';
+import CodexAgentMessage from './CodexAgentMessage';
 import CodexAssistantMessage from './CodexAssistantMessage';
 import CodexToolCallBlock from './CodexToolCallBlock';
 import CodexTurnSeparator from './CodexTurnSeparator';
@@ -472,7 +473,7 @@ interface RenderFlags {
 function renderItem(item: CodexRenderItem, flags: RenderFlags) {
   // Per-renderer dispatch. Divider/edge kinds (turn_separator, reasoning_hidden,
   // compacted, unknown) do not get skip-nav callbacks per CF-360 — only user /
-  // assistant / tool_call participate in skip chains.
+  // assistant / agent_message / tool_call participate in skip chains.
   const kindLabel = skipNavLabel(item);
   const dividerFlags = {
     isSelected: flags.isSelected,
@@ -496,6 +497,8 @@ function renderItem(item: CodexRenderItem, flags: RenderFlags) {
           prevTimestamp={flags.prevTimestamp}
         />
       );
+    case 'agent_message':
+      return <CodexAgentMessage item={item} {...flags} kindLabel={kindLabel} />;
     case 'tool_call':
       return <CodexToolCallBlock item={item} {...flags} kindLabel={kindLabel} />;
     case 'turn_separator':

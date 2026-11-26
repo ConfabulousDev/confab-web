@@ -6,7 +6,8 @@
 //   - assistant (commentary, final)
 //   - tool_call (exec_command, apply_patch, web_search, generic)
 // Flat:
-//   - user, reasoning_hidden, compacted, turn_separator, turn_aborted, unknown
+//   - user, reasoning_hidden, compacted, turn_separator, turn_aborted,
+//     agent_message, unknown
 
 import type {
   CodexCategory,
@@ -48,6 +49,8 @@ const FLAT_CATEGORIES: Array<{ category: FlatCategory; label: string; color: Sid
   { category: 'turn_separator', label: 'Turn Separator', color: 'gray' },
   // CF-368: aborted-turn divider — amber to mirror the warning-coloured divider.
   { category: 'turn_aborted', label: 'Turn Aborted', color: 'amber' },
+  // kpqz: inter-agent messages — blue to mirror the row's info accent.
+  { category: 'agent_message', label: 'Agent Message', color: 'blue' },
   { category: 'unknown', label: 'Unknown', color: 'default' },
 ];
 

@@ -206,6 +206,15 @@ runs before parsing and reads it through `EventMsgUserText` in `firstuser.go`
   substrate ticket 90c3 needs.
 - **`world_state`** (carries `agents_md` text) and **`item.ImageView`** — no
   analyzer consumes either.
+- **Codex CLI 0.172.0 record types (kpqz)**, skipped by the `default:` arm of
+  the response_item switch (`parser.go`) or, for top-level types, by contract:
+  `response_item.additional_tools` (tool catalog),
+  `response_item.configuration_update` (`{reasoning:{effort}}`),
+  `response_item.agent_message` (`{author, recipient, content[]}` parent ↔
+  subagent message; the frontend renders it, but no analyzer counts
+  inter-agent messages yet) and the top-level
+  `inter_agent_communication_metadata` (`{trigger_turn}`, written just before
+  each agent message).
 
 ### Open question
 

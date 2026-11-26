@@ -68,6 +68,26 @@ describe('RawCodexLineSchema', () => {
       expect(result.success).toBe(true);
     });
 
+    // kpqz: top-level bookkeeping types persisted by Codex CLI 0.172.0.
+    it.each([
+      ['inter_agent_communication_metadata', { trigger_turn: false }],
+      ['dynamic_tools_updated', { tools: [] }],
+      ['security_risk_score', { score: 0 }],
+      ['retained_context', { items: [] }],
+      ['realtime_item', { kind: 'synthetic' }],
+    ])('accepts %s', (type, payload) => {
+      const result = parse({ timestamp: '2026-11-25T10:00:00Z', type, payload });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts inter_agent_communication_metadata without a payload', () => {
+      const result = parse({
+        timestamp: '2026-11-25T10:00:00Z',
+        type: 'inter_agent_communication_metadata',
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('accepts unknown top-level type via catch-all', () => {
       const result = parse({
         timestamp: '2026-05-13T01:00:00Z',
@@ -86,6 +106,31 @@ describe('RawCodexLineSchema', () => {
         payload,
       });
     }
+
+    // kpqz: response_item types persisted by Codex CLI 0.172.0.
+    it('accepts agent_message with author, recipient and mixed content blocks', () => {
+      const result = responseItem({
+        type: 'agent_message',
+        id: 'amsg_synthetic',
+        author: '/root/worker',
+        recipient: '/root',
+        content: [
+          { type: 'input_text', text: 'done' },
+          { type: 'encrypted_content', encrypted_content: 'gAAAA' },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
+      ['additional_tools', { id: 'at_x', role: 'developer', tools: [] }],
+      ['configuration_update', { reasoning: { effort: 'medium' } }],
+      ['compaction', { encrypted_content: 'gAAAA' }],
+      ['context_compaction', { encrypted_content: 'gAAAA' }],
+    ])('accepts %s', (type, rest) => {
+      const result = responseItem({ type, ...rest });
+      expect(result.success).toBe(true);
+    });
 
     it('accepts message[role=user]', () => {
       const result = responseItem({

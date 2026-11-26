@@ -83,6 +83,28 @@ export interface CodexAssistantItem {
 }
 
 /**
+ * kpqz: inter-agent message — derived from `response_item.agent_message`.
+ * Carries a subagent's reply to its parent (`/root/<child>` → `/root`) or, in
+ * a child session, the parent's task prompt (`/root` → `/root/<child>`).
+ * Its text appears nowhere else in the rollout, so it renders as its own row.
+ * Deliberately a separate kind from `user`: it must not look like a human
+ * prompt, join the user skip-nav chain, or start a user turn on the timeline.
+ *
+ * `images` mirrors `CodexUserItem.images` and is omitted on text-only items.
+ */
+export interface CodexAgentMessageItem {
+  kind: 'agent_message';
+  lineId: string;
+  timestamp: CodexTimestamp;
+  /** Sending agent path, e.g. `/root/worker`. */
+  author: string;
+  /** Receiving agent path, e.g. `/root`. */
+  recipient: string;
+  text: string;
+  images?: string[];
+}
+
+/**
  * A paired tool call + output. Codex emits these as siblings keyed by
  * `call_id`; the normalizer pairs them into a single item.
  *
@@ -212,6 +234,7 @@ export interface CodexUnknownItem {
 export type CodexRenderItem =
   | CodexUserItem
   | CodexAssistantItem
+  | CodexAgentMessageItem
   | CodexToolCallItem
   | CodexReasoningHiddenItem
   | CodexTurnSeparatorItem

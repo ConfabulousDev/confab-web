@@ -450,6 +450,7 @@ function CodexWithFiltersDemo() {
     compacted: boolean;
     turn_separator: boolean;
     turn_aborted: boolean;
+    agent_message: boolean;
     unknown: boolean;
   };
   const initial: CodexState = {
@@ -460,6 +461,7 @@ function CodexWithFiltersDemo() {
     compacted: true,
     turn_separator: true,
     turn_aborted: true,
+    agent_message: true,
     unknown: true,
   };
   const [filterState, setFilterState] = useState<CodexState>(initial);
@@ -472,6 +474,7 @@ function CodexWithFiltersDemo() {
     compacted: 1,
     turn_separator: 12,
     turn_aborted: 0,
+    agent_message: 0,
     unknown: 0,
   };
 

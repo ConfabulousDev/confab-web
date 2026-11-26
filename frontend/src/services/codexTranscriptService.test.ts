@@ -1370,3 +1370,156 @@ describe('reportCodexTranscriptErrors', () => {
     expect(() => reportCodexTranscriptErrors('session-fail', [makeError(1)])).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// kpqz — record types persisted by Codex CLI 0.172.0
+// ---------------------------------------------------------------------------
+
+describe('normalizeCodexLines — newly persisted record types (kpqz)', () => {
+  const ts = '2026-11-25T10:00:00.000Z';
+
+  function jsonlOf(...lines: unknown[]): string {
+    return lines.map((line) => JSON.stringify(line)).join('\n');
+  }
+
+  function responseItem(payload: Record<string, unknown>) {
+    return { timestamp: ts, type: 'response_item', payload };
+  }
+
+  // Minimal synthesized payloads — no real paths, thread ids or tool bodies.
+  const silentResponseItems: Array<[string, Record<string, unknown>]> = [
+    [
+      'additional_tools',
+      {
+        type: 'additional_tools',
+        id: 'at_synthetic',
+        role: 'developer',
+        tools: [{ type: 'namespace', name: 'functions', description: 'tools', tools: [] }],
+      },
+    ],
+    ['configuration_update', { type: 'configuration_update', reasoning: { effort: 'medium' } }],
+    ['compaction', { type: 'compaction', encrypted_content: 'gAAAA-synthetic' }],
+    ['context_compaction', { type: 'context_compaction', encrypted_content: 'gAAAA-synthetic' }],
+  ];
+
+  it.each(silentResponseItems)(
+    'must drop response_item.%s without producing any row',
+    (_name, payload) => {
+      const result = items(jsonlOf(responseItem(payload)));
+      expect(result).toEqual([]);
+    },
+  );
+
+  const silentTopLevel: Array<[string, unknown]> = [
+    ['inter_agent_communication_metadata', { trigger_turn: false }],
+    ['dynamic_tools_updated', { tools: [] }],
+    ['security_risk_score', { score: 0 }],
+    ['retained_context', { items: [] }],
+    ['realtime_item', { kind: 'synthetic' }],
+  ];
+
+  it.each(silentTopLevel)(
+    'must drop top-level %s without producing any row',
+    (type, payload) => {
+      const result = items(jsonlOf({ timestamp: ts, type, payload }));
+      expect(result).toEqual([]);
+    },
+  );
+
+  it('must drop a top-level silent type even when its payload is absent', () => {
+    const result = items(jsonlOf({ timestamp: ts, type: 'security_risk_score' }));
+    expect(result).toEqual([]);
+  });
+
+  function agentMessage(overrides: Record<string, unknown> = {}) {
+    return responseItem({
+      type: 'agent_message',
+      id: 'amsg_synthetic',
+      author: '/root/worker',
+      recipient: '/root',
+      content: [
+        { type: 'input_text', text: 'FINAL_ANSWER: the **fix** is done' },
+        { type: 'encrypted_content', encrypted_content: 'gAAAA-synthetic' },
+      ],
+      internal_chat_message_metadata_passthrough: { anything: true },
+      ...overrides,
+    });
+  }
+
+  it('must render response_item.agent_message as one agent_message item with author, recipient and text', () => {
+    const result = items(jsonlOf(agentMessage()));
+    expect(result).toEqual([
+      {
+        kind: 'agent_message',
+        lineId: '0',
+        timestamp: ts,
+        author: '/root/worker',
+        recipient: '/root',
+        text: 'FINAL_ANSWER: the **fix** is done',
+      },
+    ]);
+  });
+
+  it('must produce exactly one item for a paired inter_agent_communication_metadata + agent_message', () => {
+    const result = items(
+      jsonlOf({ timestamp: ts, type: 'inter_agent_communication_metadata', payload: { trigger_turn: false } }, agentMessage()),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('agent_message');
+  });
+
+  it('must drop an agent_message with no text and no images', () => {
+    const result = items(
+      jsonlOf(
+        agentMessage({
+          content: [
+            { type: 'input_text', text: '   ' },
+            { type: 'encrypted_content', encrypted_content: 'gAAAA-synthetic' },
+          ],
+        }),
+      ),
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('must drop an agent_message with an empty content array', () => {
+    const result = items(jsonlOf(agentMessage({ content: [] })));
+    expect(result).toEqual([]);
+  });
+
+  it('must carry image blocks on an agent_message as images', () => {
+    const src = 'data:image/png;base64,AAAA';
+    const result = items(
+      jsonlOf(agentMessage({ content: [{ type: 'input_image', image_url: src }] })),
+    );
+    expect(result).toHaveLength(1);
+    const item = result[0];
+    if (item?.kind !== 'agent_message') throw new Error('expected an agent_message item');
+    expect(item.text).toBe('');
+    expect(item.images).toEqual([src]);
+  });
+
+  it('must keep local_shell_call as an unknown-response-payload row (forward-compat signal)', () => {
+    const result = items(
+      jsonlOf(responseItem({ type: 'local_shell_call', call_id: 'c1', status: 'completed', action: {} })),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      kind: 'unknown',
+      reason: 'unknown-response-payload',
+      unrecognizedType: 'local_shell_call',
+    });
+  });
+
+  it('must keep top-level inter_agent_communication as an unknown-line-type row', () => {
+    const result = items(
+      jsonlOf({ timestamp: ts, type: 'inter_agent_communication', payload: { author: '/root' } }),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      kind: 'unknown',
+      reason: 'unknown-line-type',
+      unrecognizedType: 'inter_agent_communication',
+    });
+  });
+});

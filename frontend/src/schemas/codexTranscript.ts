@@ -11,6 +11,9 @@
 //   compacted               context compaction replacement
 //   token_usage_record      aggregate per-response/turn/thread usage telemetry
 //   world_state             periodic environment/instructions/skills snapshot (zgd6)
+//   inter_agent_communication_metadata, dynamic_tools_updated,
+//   security_risk_score, retained_context, realtime_item
+//                           bookkeeping, recognized and dropped (kpqz)
 //   (anything else)         caught by UnknownCodexLineSchema for forward-compat
 //
 // `response_item` and `event_msg` carry a nested discriminator `payload.type`.
@@ -144,6 +147,43 @@ const CodexWebSearchCallSchema = z
   })
   .passthrough();
 
+// kpqz: inter-agent (parent <-> subagent) message. `author` / `recipient` are
+// agent paths such as `/root` and `/root/<child>`. Content reuses the message
+// block union; real rollouts mix `input_text` with `encrypted_content` blocks,
+// which fall through to the unknown-block catch-all and are ignored.
+const CodexAgentMessageSchema = z
+  .object({
+    type: z.literal('agent_message'),
+    author: z.string(),
+    recipient: z.string(),
+    content: z.array(CodexMessageContentSchema),
+  })
+  .passthrough();
+
+// kpqz: bookkeeping response_item types, recognized only so they don't render
+// as unrecognized lines; normalizeCodexLines drops them. Payloads are left
+// unmodeled on purpose (nothing reads the tool catalog, the reasoning-effort
+// update, or the encrypted compaction blobs). `additional_tools` and
+// `configuration_update` were observed in Codex CLI 0.172.0 rollouts;
+// `compaction` and `context_compaction` were added from the upstream source at
+// `rust-v0.172.0` (codex-rs/rollout/src/policy.rs) and haven't been observed
+// locally.
+const CodexAdditionalToolsSchema = z
+  .object({ type: z.literal('additional_tools') })
+  .passthrough();
+
+const CodexConfigurationUpdateSchema = z
+  .object({ type: z.literal('configuration_update') })
+  .passthrough();
+
+const CodexCompactionSchema = z
+  .object({ type: z.literal('compaction') })
+  .passthrough();
+
+const CodexContextCompactionSchema = z
+  .object({ type: z.literal('context_compaction') })
+  .passthrough();
+
 // Catch-all for unknown response_item.payload.type variants.
 const CodexUnknownResponseItemPayloadSchema = z
   .object({ type: z.string() })
@@ -157,6 +197,11 @@ const KnownResponseItemPayloadSchema = z.union([
   CodexCustomToolCallOutputSchema,
   CodexReasoningSchema,
   CodexWebSearchCallSchema,
+  CodexAgentMessageSchema,
+  CodexAdditionalToolsSchema,
+  CodexConfigurationUpdateSchema,
+  CodexCompactionSchema,
+  CodexContextCompactionSchema,
 ]);
 
 const CodexResponseItemPayloadSchema = z.union([
@@ -174,6 +219,11 @@ const KNOWN_RESPONSE_ITEM_PAYLOAD_TYPES = new Set<string>([
   'custom_tool_call_output',
   'reasoning',
   'web_search_call',
+  'agent_message',
+  'additional_tools',
+  'configuration_update',
+  'compaction',
+  'context_compaction',
 ]);
 
 export function isKnownResponseItemPayload(
@@ -616,6 +666,32 @@ const CodexWorldStateLineSchema = z
   })
   .passthrough();
 
+// kpqz: top-level bookkeeping lines, dropped by normalizeCodexLines and
+// recognized here only so they don't fall through to CodexUnknownLineSchema.
+// Payloads are unmodeled for the same reason as world_state.
+// `inter_agent_communication_metadata` (`{trigger_turn}`, written just before
+// each response_item.agent_message) was observed in Codex CLI 0.172.0
+// rollouts; the other four were added from the upstream source at
+// `rust-v0.172.0` (codex-rs/history/src/lib.rs `persisted_rollout_item`) and
+// haven't been observed locally.
+function bookkeepingLineSchema<T extends string>(type: T) {
+  return z
+    .object({
+      timestamp: z.string(),
+      type: z.literal(type),
+      payload: z.object({}).passthrough().optional(),
+    })
+    .passthrough();
+}
+
+const CodexInterAgentCommunicationMetadataLineSchema = bookkeepingLineSchema(
+  'inter_agent_communication_metadata',
+);
+const CodexDynamicToolsUpdatedLineSchema = bookkeepingLineSchema('dynamic_tools_updated');
+const CodexSecurityRiskScoreLineSchema = bookkeepingLineSchema('security_risk_score');
+const CodexRetainedContextLineSchema = bookkeepingLineSchema('retained_context');
+const CodexRealtimeItemLineSchema = bookkeepingLineSchema('realtime_item');
+
 // Catch-all for unknown top-level types.
 const CodexUnknownLineSchema = z
   .object({
@@ -638,6 +714,11 @@ const KnownCodexLineSchema = z.union([
   CodexCompactedLineSchema,
   CodexTokenUsageRecordLineSchema,
   CodexWorldStateLineSchema,
+  CodexInterAgentCommunicationMetadataLineSchema,
+  CodexDynamicToolsUpdatedLineSchema,
+  CodexSecurityRiskScoreLineSchema,
+  CodexRetainedContextLineSchema,
+  CodexRealtimeItemLineSchema,
 ]);
 
 export const RawCodexLineSchema = z.union([
@@ -656,6 +737,11 @@ const KNOWN_LINE_TYPES = new Set<string>([
   'compacted',
   'token_usage_record',
   'world_state',
+  'inter_agent_communication_metadata',
+  'dynamic_tools_updated',
+  'security_risk_score',
+  'retained_context',
+  'realtime_item',
 ]);
 
 /**
@@ -674,6 +760,7 @@ export type CodexResponseItemLine = z.infer<typeof CodexResponseItemLineSchema>;
 export type CodexEventMsgLine = z.infer<typeof CodexEventMsgLineSchema>;
 
 export type CodexResponseMessage = z.infer<typeof CodexResponseMessageSchema>;
+export type CodexAgentMessage = z.infer<typeof CodexAgentMessageSchema>;
 
 // ============================================================================
 // Parse-result types

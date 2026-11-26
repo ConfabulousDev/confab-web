@@ -7,7 +7,7 @@
 //   - turn_separator / reasoning_hidden / compacted / unknown → null
 
 import { describe, it, expect } from 'vitest';
-import { skipNavKey } from './codexVirtualItems';
+import { skipNavKey, skipNavLabel } from './codexVirtualItems';
 import type { CodexRenderItem } from '@/types/codexRenderItem';
 
 const ts = '2026-05-13T18:00:00Z';
@@ -126,5 +126,29 @@ describe('skipNavKey', () => {
         unrecognizedType: '(none)',
       }),
     ).toBeNull();
+  });
+});
+
+// kpqz: inter-agent messages get their own skip chain, never the user chain.
+describe('agent_message skip nav (kpqz)', () => {
+  const item: CodexRenderItem = {
+    kind: 'agent_message',
+    lineId: '0',
+    timestamp: ts,
+    author: '/root/worker',
+    recipient: '/root',
+    text: 'done',
+  };
+
+  it('returns "agent_message" as the skip-nav key', () => {
+    expect(skipNavKey(item)).toBe('agent_message');
+  });
+
+  it('does not share the user chain', () => {
+    expect(skipNavKey(item)).not.toBe('user');
+  });
+
+  it('labels the row "agent message"', () => {
+    expect(skipNavLabel(item)).toBe('agent message');
   });
 });

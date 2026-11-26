@@ -9,7 +9,7 @@
 //     Bucket selected by `categorizeCodexToolCall` from the raw toolName.
 //     Future tool names fall into `generic`; the mapping is the single edit.
 //   - flat: `reasoning_hidden`, `compacted`, `turn_separator`, `turn_aborted`
-//     (CF-368), `unknown`.
+//     (CF-368), `agent_message` (kpqz, inter-agent messages), `unknown`.
 //
 // `reasoning_hidden` is the only default-hidden category — parallel to
 // Claude's attachment chips defaulting to hidden. Everything else is visible
@@ -25,6 +25,7 @@ export type CodexCategory =
   | 'compacted'
   | 'turn_separator'
   | 'turn_aborted'
+  | 'agent_message'
   | 'unknown';
 
 export type CodexAssistantSubcategory = 'commentary' | 'final';
@@ -55,6 +56,7 @@ export interface CodexHierarchicalCounts {
   compacted: number;
   turn_separator: number;
   turn_aborted: number;
+  agent_message: number;
   unknown: number;
 }
 
@@ -71,6 +73,7 @@ export interface CodexFilterState {
   compacted: boolean;
   turn_separator: boolean;
   turn_aborted: boolean;
+  agent_message: boolean;
   unknown: boolean;
 }
 
@@ -82,6 +85,7 @@ export const DEFAULT_CODEX_FILTER_STATE: CodexFilterState = {
   compacted: true,
   turn_separator: true,
   turn_aborted: true,
+  agent_message: true,
   unknown: true,
 };
 
@@ -107,6 +111,7 @@ export function countCodexCategories(items: CodexRenderItem[]): CodexHierarchica
     compacted: 0,
     turn_separator: 0,
     turn_aborted: 0,
+    agent_message: 0,
     unknown: 0,
   };
 
@@ -137,6 +142,9 @@ export function countCodexCategories(items: CodexRenderItem[]): CodexHierarchica
       case 'turn_aborted':
         counts.turn_aborted++;
         break;
+      case 'agent_message':
+        counts.agent_message++;
+        break;
       case 'unknown':
         counts.unknown++;
         break;
@@ -165,6 +173,8 @@ export function codexItemMatchesFilter(
       return state.turn_separator;
     case 'turn_aborted':
       return state.turn_aborted;
+    case 'agent_message':
+      return state.agent_message;
     case 'unknown':
       return state.unknown;
   }

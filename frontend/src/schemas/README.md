@@ -78,26 +78,41 @@ All types are inferred from Zod schemas via `z.infer<>`:
 ### codexTranscript.ts -- Codex Rollout Types
 
 Each on-disk Codex line has the envelope `{ timestamp, type, payload }`.
-`RawCodexLineSchema` is a `z.union` of the seven known top-level branches
+`RawCodexLineSchema` is a `z.union` of the twelve known top-level branches
 (`session_meta`, `turn_context`, `response_item`, `event_msg`, `compacted`,
-`token_usage_record` — pnkh, `world_state` — zgd6) plus a catch-all
-`CodexUnknownLineSchema` so unfamiliar future types parse without erroring.
+`token_usage_record` — pnkh, `world_state` — zgd6, and the kpqz bookkeeping
+lines `inter_agent_communication_metadata`, `dynamic_tools_updated`,
+`security_risk_score`, `retained_context`, `realtime_item`, built by the local
+`bookkeepingLineSchema` helper with an optional unmodeled payload) plus a
+catch-all `CodexUnknownLineSchema` so unfamiliar future types parse without
+erroring. Only `inter_agent_communication_metadata` has been observed locally;
+the other four kpqz types come from the upstream `rust-v0.172.0` source.
+Top-level `inter_agent_communication` is deliberately still unknown until a
+real sample exists.
 
 **Top-level inferred types:**
 - `RawCodexLine` -- union of all branches (catch-all included)
 - `CodexResponseItemLine`, `CodexEventMsgLine` -- the two branches the
-  normalizer destructures; the other five (`session_meta`,
-  `turn_context`, `compacted`, `token_usage_record`, `world_state`) parse
-  through `RawCodexLine` but their per-branch types are local to the schema
-  module.
+  normalizer destructures; the other ten (`session_meta`,
+  `turn_context`, `compacted`, `token_usage_record`, `world_state` and the
+  five kpqz bookkeeping lines) parse through `RawCodexLine` but their
+  per-branch types are local to the schema module.
 
 **Nested payload variants:**
-- `response_item.payload` is a union with seven known shapes
+- `response_item.payload` is a union with twelve known shapes
   (`message`, `function_call`, `function_call_output`,
   `custom_tool_call`, `custom_tool_call_output`, `reasoning`,
-  `web_search_call`) plus a catch-all. `CodexResponseMessage` is the
-  only exported branch type (used by the normalizer); the others are
-  composed via schema unions and don't need exported aliases.
+  `web_search_call`, and kpqz's `agent_message`, `additional_tools`,
+  `configuration_update`, `compaction`, `context_compaction`) plus a
+  catch-all. `agent_message` models `author` / `recipient` / `content`
+  (the message content-block union); the four bookkeeping kpqz shapes are
+  bare `{type}` passthroughs. `compaction` / `context_compaction` come from
+  the upstream `rust-v0.172.0` source and haven't been observed locally;
+  `local_shell_call`, `tool_search_call`, `tool_search_output` and
+  `image_generation_call` deliberately stay unknown until real samples exist.
+  `CodexResponseMessage` and `CodexAgentMessage` are the only exported
+  branch types (used by the normalizer); the others are composed via schema
+  unions and don't need exported aliases.
 - `event_msg.payload` is a union with twenty known shapes plus a catch-all,
   split three ways per Codex's own `should_persist_event_msg` rollout policy
   (px58 — only these 20 of Codex's 81 `EventMsg` variants can ever reach a
