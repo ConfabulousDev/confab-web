@@ -111,6 +111,7 @@ describe('categorizeCodexToolCall', () => {
   });
 
   it('buckets runtime-qualified command tool names as exec_command', () => {
+    expect(categorizeCodexToolCall(toolCall('exec'))).toBe('exec_command');
     expect(categorizeCodexToolCall(toolCall('functions.exec'))).toBe('exec_command');
     expect(categorizeCodexToolCall(toolCall('functions.exec_command'))).toBe('exec_command');
   });

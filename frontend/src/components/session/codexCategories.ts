@@ -92,6 +92,7 @@ export const DEFAULT_CODEX_FILTER_STATE: CodexFilterState = {
 export function categorizeCodexToolCall(item: CodexToolCallItem): CodexToolCallSubcategory {
   switch (item.toolName) {
     case 'exec_command':
+    case 'exec':
     case 'functions.exec':
     case 'functions.exec_command':
       return 'exec_command';
