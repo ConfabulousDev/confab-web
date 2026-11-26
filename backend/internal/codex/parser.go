@@ -18,26 +18,17 @@ import (
 // drops uploaded data and only guards inputs that came another way.
 const maxLineBytes = 32 * 1024 * 1024
 
-// envContextPattern strips the <environment_context>…</environment_context>
-// preamble Codex injects on the first user message. Matches greedily across
-// newlines (DOTALL behavior via [\s\S]).
-var envContextPattern = regexp.MustCompile(`(?s)<environment_context>.*?</environment_context>`)
-
-// skillBlockPattern matches a single <skill>...</skill> wrapper Codex injects
-// as a synthetic user-role message. Non-greedy so multiple blocks in one
-// message extract individually.
-var skillBlockPattern = regexp.MustCompile(`(?s)<skill>(.*?)</skill>`)
+// skillBlockPattern matches one <skill>...</skill> wrapper inside a content
+// block that isSkillBlock already classified. Case-insensitive like the
+// classifier; non-greedy so several wrappers in one block extract
+// individually.
+var skillBlockPattern = regexp.MustCompile(`(?is)<skill>(.*?)</skill>`)
 
 // skillNamePattern / skillPathPattern extract the inner metadata tags. Use
 // raw (non-multiline) regex; the tags are guaranteed by Codex to sit on
 // their own lines but we accept any whitespace around them.
 var skillNamePattern = regexp.MustCompile(`<name>\s*(.+?)\s*</name>`)
 var skillPathPattern = regexp.MustCompile(`<path>\s*(.+?)\s*</path>`)
-
-// subagentNotificationPattern strips parent-side <subagent_notification>
-// JSON wrappers. The structured data is sourced from wait_agent output;
-// the user-message form is purely a transcript-rendering artifact.
-var subagentNotificationPattern = regexp.MustCompile(`(?s)<subagent_notification>.*?</subagent_notification>`)
 
 // skillsInstructionsBlockPattern extracts the entire <skills_instructions>
 // body from the first developer-role message.
@@ -439,29 +430,22 @@ func (p *parser) handleResponseItem(ts time.Time, raw json.RawMessage, lineNum i
 
 // handleMessage processes a response_item.message. Developer-role messages
 // are inspected for a <skills_instructions> catalog and then dropped. User
-// messages have <environment_context>, <skill>...</skill>, and
-// <subagent_notification> wrappers stripped; <skill> blocks additionally
-// produce SkillInvocation records. If nothing remains they're dropped
-// entirely. Assistant messages preserve their phase.
+// messages drop every input_text block isContextBlock classifies as injected
+// context (AGENTS.md, <environment_context>, <skill>, <turn_aborted>, …; z63s)
+// before joining; <skill> blocks additionally produce SkillInvocation
+// records. If nothing remains the message is dropped entirely. Assistant
+// messages preserve their phase.
 func (p *parser) handleMessage(ts time.Time, msg responseMessagePayload) {
-	text := joinContentText(msg.Content)
-
-	if msg.Role == "developer" {
+	switch msg.Role {
+	case "developer":
 		if !p.skillsCatalogPopulated {
-			if catalog := extractSkillsCatalog(text); len(catalog) > 0 {
+			if catalog := extractSkillsCatalog(joinContentText(msg.Content)); len(catalog) > 0 {
 				p.out.AvailableSkills = catalog
 				p.skillsCatalogPopulated = true
 			}
 		}
-		return
-	}
-
-	switch msg.Role {
 	case "user":
-		text = envContextPattern.ReplaceAllString(text, "")
-		text = subagentNotificationPattern.ReplaceAllString(text, "")
-		text = p.extractAndStripSkillBlocks(ts, text)
-		text = strings.TrimSpace(text)
+		text := strings.TrimSpace(joinContentText(p.dropContextBlocks(ts, msg.Content)))
 		if text == "" {
 			return
 		}
@@ -470,6 +454,7 @@ func (p *parser) handleMessage(ts time.Time, msg responseMessagePayload) {
 			Role: "user", Text: text, Timestamp: ts,
 		})
 	case "assistant":
+		text := joinContentText(msg.Content)
 		p.ensureTurn(ts)
 		phase := msg.Phase
 		if phase == "" {
@@ -481,20 +466,31 @@ func (p *parser) handleMessage(ts time.Time, msg responseMessagePayload) {
 	}
 }
 
-// extractAndStripSkillBlocks pulls every <skill>...</skill> wrapper out of
-// text, appends a SkillInvocation per block, and returns text with all
-// wrappers removed. Empty Name/Path still produces an invocation record
-// (the parser is permissive — bucketing as "unknown" happens downstream).
-func (p *parser) extractAndStripSkillBlocks(ts time.Time, text string) string {
-	return skillBlockPattern.ReplaceAllStringFunc(text, func(match string) string {
-		body := firstSubmatch(skillBlockPattern, match)
-		p.out.SkillInvocations = append(p.out.SkillInvocations, SkillInvocation{
-			Name:      firstSubmatch(skillNamePattern, body),
-			Path:      firstSubmatch(skillPathPattern, body),
-			Timestamp: ts,
-		})
-		return ""
-	})
+// dropContextBlocks returns the user-message content without the input_text
+// blocks isContextBlock classifies as injected context. Each dropped <skill>
+// block first appends a SkillInvocation per wrapper it holds. Empty Name/Path
+// still produces an invocation record (the parser is permissive — bucketing
+// as "unknown" happens downstream).
+func (p *parser) dropContextBlocks(ts time.Time, blocks []responseContentBlock) []responseContentBlock {
+	kept := make([]responseContentBlock, 0, len(blocks))
+	for _, b := range blocks {
+		if b.Type != "input_text" || !isContextBlock(b.Text) {
+			kept = append(kept, b)
+			continue
+		}
+		if !isSkillBlock(b.Text) {
+			continue
+		}
+		for _, m := range skillBlockPattern.FindAllStringSubmatch(b.Text, -1) {
+			body := m[1]
+			p.out.SkillInvocations = append(p.out.SkillInvocations, SkillInvocation{
+				Name:      firstSubmatch(skillNamePattern, body),
+				Path:      firstSubmatch(skillPathPattern, body),
+				Timestamp: ts,
+			})
+		}
+	}
+	return kept
 }
 
 // firstSubmatch returns the first capture group of re applied to s, or "" if

@@ -29,6 +29,7 @@ import {
 } from '@/schemas/codexTranscript';
 import { isRecord } from '@/utils/utils';
 import { syncFilesAPI } from './api';
+import { isCodexContextBlock } from './codexContextBlocks';
 import { reportTranscriptErrors } from './transcriptErrorReporting';
 
 // Dedupe across re-parses: only report each session once per page-load.
@@ -174,11 +175,14 @@ function joinMessageText(msg: Pick<CodexResponseMessage | CodexAgentMessage, 'co
   return { text: texts.join('\n'), images };
 }
 
-/** Drop `<environment_context>…</environment_context>` blocks from user text. */
-function stripEnvironmentContext(text: string): string {
-  return text
-    .replace(/<environment_context>[\s\S]*?<\/environment_context>/g, '')
-    .trim();
+/** True for a user-role `input_text` block that Codex injected as context (z63s). */
+function isInjectedContextBlock(block: CodexResponseMessage['content'][number]): boolean {
+  return (
+    block.type === 'input_text' &&
+    'text' in block &&
+    typeof block.text === 'string' &&
+    isCodexContextBlock(block.text)
+  );
 }
 
 /**
@@ -317,7 +321,8 @@ type ToolCallDraft = {
  *     top-level bookkeeping lines token_usage_record (pnkh), world_state
  *     (zgd6), inter_agent_communication_metadata, dynamic_tools_updated,
  *     security_risk_score, retained_context, realtime_item (kpqz)
- *   - Strip `<environment_context>…</environment_context>` from user messages
+ *   - Drop Codex-injected context blocks (AGENTS.md, `<environment_context>`,
+ *     `<skill>`, `<turn_aborted>`, …) from user messages (z63s, codexContextBlocks.ts)
  *   - Strip exec output preamble; surface exit code + wall time as execMetadata
  *   - Pair function_call ↔ function_call_output by call_id
  *   - Pair custom_tool_call ↔ custom_tool_call_output ↔ event_msg.patch_apply_end
@@ -608,17 +613,21 @@ function handleResponseMessage(
       // Drop developer-role messages entirely (sandbox/permissions noise).
       return;
     case 'user': {
-      const { text, images } = joinMessageText(msg);
-      const cleaned = stripEnvironmentContext(text);
+      // z63s: drop the context blocks Codex injects as user input (AGENTS.md,
+      // <environment_context>, <skill>, …) before joining, so only what the
+      // human typed renders.
+      const { text, images } = joinMessageText({
+        content: msg.content.filter((block) => !isInjectedContextBlock(block)),
+      });
       // CF-388: keep image-only messages — sentinel-stripped text may be
       // empty but the user clearly attached an image and meant to send it.
-      // env_context-only messages (no text, no images) still skip.
-      if (cleaned.length === 0 && images.length === 0) return;
+      // Context-only messages (no text, no images) still skip.
+      if (text.length === 0 && images.length === 0) return;
       items.push({
         kind: 'user',
         lineId,
         timestamp: line.timestamp,
-        text: cleaned,
+        text,
         ...(images.length > 0 ? { images } : {}),
       });
       return;
