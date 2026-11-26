@@ -110,12 +110,26 @@ describe('categorizeCodexToolCall', () => {
     expect(categorizeCodexToolCall(toolCall('exec_command'))).toBe('exec_command');
   });
 
+  it('buckets runtime-qualified command tool names as exec_command', () => {
+    expect(categorizeCodexToolCall(toolCall('functions.exec'))).toBe('exec_command');
+    expect(categorizeCodexToolCall(toolCall('functions.exec_command'))).toBe('exec_command');
+  });
+
   it('buckets apply_patch toolName as apply_patch', () => {
     expect(categorizeCodexToolCall(toolCall('apply_patch'))).toBe('apply_patch');
   });
 
+  it('buckets the runtime-qualified patch tool name as apply_patch', () => {
+    expect(categorizeCodexToolCall(toolCall('functions.apply_patch'))).toBe('apply_patch');
+  });
+
   it('buckets web_search_call toolName as web_search', () => {
     expect(categorizeCodexToolCall(toolCall('web_search_call'))).toBe('web_search');
+  });
+
+  it('buckets runtime-qualified web search tool names as web_search', () => {
+    expect(categorizeCodexToolCall(toolCall('web.run'))).toBe('web_search');
+    expect(categorizeCodexToolCall(toolCall('web__run'))).toBe('web_search');
   });
 
   it('buckets MCP tool names as generic', () => {
@@ -140,6 +154,23 @@ describe('categorizeCodexToolCall', () => {
 // ---------------------------------------------------------------------------
 
 describe('countCodexCategories', () => {
+  it('counts runtime-qualified built-in tools in their corresponding buckets', () => {
+    const counts = countCodexCategories([
+      toolCall('functions.exec'),
+      toolCall('functions.apply_patch'),
+      toolCall('web__run'),
+      toolCall('mcp__github__create_issue'),
+    ]);
+
+    expect(counts.tool_call).toEqual({
+      total: 4,
+      exec_command: 1,
+      apply_patch: 1,
+      web_search: 1,
+      generic: 1,
+    });
+  });
+
   it('returns all-zero counts for an empty array', () => {
     const counts = countCodexCategories([]);
     expect(counts.user).toBe(0);
