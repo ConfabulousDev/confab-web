@@ -92,10 +92,15 @@ export const DEFAULT_CODEX_FILTER_STATE: CodexFilterState = {
 export function categorizeCodexToolCall(item: CodexToolCallItem): CodexToolCallSubcategory {
   switch (item.toolName) {
     case 'exec_command':
+    case 'functions.exec':
+    case 'functions.exec_command':
       return 'exec_command';
     case 'apply_patch':
+    case 'functions.apply_patch':
       return 'apply_patch';
     case 'web_search_call':
+    case 'web.run':
+    case 'web__run':
       return 'web_search';
     default:
       return 'generic';
