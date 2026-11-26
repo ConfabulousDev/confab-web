@@ -49,6 +49,24 @@
   background: var(--color-bg-primary);
 }
 
+/* kpqz: inter-agent (parent <-> subagent) message. Blue accent keeps it
+   visually distinct from the green user-prompt row it would otherwise be
+   mistaken for. */
+.agentMessage {
+  background: var(--color-info-light);
+  border-left: 3px solid var(--color-info);
+}
+
+/* `author → recipient` header label. Agent paths can be long, so let them
+   wrap rather than push the timestamp off a phone-width row. */
+.agentRoute {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Commentary phase: lighter background, faded text — visually subordinate. */
 .commentary {
   background: var(--color-bg-secondary);

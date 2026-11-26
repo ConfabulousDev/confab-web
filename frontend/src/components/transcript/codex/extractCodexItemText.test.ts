@@ -24,6 +24,14 @@ describe('extractCodexItemText', () => {
     expect(extractCodexItemText(item)).toContain('reply body');
   });
 
+  it('returns the agent_message text (kpqz)', () => {
+    const item: CodexRenderItem = {
+      kind: 'agent_message', lineId: '0', timestamp: ts,
+      author: '/root/worker', recipient: '/root', text: 'subagent reply',
+    };
+    expect(extractCodexItemText(item)).toContain('subagent reply');
+  });
+
   describe('tool_call', () => {
     it('exec_command: returns both the command and the output', () => {
       const item: CodexRenderItem = {

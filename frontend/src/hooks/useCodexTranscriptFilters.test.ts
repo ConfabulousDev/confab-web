@@ -127,6 +127,14 @@ describe('stateFromPaths', () => {
     expect(result).toEqual(DEFAULT_CODEX_FILTER_STATE);
   });
 
+  it('maps the agent_message token to the agent_message slot (kpqz)', () => {
+    expect(stateFromPaths(['agent_message']).agent_message).toBe(false);
+    expect(pathsFromState({ ...DEFAULT_CODEX_FILTER_STATE, agent_message: false })).toContain(
+      'agent_message',
+    );
+    expect(DEFAULT_HIDDEN).not.toContain('agent_message');
+  });
+
   it('round-trips: stateFromPaths(pathsFromState(s)) === s', () => {
     const samples: CodexFilterState[] = [
       DEFAULT_CODEX_FILTER_STATE,
@@ -147,6 +155,7 @@ describe('stateFromPaths', () => {
         compacted: false,
         turn_separator: false,
         turn_aborted: false,
+        agent_message: false,
         unknown: true,
       },
       {
@@ -162,6 +171,7 @@ describe('stateFromPaths', () => {
         compacted: true,
         turn_separator: true,
         turn_aborted: true,
+        agent_message: true,
         unknown: true,
       },
     ];

@@ -8,6 +8,7 @@ import type {
   CodexCompactedItem,
   CodexTurnSeparatorItem,
   CodexUnknownItem,
+  CodexAgentMessageItem,
 } from '@/types/codexRenderItem';
 import {
   categorizeCodexToolCall,
@@ -90,6 +91,16 @@ const unknown: CodexUnknownItem = {
   unrecognizedType: '(none)',
 };
 
+// kpqz: inter-agent (parent <-> subagent) message.
+const agentMessage: CodexAgentMessageItem = {
+  kind: 'agent_message',
+  lineId: '14',
+  timestamp: TS,
+  author: '/root/worker',
+  recipient: '/root',
+  text: 'done',
+};
+
 // ---------------------------------------------------------------------------
 // categorizeCodexToolCall
 // ---------------------------------------------------------------------------
@@ -143,7 +154,15 @@ describe('countCodexCategories', () => {
     expect(counts.reasoning_hidden).toBe(0);
     expect(counts.compacted).toBe(0);
     expect(counts.turn_separator).toBe(0);
+    expect(counts.agent_message).toBe(0);
     expect(counts.unknown).toBe(0);
+  });
+
+  it('counts agent_message items in their own flat bucket, never as user (kpqz)', () => {
+    const counts = countCodexCategories([agentMessage, agentMessage, userItem]);
+    expect(counts.agent_message).toBe(2);
+    expect(counts.user).toBe(1);
+    expect(counts.assistant.total).toBe(0);
   });
 
   it('counts one of each kind across a mixed fixture', () => {
@@ -252,6 +271,7 @@ describe('codexItemMatchesFilter', () => {
       compacted: false,
       turn_separator: false,
       turn_aborted: false,
+      agent_message: false,
       unknown: false,
     };
     it.each<[string, CodexRenderItem]>([
@@ -265,6 +285,7 @@ describe('codexItemMatchesFilter', () => {
       ['reasoning_hidden', reasoningHidden],
       ['compacted', compacted],
       ['turn_separator', turnSeparator],
+      ['agent_message', agentMessage],
       ['unknown', unknown],
     ])('hides every variant (%s)', (_label, item) => {
       expect(codexItemMatchesFilter(item, allFalse)).toBe(false);
@@ -315,6 +336,12 @@ describe('codexItemMatchesFilter', () => {
     it('respects the compacted flag', () => {
       const state: CodexFilterState = { ...DEFAULT_CODEX_FILTER_STATE, compacted: false };
       expect(codexItemMatchesFilter(compacted, state)).toBe(false);
+    });
+    it('shows agent_message by default and respects its flag (kpqz)', () => {
+      expect(codexItemMatchesFilter(agentMessage, DEFAULT_CODEX_FILTER_STATE)).toBe(true);
+      const state: CodexFilterState = { ...DEFAULT_CODEX_FILTER_STATE, agent_message: false };
+      expect(codexItemMatchesFilter(agentMessage, state)).toBe(false);
+      expect(codexItemMatchesFilter(userItem, state)).toBe(true);
     });
     it('respects the user flag', () => {
       const state: CodexFilterState = { ...DEFAULT_CODEX_FILTER_STATE, user: false };

@@ -25,6 +25,7 @@ import {
   type CodexResponseItemLine,
   type CodexEventMsgLine,
   type CodexResponseMessage,
+  type CodexAgentMessage,
 } from '@/schemas/codexTranscript';
 import { isRecord } from '@/utils/utils';
 import { syncFilesAPI } from './api';
@@ -151,7 +152,7 @@ const CODEX_IMAGE_SENTINEL_RE = /<image[^>]*>|<\/image>/g;
  * Unknown block types are dropped — renderers branch on them upstream if
  * they ever matter.
  */
-function joinMessageText(msg: CodexResponseMessage): {
+function joinMessageText(msg: Pick<CodexResponseMessage | CodexAgentMessage, 'content'>): {
   text: string;
   images: string[];
 } {
@@ -311,13 +312,18 @@ type ToolCallDraft = {
  *   - Drop noise: session_meta, turn_context, event_msg.task_started,
  *     event_msg.user_message, event_msg.agent_message,
  *     event_msg.web_search_end (CF-368), event_msg.context_compacted (CF-368),
- *     response_item.message[role=developer]
+ *     response_item.message[role=developer], response_item.additional_tools /
+ *     configuration_update / compaction / context_compaction (kpqz), and the
+ *     top-level bookkeeping lines token_usage_record (pnkh), world_state
+ *     (zgd6), inter_agent_communication_metadata, dynamic_tools_updated,
+ *     security_risk_score, retained_context, realtime_item (kpqz)
  *   - Strip `<environment_context>…</environment_context>` from user messages
  *   - Strip exec output preamble; surface exit code + wall time as execMetadata
  *   - Pair function_call ↔ function_call_output by call_id
  *   - Pair custom_tool_call ↔ custom_tool_call_output ↔ event_msg.patch_apply_end
  *   - Enrich the paired tool_call with MCP server/tool from event_msg.mcp_tool_call_end (CF-368)
  *   - Attach event_msg.token_count.last_token_usage to the most-recent unannotated assistant
+ *   - Emit CodexAgentMessageItem for each non-empty response_item.agent_message (kpqz)
  *   - Emit CodexReasoningHiddenItem for each reasoning line
  *   - Emit CodexTurnSeparatorItem per task_complete (durationMs, timeToFirstTokenMs)
  *   - Emit CodexCompactedItem for each compacted line
@@ -401,6 +407,17 @@ export function normalizeCodexLines(rawLines: RawCodexLine[]): CodexRenderItem[]
         // row the reader can't act on.
         break;
       }
+      case 'inter_agent_communication_metadata':
+        // kpqz: `{trigger_turn}` flag written just before each
+        // response_item.agent_message; the message itself carries the content.
+        break;
+      case 'dynamic_tools_updated':
+      case 'security_risk_score':
+      case 'retained_context':
+      case 'realtime_item':
+        // kpqz: bookkeeping persisted per upstream rust-v0.172.0, not yet
+        // observed locally; nothing a reader can act on.
+        break;
     }
   });
 
@@ -537,6 +554,31 @@ function handleResponseItem(
       items.push({ kind: 'reasoning_hidden', lineId, timestamp: line.timestamp });
       break;
     }
+
+    case 'agent_message': {
+      // kpqz: parent <-> subagent message. Its text exists nowhere else in
+      // the rollout, so render it; drop it only when there's nothing to show.
+      const { text, images } = joinMessageText(payload);
+      if (text.length === 0 && images.length === 0) return;
+      items.push({
+        kind: 'agent_message',
+        lineId,
+        timestamp: line.timestamp,
+        author: payload.author,
+        recipient: payload.recipient,
+        text,
+        ...(images.length > 0 ? { images } : {}),
+      });
+      break;
+    }
+
+    case 'additional_tools':
+    case 'configuration_update':
+    case 'compaction':
+    case 'context_compaction':
+      // kpqz: tool catalog, reasoning-effort control and encrypted
+      // compaction blobs — bookkeeping with nothing to render.
+      break;
 
     case 'web_search_call': {
       // Treat web search like any other tool call — render as inline summary.

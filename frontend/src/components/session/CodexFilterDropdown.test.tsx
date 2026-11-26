@@ -13,6 +13,7 @@ function makeCounts(overrides: Partial<CodexHierarchicalCounts> = {}): CodexHier
     compacted: 0,
     turn_separator: 2,
     turn_aborted: 0,
+    agent_message: 0,
     unknown: 0,
     ...overrides,
   };
@@ -27,6 +28,7 @@ function makeFilterState(overrides: Partial<CodexFilterState> = {}): CodexFilter
     compacted: true,
     turn_separator: true,
     turn_aborted: true,
+    agent_message: true,
     unknown: true,
     ...overrides,
   };
@@ -92,6 +94,16 @@ describe('CodexFilterDropdown', () => {
     await user.click(getByRole('button', { name: 'Message Filters' }));
     await user.click(getByText('User').closest('button')!);
     expect(onToggleCategory).toHaveBeenCalledWith('user');
+  });
+
+  it('offers an Agent Message chip that toggles the agent_message category (kpqz)', async () => {
+    const user = userEvent.setup();
+    const { getByRole, getByText, onToggleCategory } = renderDropdown({
+      counts: { agent_message: 2 },
+    });
+    await user.click(getByRole('button', { name: 'Message Filters' }));
+    await user.click(getByText('Agent Message').closest('button')!);
+    expect(onToggleCategory).toHaveBeenCalledWith('agent_message');
   });
 
   it('clicking an assistant subcategory invokes onToggleAssistantSubcategory', async () => {

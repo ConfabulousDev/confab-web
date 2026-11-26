@@ -25,7 +25,8 @@ function timestampMs(item: CodexRenderItem): number | undefined {
  * Chain key for skip-to-next / skip-to-prev same-kind navigation (CF-360).
  *
  * Returns null for kinds that do not participate in skip nav (turn_separator,
- * reasoning_hidden, compacted, unknown). Splits assistant by `phase` so users
+ * reasoning_hidden, compacted, turn_aborted, unknown). `agent_message` (kpqz)
+ * gets its own chain, separate from `user`. Splits assistant by `phase` so users
  * can jump between final answers without stopping at commentary, and tool_call
  * by `toolName` so users can jump between exec_command rows past intervening
  * apply_patch rows.
@@ -36,6 +37,8 @@ export function skipNavKey(item: CodexRenderItem): string | null {
       return 'user';
     case 'assistant':
       return `assistant:${item.phase}`;
+    case 'agent_message':
+      return 'agent_message';
     case 'tool_call':
       return `tool_call:${item.toolName}`;
     default:
@@ -50,6 +53,8 @@ export function skipNavLabel(item: CodexRenderItem): string {
       return 'user prompt';
     case 'assistant':
       return item.phase === 'commentary' ? 'assistant commentary' : 'assistant answer';
+    case 'agent_message':
+      return 'agent message';
     case 'tool_call':
       switch (item.toolName) {
         case 'exec_command':
@@ -82,11 +87,11 @@ export function skipNavLabel(item: CodexRenderItem): string {
  *
  * Speaker rule: track the last user/assistant kind seen. Mark the current
  * item as newSpeaker iff its kind is user|assistant AND a previous speaker
- * exists AND the previous speaker kind differs. tool_call, reasoning_hidden,
- * turn_separator, compacted, and unknown items do NOT update the tracked
- * speaker — so user → tool_call → user is the same speaker (Codex-specific
- * carveout; Claude has no analog because tool_use is a content block, not
- * a separate timeline item).
+ * exists AND the previous speaker kind differs. tool_call, agent_message,
+ * reasoning_hidden, turn_separator, compacted, and unknown items do NOT update
+ * the tracked speaker — so user → tool_call → user is the same speaker
+ * (Codex-specific carveout; Claude has no analog because tool_use is a
+ * content block, not a separate timeline item).
  */
 export function buildVirtualItems(items: CodexRenderItem[]): VirtualItem[] {
   const out: VirtualItem[] = [];

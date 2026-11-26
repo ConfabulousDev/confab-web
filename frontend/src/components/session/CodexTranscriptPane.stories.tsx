@@ -190,6 +190,7 @@ export const FilteredAllOut: Story = {
       compacted: false,
       turn_separator: false,
       turn_aborted: false,
+      agent_message: false,
       unknown: false,
     };
     const { items, filteredItems, visibleIndices } = deriveProps(fixtureLines, filterState);

@@ -27,6 +27,7 @@ export function extractCodexItemText(item: CodexRenderItem): string {
   switch (item.kind) {
     case 'user':
     case 'assistant':
+    case 'agent_message':
       return item.text;
     case 'tool_call':
       return extractToolCallText(item);

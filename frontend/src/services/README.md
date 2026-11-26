@@ -89,6 +89,18 @@ without re-fetching:
      `event_msg.token_count`, below — pnkh), and the top-level `world_state`
      (periodic environment/instructions/skills snapshot; no analyzer or UI
      consumes it — zgd6).
+   - **kpqz — Codex CLI 0.172.0 record types.** Silently dropped:
+     `response_item.additional_tools` (tool catalog),
+     `response_item.configuration_update` (reasoning-effort control),
+     `response_item.compaction` / `context_compaction` (encrypted blobs), and
+     the top-level `inter_agent_communication_metadata` (`{trigger_turn}`,
+     written just before each agent message), `dynamic_tools_updated`,
+     `security_risk_score`, `retained_context` and `realtime_item`.
+     `response_item.agent_message` (parent ↔ subagent message, whose text
+     appears nowhere else in the rollout) emits a `CodexAgentMessageItem`
+     (`kind: 'agent_message'`, `author`, `recipient`, `text`, optional
+     `images`) via the shared `joinMessageText`; it's dropped only when it has
+     neither text nor images.
      (`session_meta` and `turn_context` are dropped from the render stream
      but their `payload.model` is plucked first — see below.)
    - **px58 — 9 more recognized-but-silent `event_msg` types**, whitelisted
