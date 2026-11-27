@@ -61,7 +61,8 @@ export interface CodexUserItem {
  * `event_msg.token_count` line is processed — the most-recent unannotated
  * assistant item (any phase) gets the `last_token_usage` delta, normalized
  * to canonical `TokenUsage` at parse time (uncached input, output with
- * reasoning folded in, cacheRead = cached_input_tokens, cacheWrite = 0).
+ * reasoning folded in, cacheRead = cached_input_tokens,
+ * cacheWrite = cache_write_input_tokens).
  *
  * `reasoningTokens` (CF-418) preserves the raw reasoning count so the cost
  * tooltip can show a "Reasoning: N" sub-line even though `usage.output`

@@ -15,10 +15,10 @@ import (
 // (card, provider) matrix.
 //
 // Per-card aggregation rules:
-//   - Tokens: sum across rollouts (cached is a subset of input under OpenAI
-//     semantics — subtract before applying the uncached rate; reasoning tokens
-//     fold into output; cache writes bill nothing because the wire carries no
-//     cache-write count, not because the rate is zero — md0z).
+//   - Tokens: sum across rollouts (cached and cache-write are both subsets of
+//     input under OpenAI semantics — subtract both before applying the
+//     uncached rate; cache writes bill at the cacheWrite rate; reasoning
+//     tokens fold into output).
 //   - Session: per-turn counts sum; ModelsUsed unions; DurationMs spans
 //     earliest start to latest completion; compactions sum (all "auto").
 //   - Conversation: rollouts[0] only — turn counts + timing reflect

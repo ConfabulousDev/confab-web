@@ -207,6 +207,14 @@ describe('codexAdapter.calculateMessageCost', () => {
     expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
   });
 
+  it('bills cache writes at the table cacheWrite rate on GPT-5.6+ families (md0z)', () => {
+    // gpt-5.6-sol fixture: input=$4/M, cacheWrite=$5/M, cacheRead=$0.4/M →
+    // 100k*$4 + 300k*$5 + 600k*$0.4 = $0.4 + $1.5 + $0.24 = $2.14
+    const it = item('gpt-5.6-sol', usage({ input: 100_000, cacheWrite: 300_000, cacheRead: 600_000 }));
+    expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it))
+      .toBeCloseTo(2.14, 6);
+  });
+
   it('returns 0 for zero usage', () => {
     const it = item('gpt-5', usage());
     expect(codexAdapter.calculateMessageCost(it.model, it.usage!, it)).toBe(0);
@@ -249,6 +257,22 @@ describe('codexAdapter.extendCostTooltip', () => {
     const i = item({ input: 100, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0 });
     const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
     expect(out.every((l) => !l.includes('Cached (hit)'))).toBe(true);
+  });
+
+  it('shows gross input including cache writes, with a Cache write sub-line after Cached (hit) (md0z)', () => {
+    const i = item({ input: 100, output: 0, cacheWrite: 300, cacheWrite1h: 0, cacheRead: 600 });
+    const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
+    expect(out).toContain('Input tokens (in): 1,000');
+    const hit = out.findIndex((l) => /Cached \(hit\):\s*600/.test(l));
+    const write = out.findIndex((l) => /Cache write:\s*300/.test(l));
+    expect(hit).toBeGreaterThan(-1);
+    expect(write).toBe(hit + 1);
+  });
+
+  it('omits the Cache write sub-line when cacheWrite is 0', () => {
+    const i = item({ input: 100, output: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 25 });
+    const out = codexAdapter.extendCostTooltip!(baseLines, i.usage!, i);
+    expect(out.every((l) => !l.includes('Cache write'))).toBe(true);
   });
 
   it('does NOT emit Claude-only labels (Speed, Tier, Web searches)', () => {

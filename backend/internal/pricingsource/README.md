@@ -86,9 +86,10 @@ Read these before adding or repricing a row.
   offer no caching at all, so both cache columns are 0 for them. `cacheWrite1h`
   is 0 on every OpenAI row — OpenAI has no 1-hour tier, and consumers fall back
   to `cacheWrite`. OpenAI's 12-hour retention tier (since 2026-10-20, 2.5x
-  input) is not stored: it maps to neither column. These rates bill nothing
-  today: the Codex parser carries the wire's cache-write token count, but the
-  analyzer deliberately does not apply the rates to it yet (tracked in `md0z`).
+  input) is not stored: it maps to neither column. The Codex analyzer bills the
+  wire's cache-write token count at `cacheWrite`; the rollout carries no
+  30m/12h split, so 12-hour writes bill at the 30-minute rate. OpenCode's
+  OpenAI fallback still zeroes its cache writes (`1pcr`).
 - **DeepSeek V4 is stored at off-peak rates.** DeepSeek bills peak during
   01:00–04:00 and 06:00–10:00 UTC Mon–Fri and half that otherwise — 35 of 168
   hours, so off-peak covers ~79% of wall-clock time and is the better

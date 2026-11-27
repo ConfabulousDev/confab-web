@@ -1234,6 +1234,52 @@ describe('normalizeCodexLines — token_count attribution (CF-362)', () => {
 // parenthetical sub-line.
 // ---------------------------------------------------------------------------
 
+// md0z: `cache_write_input_tokens` is a SUBSET of `input_tokens`, like
+// `cached_input_tokens`. Both leave ordinary input; the write count lands in
+// the 5-minute `cacheWrite` slot (the 30-minute OpenAI tier).
+describe('normalizeCodexLines — cache writes are a subset of input (md0z)', () => {
+  function usageFor(usageJSON: string) {
+    const jsonl = [
+      '{"timestamp":"2026-05-13T01:00:00Z","type":"session_meta","payload":{"model":"gpt-5.6-sol"}}',
+      '{"timestamp":"2026-05-13T01:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"final","content":[{"type":"output_text","text":"hello"}]}}',
+      `{"timestamp":"2026-05-13T01:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":${usageJSON}}}}`,
+    ].join('\n');
+    const a = items(jsonl).find((i) => i.kind === 'assistant');
+    if (a?.kind !== 'assistant') throw new Error('expected assistant');
+    return a.usage;
+  }
+
+  it('subtracts both cached and cache-write tokens from input', () => {
+    expect(usageFor('{"input_tokens":1000,"cached_input_tokens":600,"cache_write_input_tokens":300,"output_tokens":50}')).toEqual({
+      input: 100,
+      output: 50,
+      cacheWrite: 300,
+      cacheWrite1h: 0,
+      cacheRead: 600,
+    });
+  });
+
+  it('treats a missing cache_write_input_tokens as 0', () => {
+    expect(usageFor('{"input_tokens":1000,"cached_input_tokens":600,"output_tokens":50}')).toEqual({
+      input: 400,
+      output: 50,
+      cacheWrite: 0,
+      cacheWrite1h: 0,
+      cacheRead: 600,
+    });
+  });
+
+  it('clamps ordinary input at 0 when cached + cache-write exceed input, keeping the write in full', () => {
+    expect(usageFor('{"input_tokens":500,"cached_input_tokens":400,"cache_write_input_tokens":300,"output_tokens":10}')).toEqual({
+      input: 0,
+      output: 10,
+      cacheWrite: 300,
+      cacheWrite1h: 0,
+      cacheRead: 400,
+    });
+  });
+});
+
 describe('normalizeCodexLines — reasoning is informational, never additive (CF-471)', () => {
   // One user → one assistant, then a single token_count event whose usage
   // JSON varies per case. All four cases share this scaffold, so we build

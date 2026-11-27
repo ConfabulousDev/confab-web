@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ConfabulousDev/confab-web/internal/codex"
+	"github.com/shopspring/decimal"
 )
 
 // CF-471 regression: reasoning_output_tokens is a SUBSET of output_tokens on
@@ -26,11 +27,7 @@ import (
 // token counts. All four CF-471 tests below differ only in the TokenUsage
 // values, so the rest of the rollout is identical.
 func rolloutWithUsage(usage codex.TokenUsage) *codex.ParsedRollout {
-	return &codex.ParsedRollout{
-		Model:      "gpt-5",
-		Turns:      []codex.Turn{{Model: "gpt-5"}},
-		TokenUsage: usage,
-	}
+	return codexModelRollout("gpt-5", usage)
 }
 
 // TestComputeCodexTokens_TicketRollout_ReasoningNotAdded pins the exact
@@ -147,7 +144,7 @@ func TestComputeCodexTokens_MultiRolloutReasoningExcluded(t *testing.T) {
 // TestComputeCodexTokens_V2Tree is the 7eje contract for Codex: the per-model
 // tokens_v2 tree under the canonical agent id "codex", keyed by getModelFamily()
 // families, grouped per-rollout model, with reasoning surfaced per model and
-// cache_creation held at 0 (OpenAI bills no cache writes).
+// cache_creation 0 when the wire reports no cache writes.
 func TestComputeCodexTokens_V2Tree(t *testing.T) {
 	main := &codex.ParsedRollout{
 		Model: "gpt-5",
@@ -195,7 +192,7 @@ func TestComputeCodexTokens_V2Tree(t *testing.T) {
 		t.Errorf("gpt-5 reasoning = %d, want 500", gpt5.Reasoning)
 	}
 	if gpt5.CacheWrite != 0 {
-		t.Errorf("gpt-5 cacheWrite = %d, want 0 (OpenAI bills no cache writes)", gpt5.CacheWrite)
+		t.Errorf("gpt-5 cacheWrite = %d, want 0 (no cache writes on the wire)", gpt5.CacheWrite)
 	}
 
 	mini, ok := prov.Models["gpt-5-mini"]
@@ -211,31 +208,171 @@ func TestComputeCodexTokens_V2Tree(t *testing.T) {
 	}
 }
 
-// 23h5 / md0z: the parser carries cache_write_input_tokens, but the analyzer
-// deliberately leaves it out of the card and out of the billed path until
-// md0z settles how it relates to input_tokens.
-func TestComputeCodexTokens_CacheWriteParsedButNotBilled(t *testing.T) {
-	usage := codex.TokenUsage{
-		InputTokens:       100_000,
-		CachedInputTokens: 40_000,
-		OutputTokens:      2_000,
-		TotalTokens:       102_000,
+// codexModelRollout builds a minimal rollout on the given model carrying the given
+// wire token counts.
+func codexModelRollout(model string, usage codex.TokenUsage) *codex.ParsedRollout {
+	return &codex.ParsedRollout{
+		Model:      model,
+		Turns:      []codex.Turn{{Model: model}},
+		TokenUsage: usage,
 	}
-	base := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rolloutWithUsage(usage)})
+}
 
-	usage.CacheWriteInputTokens = 25_000
-	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{rolloutWithUsage(usage)})
-	if base == nil || out == nil {
+// wantCodexCost prices a request by hand from the model's table rates:
+// ordinary input, cached reads, cache writes and output each at their own
+// rate. It deliberately does not call CalculateCost.
+func wantCodexCost(t *testing.T, model string, ordinary, cached, cacheWrite, output int64) decimal.Decimal {
+	t.Helper()
+	p, ok := LookupPricing(model)
+	if !ok {
+		t.Fatalf("no pricing row for %s", model)
+	}
+	sum := decimal.NewFromInt(ordinary).Mul(p.Input).
+		Add(decimal.NewFromInt(cached).Mul(p.CacheRead)).
+		Add(decimal.NewFromInt(cacheWrite).Mul(p.CacheWrite)).
+		Add(decimal.NewFromInt(output).Mul(p.Output))
+	return sum.Div(decimal.NewFromInt(1_000_000))
+}
+
+// md0z: cache_write_input_tokens is a SUBSET of input_tokens (OpenAI's
+// prompt-caching guide; Codex's own status line computes
+// input - cached - cache_write). The write portion leaves ordinary input,
+// surfaces as cache creation, and bills at the table's cacheWrite rate.
+func TestComputeCodexTokens_CacheWriteBilledAsSubsetOfInput(t *testing.T) {
+	const model = "gpt-5.6-terra"
+	if p, _ := LookupPricing(model); !p.CacheWrite.IsPositive() {
+		t.Fatalf("%s cacheWrite rate = %s; this test needs a non-zero rate", model, p.CacheWrite)
+	}
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{codexModelRollout(model, codex.TokenUsage{
+		InputTokens:           1000,
+		CachedInputTokens:     600,
+		CacheWriteInputTokens: 300,
+		OutputTokens:          50,
+		TotalTokens:           1050,
+	})})
+	if out == nil {
 		t.Fatal("ComputeFromCodexRollout returned nil")
 	}
-	if out.CacheCreationTokens != 0 {
-		t.Errorf("CacheCreationTokens = %d, want 0 (cache-write tokens must not be surfaced until md0z)", out.CacheCreationTokens)
+	if out.InputTokens != 100 {
+		t.Errorf("InputTokens = %d, want 100 (input - cached - cache_write)", out.InputTokens)
 	}
-	if !out.EstimatedCostUSD.Equal(base.EstimatedCostUSD) {
-		t.Errorf("EstimatedCostUSD = %s, want %s (cache-write tokens must not be billed until md0z)", out.EstimatedCostUSD, base.EstimatedCostUSD)
+	if out.CacheReadTokens != 600 {
+		t.Errorf("CacheReadTokens = %d, want 600", out.CacheReadTokens)
 	}
-	if out.InputTokens != base.InputTokens || out.CacheReadTokens != base.CacheReadTokens || out.OutputTokens != base.OutputTokens {
-		t.Errorf("token totals changed with cache-write present: got in=%d read=%d out=%d, want in=%d read=%d out=%d",
-			out.InputTokens, out.CacheReadTokens, out.OutputTokens, base.InputTokens, base.CacheReadTokens, base.OutputTokens)
+	if out.CacheCreationTokens != 300 {
+		t.Errorf("CacheCreationTokens = %d, want 300 (wire cache_write_input_tokens)", out.CacheCreationTokens)
+	}
+	if out.OutputTokens != 50 {
+		t.Errorf("OutputTokens = %d, want 50", out.OutputTokens)
+	}
+	want := wantCodexCost(t, model, 100, 600, 300, 50)
+	if !out.EstimatedCostUSD.Equal(want) {
+		t.Errorf("EstimatedCostUSD = %s, want %s (cache writes billed at the cacheWrite rate)", out.EstimatedCostUSD, want)
+	}
+
+	if out.TokensV2 == nil {
+		t.Fatal("TokensV2 not populated")
+	}
+	node, ok := out.TokensV2.ByProvider["codex"].Models[model]
+	if !ok {
+		t.Fatalf("tokens_v2 missing model %s: %+v", model, out.TokensV2.ByProvider)
+	}
+	if node.CacheWrite != 300 || node.Input != 100 {
+		t.Errorf("tokens_v2 %s cache_creation/input = %d/%d, want 300/100", model, node.CacheWrite, node.Input)
+	}
+	if node.CostUSD != want.String() {
+		t.Errorf("tokens_v2 %s cost = %s, want %s", model, node.CostUSD, want)
+	}
+	if out.TokensV2.TotalCacheCreation != 300 {
+		t.Errorf("tokens_v2 total_cache_creation = %d, want 300", out.TokensV2.TotalCacheCreation)
+	}
+}
+
+// md0z: malformed wire data where cached + cache_write exceeds input clamps
+// ordinary input at 0 (never negative), and the write still bills in full.
+func TestComputeCodexTokens_CacheWriteClampsOrdinaryInputAtZero(t *testing.T) {
+	const model = "gpt-5.6-terra"
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{codexModelRollout(model, codex.TokenUsage{
+		InputTokens:           500,
+		CachedInputTokens:     400,
+		CacheWriteInputTokens: 300,
+		OutputTokens:          10,
+	})})
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.InputTokens != 0 {
+		t.Errorf("InputTokens = %d, want 0 (ordinary input clamps, never negative)", out.InputTokens)
+	}
+	if out.CacheCreationTokens != 300 {
+		t.Errorf("CacheCreationTokens = %d, want 300 (the write is kept in full)", out.CacheCreationTokens)
+	}
+	want := wantCodexCost(t, model, 0, 400, 300, 10)
+	if !out.EstimatedCostUSD.Equal(want) {
+		t.Errorf("EstimatedCostUSD = %s, want %s", out.EstimatedCostUSD, want)
+	}
+}
+
+// md0z D2: a model whose table cacheWrite rate is 0 (pre-5.6) gets no
+// fallback rate. Its write tokens still leave ordinary input and surface as
+// cache creation, but bill at $0.
+func TestComputeCodexTokens_CacheWriteOnZeroRateModelBillsZero(t *testing.T) {
+	const model = "gpt-5.5"
+	if p, _ := LookupPricing(model); !p.CacheWrite.IsZero() {
+		t.Fatalf("%s cacheWrite rate = %s; this test needs a zero rate", model, p.CacheWrite)
+	}
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{codexModelRollout(model, codex.TokenUsage{
+		InputTokens:           1000,
+		CachedInputTokens:     200,
+		CacheWriteInputTokens: 300,
+		OutputTokens:          40,
+	})})
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.InputTokens != 500 {
+		t.Errorf("InputTokens = %d, want 500 (write tokens removed from ordinary input)", out.InputTokens)
+	}
+	if out.CacheCreationTokens != 300 {
+		t.Errorf("CacheCreationTokens = %d, want 300", out.CacheCreationTokens)
+	}
+	want := wantCodexCost(t, model, 500, 200, 0, 40)
+	if !out.EstimatedCostUSD.Equal(want) {
+		t.Errorf("EstimatedCostUSD = %s, want %s (writes on a 0-rate model bill at $0, no fallback)", out.EstimatedCostUSD, want)
+	}
+}
+
+// md0z: cache writes sum across the main rollout and its subagents, both in
+// the session total and in the tokens_v2 tree.
+func TestComputeCodexTokens_CacheWriteSummedAcrossRollouts(t *testing.T) {
+	const model = "gpt-5.6-terra"
+	main := codexModelRollout(model, codex.TokenUsage{
+		InputTokens:           5000,
+		CachedInputTokens:     1000,
+		CacheWriteInputTokens: 2000,
+		OutputTokens:          100,
+	})
+	sub := codexModelRollout(model, codex.TokenUsage{
+		InputTokens:           3000,
+		CachedInputTokens:     500,
+		CacheWriteInputTokens: 700,
+		OutputTokens:          60,
+	})
+	out := ComputeFromCodexRollout(context.Background(), []*codex.ParsedRollout{main, sub})
+	if out == nil {
+		t.Fatal("ComputeFromCodexRollout returned nil")
+	}
+	if out.CacheCreationTokens != 2700 {
+		t.Errorf("CacheCreationTokens = %d, want 2700 (2000 + 700)", out.CacheCreationTokens)
+	}
+	if out.InputTokens != 2000+1800 {
+		t.Errorf("InputTokens = %d, want 3800 (per-rollout input - cached - cache_write)", out.InputTokens)
+	}
+	want := wantCodexCost(t, model, 3800, 1500, 2700, 160)
+	if !out.EstimatedCostUSD.Equal(want) {
+		t.Errorf("EstimatedCostUSD = %s, want %s", out.EstimatedCostUSD, want)
+	}
+	if out.TokensV2 == nil || out.TokensV2.TotalCacheCreation != 2700 {
+		t.Errorf("tokens_v2 total_cache_creation = %+v, want 2700", out.TokensV2)
 	}
 }

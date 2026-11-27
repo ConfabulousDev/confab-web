@@ -96,7 +96,7 @@ func computeOpenCodeTokens(log *slog.Logger, out *ComputeResult, rollouts [][]*O
 			// OpenAI bills cached input as a subset of `input`; everyone else
 			// (Anthropic-style) bills writes and treats reads as independent of
 			// input. OpenCode does report a cache-write count for OpenAI, but it is
-			// zeroed rather than billed (md0z) — the 5.6 and 6 families do carry a
+			// zeroed rather than billed (1pcr) — the 5.6 and 6 families do carry a
 			// real cache-write rate in pricing.json, so this is an open question,
 			// not a $0 rate.
 			input := msg.Info.Tokens.Input

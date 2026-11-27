@@ -10,20 +10,24 @@ import (
 
 // computeCodexTokens sums token usage across rollouts and computes cost.
 // OpenAI semantics:
-//   - CachedInputTokens is a subset of InputTokens; subtract it before billing
-//     the uncached portion at the input rate.
+//   - CachedInputTokens and CacheWriteInputTokens are both SUBSETS of
+//     InputTokens (OpenAI's prompt-caching guide; Codex maps the wire's
+//     input_tokens_details.cache_write_tokens straight through). Ordinary input
+//     is input - cached - cacheWrite, clamped at 0, and bills at the input rate.
+//   - Cache writes surface as CacheCreationTokens and bill at the table's
+//     cacheWrite rate, which is OpenAI's 30-minute tier (1.25x input). The
+//     rollout carries no 30m/12h split, so an explicitly requested 12-hour write
+//     (2.5x) is undercharged at the 30-minute rate.
+//   - Models priced with cacheWrite = 0 (everything before gpt-5.6) get no
+//     fallback rate: their writes leave ordinary input and bill at $0. No such
+//     model has ever reported a write.
 //   - ReasoningOutputTokens is a subset of OutputTokens (CF-471); the wire's
 //     output_tokens already includes reasoning, so we surface it unchanged.
 //     Reasoning bills at the output rate implicitly.
-//   - CacheCreationTokens stays 0 and cache writes are not billed, deliberately:
-//     the parser carries the wire's count (TokenUsage.CacheWriteInputTokens), but
-//     whether it is a subset of input_tokens is undecided (md0z). The rate
-//     itself is not zero: the 5.6 and 6 families do carry a real cache-write
-//     rate in pricing.json.
 //
 // Pricing uses the main rollout's model.
 func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.ParsedRollout) {
-	var totalUncached, totalCached, totalOutput int64
+	var totalUncached, totalCached, totalCacheWrite, totalOutput int64
 
 	// Per-model accumulation for tokens_v2, grouped by model family with
 	// per-rollout pricing (7eje). pricingByFamily memoizes the lookup so an
@@ -36,9 +40,11 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 			continue
 		}
 		tu := r.TokenUsage
-		uncached := max(tu.InputTokens-tu.CachedInputTokens, 0)
+		cacheWrite := tu.CacheWriteInputTokens
+		uncached := max(tu.InputTokens-tu.CachedInputTokens-cacheWrite, 0)
 		totalUncached += uncached
 		totalCached += tu.CachedInputTokens
+		totalCacheWrite += cacheWrite
 		totalOutput += tu.OutputTokens
 
 		family := getModelFamily(r.Model)
@@ -55,16 +61,16 @@ func computeCodexTokens(log *slog.Logger, out *ComputeResult, rollouts []*codex.
 		agg.input += uncached
 		agg.output += tu.OutputTokens
 		agg.cacheRead += tu.CachedInputTokens
+		agg.cacheCreation += cacheWrite
 		agg.reasoning += tu.ReasoningOutputTokens
-		// Cache writes stay unbilled (see the header comment);
-		// reasoning is a subset of output (CF-471), so it bills implicitly at the
+		// Reasoning is a subset of output (CF-471), so it bills implicitly at the
 		// output rate and is not added here.
-		agg.cost = agg.cost.Add(CalculateCost(pricing, uncached, tu.OutputTokens, 0, tu.CachedInputTokens))
+		agg.cost = agg.cost.Add(CalculateCost(pricing, uncached, tu.OutputTokens, cacheWrite, tu.CachedInputTokens))
 	}
 
 	out.InputTokens = totalUncached
 	out.CacheReadTokens = totalCached
-	out.CacheCreationTokens = 0
+	out.CacheCreationTokens = totalCacheWrite
 	out.OutputTokens = totalOutput
 
 	pricingModel := ""

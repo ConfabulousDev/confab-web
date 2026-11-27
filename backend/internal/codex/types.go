@@ -160,12 +160,10 @@ type ToolCall struct {
 // usage a forked thread inherited from its parent and survives the running
 // total restarting (resume, compaction). See the package README for the rule.
 //
-// CacheWriteInputTokens is carried from the wire but not billed or displayed
-// yet (md0z).
-//
-// CachedInputTokens is a subset of InputTokens (OpenAI's API semantics — not
-// a separate count). Callers that bill cached tokens at a different rate must
-// subtract cached from input before applying the uncached rate.
+// CachedInputTokens and CacheWriteInputTokens are both subsets of InputTokens
+// (OpenAI's API semantics — not separate counts). Callers that bill them at
+// their own rates must subtract both from input before applying the uncached
+// rate.
 type TokenUsage struct {
 	InputTokens           int64
 	CachedInputTokens     int64

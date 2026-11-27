@@ -131,7 +131,7 @@ function usageFromTokens(line: RawOpenCodeLine): TokenUsage | undefined {
   let cacheWrite = t.cache?.write ?? 0;
   // Mirror the backend's per-provider normalization (opencode_compute.go): OpenAI
   // bills cached input as a subset of `input`, and its cache writes are zeroed
-  // because the wire carries no trustworthy count (md0z) — not because the rate
+  // because the wire carries no trustworthy count (1pcr) — not because the rate
   // is zero — so the pricing-table cost fallback matches the backend's number.
   if (line.info.providerID === 'openai') {
     input = Math.max(0, input - cacheRead);
