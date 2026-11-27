@@ -168,38 +168,11 @@ func (p *parser) dispatch(typ string, ts time.Time, payload json.RawMessage, lin
 // ----------------------------------------------------------------------------
 
 type sessionMetaPayload struct {
-	Model         string          `json:"model"`
-	ModelProvider string          `json:"model_provider"`
-	CWD           string          `json:"cwd"`
-	Git           map[string]any  `json:"git"`
-	CLIVersion    string          `json:"cli_version"`
-	Source        json.RawMessage `json:"source"`
-	ThreadSource  string          `json:"thread_source"`
-	AgentNickname string          `json:"agent_nickname"`
-	AgentRole     string          `json:"agent_role"`
-	AgentType     string          `json:"agent_type"` // legacy alias for agent_role
-	AgentPath     string          `json:"agent_path"`
-}
-
-// subAgentSourceWrapper decodes the {"sub_agent":{...}} variant. The inner
-// value is either a string (e.g. "review", "compact") or an object whose
-// single key names the subagent kind (e.g. {"thread_spawn":{...}}).
-type subAgentSourceWrapper struct {
-	SubAgent json.RawMessage `json:"sub_agent"`
-}
-
-// threadSpawnWrapper decodes {"thread_spawn":{...}}.
-type threadSpawnWrapper struct {
-	ThreadSpawn *threadSpawnPayload `json:"thread_spawn"`
-}
-
-type threadSpawnPayload struct {
-	ParentThreadID string `json:"parent_thread_id"`
-	Depth          int    `json:"depth"`
-	AgentPath      string `json:"agent_path"`
-	AgentNickname  string `json:"agent_nickname"`
-	AgentRole      string `json:"agent_role"`
-	AgentType      string `json:"agent_type"` // legacy alias
+	Model         string         `json:"model"`
+	ModelProvider string         `json:"model_provider"`
+	CWD           string         `json:"cwd"`
+	Git           map[string]any `json:"git"`
+	CLIVersion    string         `json:"cli_version"`
 }
 
 func (p *parser) handleSessionMeta(raw json.RawMessage) {
@@ -222,38 +195,6 @@ func (p *parser) handleSessionMeta(raw json.RawMessage) {
 	if meta.CLIVersion != "" {
 		p.out.CLIVersion = meta.CLIVersion
 	}
-	if sub := extractThreadSpawn(meta.Source); sub != nil {
-		role := sub.AgentRole
-		if role == "" {
-			role = sub.AgentType
-		}
-		p.out.Subagent = &SubagentSource{
-			ParentThreadID: sub.ParentThreadID,
-			Depth:          sub.Depth,
-			AgentPath:      sub.AgentPath,
-			AgentNickname:  sub.AgentNickname,
-			AgentRole:      role,
-		}
-	}
-}
-
-// extractThreadSpawn returns the thread_spawn payload if source decodes as
-// {"sub_agent":{"thread_spawn":{...}}}, otherwise nil. Any other variant
-// (string source, custom source, non-thread_spawn sub_agent variant) yields
-// nil with no error — those rollouts are simply not subagent threads.
-func extractThreadSpawn(raw json.RawMessage) *threadSpawnPayload {
-	if len(raw) == 0 {
-		return nil
-	}
-	var wrap subAgentSourceWrapper
-	if err := json.Unmarshal(raw, &wrap); err != nil || len(wrap.SubAgent) == 0 {
-		return nil
-	}
-	var ts threadSpawnWrapper
-	if err := json.Unmarshal(wrap.SubAgent, &ts); err != nil {
-		return nil
-	}
-	return ts.ThreadSpawn
 }
 
 // ----------------------------------------------------------------------------

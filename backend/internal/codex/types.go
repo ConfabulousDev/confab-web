@@ -27,12 +27,6 @@ type ParsedRollout struct {
 	ValidationErrors []ValidationError
 	TotalLines       int
 
-	// Subagent is non-nil for rollouts that were spawned as a subagent
-	// (session_meta.source.sub_agent.thread_spawn). Nil for top-level / CLI
-	// sessions and for non-thread-spawn subagent variants (review, compact,
-	// memory_consolidation).
-	Subagent *SubagentSource
-
 	// SkillInvocations records every <skill>...</skill> user-message block.
 	// Order is rollout order.
 	SkillInvocations []SkillInvocation
@@ -46,16 +40,6 @@ type ParsedRollout struct {
 	// <skills_instructions> block. Ephemeral — not persisted in any card.
 	// Subsequent <skills_instructions> blocks (rare) are ignored.
 	AvailableSkills []SkillAvailable
-}
-
-// SubagentSource describes how a child rollout was spawned by a parent.
-// Mapped from session_meta.source.sub_agent.thread_spawn.
-type SubagentSource struct {
-	ParentThreadID string // parent rollout's thread ID
-	Depth          int    // i32 in Rust; always ≥1 when set
-	AgentPath      string // optional, e.g. "root/researcher"
-	AgentNickname  string // optional, e.g. "Nash" — auto-generated scientist surname
-	AgentRole      string // optional, e.g. "default", "explorer"; accepts legacy alias "agent_type"
 }
 
 // SkillInvocation is one <skill>...</skill> user-message block.
