@@ -443,94 +443,46 @@ func TestParseRollout_TaskStartedModelWinsOverTurnContext(t *testing.T) {
 // CF-443: Codex subagent + skill support
 // ============================================================================
 
-// TestParseRollout_SessionMetaCLI_NoSubagent verifies that a parent / CLI
-// rollout (session_meta.source == "cli") sets Subagent to nil and extracts
-// CLIVersion.
-func TestParseRollout_SessionMetaCLI_NoSubagent(t *testing.T) {
-	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-p","cli_version":"0.130.0","source":"cli","thread_source":"user","model":"gpt-5","model_provider":"openai"}}`)
-	rollout, err := ParseRollout(raw)
-	if err != nil {
-		t.Fatalf("ParseRollout: %v", err)
-	}
-	if rollout.Subagent != nil {
-		t.Errorf("Subagent = %+v, want nil for source=cli", rollout.Subagent)
-	}
-	if rollout.CLIVersion != "0.130.0" {
-		t.Errorf("CLIVersion = %q, want 0.130.0", rollout.CLIVersion)
-	}
-}
-
-// TestParseRollout_SessionMetaSubAgent_ThreadSpawn verifies extraction of
-// every field in source.sub_agent.thread_spawn.
-func TestParseRollout_SessionMetaSubAgent_ThreadSpawn(t *testing.T) {
-	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-c","cli_version":"0.130.0","source":{"sub_agent":{"thread_spawn":{"parent_thread_id":"019e-p","depth":1,"agent_path":"root/r1","agent_nickname":"Nash","agent_role":"default"}}},"thread_source":"subagent","agent_nickname":"Nash","agent_role":"default","model":"gpt-5","model_provider":"openai"}}`)
-	rollout, err := ParseRollout(raw)
-	if err != nil {
-		t.Fatalf("ParseRollout: %v", err)
-	}
-	if rollout.Subagent == nil {
-		t.Fatal("Subagent = nil, want populated for thread_spawn source")
-	}
-	if got := rollout.Subagent.ParentThreadID; got != "019e-p" {
-		t.Errorf("Subagent.ParentThreadID = %q, want 019e-p", got)
-	}
-	if got := rollout.Subagent.Depth; got != 1 {
-		t.Errorf("Subagent.Depth = %d, want 1", got)
-	}
-	if got := rollout.Subagent.AgentPath; got != "root/r1" {
-		t.Errorf("Subagent.AgentPath = %q, want root/r1", got)
-	}
-	if got := rollout.Subagent.AgentNickname; got != "Nash" {
-		t.Errorf("Subagent.AgentNickname = %q, want Nash", got)
-	}
-	if got := rollout.Subagent.AgentRole; got != "default" {
-		t.Errorf("Subagent.AgentRole = %q, want default", got)
-	}
-}
-
-// TestParseRollout_SessionMetaAgentTypeLegacyAlias_MapsToAgentRole verifies
-// that the legacy serde alias "agent_type" maps to AgentRole when "agent_role"
-// is absent.
-func TestParseRollout_SessionMetaAgentTypeLegacyAlias_MapsToAgentRole(t *testing.T) {
-	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-c","cli_version":"0.120.0","source":{"sub_agent":{"thread_spawn":{"parent_thread_id":"019e-p","depth":1,"agent_type":"explorer"}}},"thread_source":"subagent","agent_type":"explorer"}}`)
-	rollout, err := ParseRollout(raw)
-	if err != nil {
-		t.Fatalf("ParseRollout: %v", err)
-	}
-	if rollout.Subagent == nil {
-		t.Fatal("Subagent = nil, want populated")
-	}
-	if got := rollout.Subagent.AgentRole; got != "explorer" {
-		t.Errorf("Subagent.AgentRole = %q, want explorer (from agent_type legacy alias)", got)
-	}
-}
-
-// TestParseRollout_SessionMetaSourceUnknownVariants_NoSubagent verifies that
-// non-thread_spawn source values yield Subagent==nil without errors.
-func TestParseRollout_SessionMetaSourceUnknownVariants_NoSubagent(t *testing.T) {
+// TestParseRollout_SessionMeta_ExtractsFieldsForEverySourceShape verifies that
+// session_meta fields are extracted whatever shape session_meta.source takes.
+// The parser ignores source; subagent identity reaches the backend from CLI
+// metadata (codex_rollouts), not from the rollout. Shapes mirror real Codex
+// output: top-level sessions write a string, subagents write
+// {"subagent":{...}} (thread_spawn at any depth, or another variant such as
+// guardian).
+func TestParseRollout_SessionMeta_ExtractsFieldsForEverySourceShape(t *testing.T) {
 	variants := []string{
+		`"cli"`,
 		`"vscode"`,
 		`"exec"`,
-		`"mcp"`,
 		`{"custom":"my-tool"}`,
-		`{"internal":"memory_consolidation"}`,
-		`{"sub_agent":"review"}`,
-		`{"sub_agent":"compact"}`,
-		`{"sub_agent":"memory_consolidation"}`,
-		`{"sub_agent":{"other":"x"}}`,
+		`{"subagent":{"thread_spawn":{"parent_thread_id":"019e-p","depth":1,"agent_path":"root/r1","agent_nickname":"Nash","agent_role":"default"}}}`,
+		`{"subagent":{"thread_spawn":{"parent_thread_id":"019e-c","depth":2,"agent_path":"root/r1/r2","agent_nickname":"Turing","agent_role":"default"}}}`,
+		`{"subagent":{"other":"guardian"}}`,
+		`{"subagent":"review"}`,
+		`null`,
 	}
 	for _, v := range variants {
-		raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.130.0","source":` + v + `}}`)
+		raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"s","cli_version":"0.130.0","source":` + v + `,"model":"gpt-5","model_provider":"openai","cwd":"/repo"}}`)
 		rollout, err := ParseRollout(raw)
 		if err != nil {
 			t.Errorf("source=%s: ParseRollout returned error: %v", v, err)
 			continue
 		}
-		if rollout.Subagent != nil {
-			t.Errorf("source=%s: Subagent = %+v, want nil", v, rollout.Subagent)
+		if len(rollout.ValidationErrors) != 0 {
+			t.Errorf("source=%s: ValidationErrors = %+v, want none", v, rollout.ValidationErrors)
 		}
 		if rollout.CLIVersion != "0.130.0" {
-			t.Errorf("source=%s: CLIVersion = %q, want 0.130.0 (extracted regardless)", v, rollout.CLIVersion)
+			t.Errorf("source=%s: CLIVersion = %q, want 0.130.0", v, rollout.CLIVersion)
+		}
+		if rollout.Model != "gpt-5" {
+			t.Errorf("source=%s: Model = %q, want gpt-5", v, rollout.Model)
+		}
+		if rollout.ModelProvider != "openai" {
+			t.Errorf("source=%s: ModelProvider = %q, want openai", v, rollout.ModelProvider)
+		}
+		if rollout.CWD != "/repo" {
+			t.Errorf("source=%s: CWD = %q, want /repo", v, rollout.CWD)
 		}
 	}
 }
@@ -845,23 +797,6 @@ func TestParseRollout_SubagentNotification_StrippedFromMessageText(t *testing.T)
 					ti, mi, m.Text)
 			}
 		}
-	}
-}
-
-// TestParseRollout_Depth2_ParsesWithoutCrash exercises the depth>1 code path
-// (a subagent spawned by another subagent) with synthetic input. Depth>1 is
-// out of scope for the current corpus but must not crash the parser.
-func TestParseRollout_Depth2_ParsesWithoutCrash(t *testing.T) {
-	raw := []byte(`{"timestamp":"2026-05-13T01:00:00.000Z","type":"session_meta","payload":{"id":"019e-gc","cli_version":"0.130.0","source":{"sub_agent":{"thread_spawn":{"parent_thread_id":"019e-c","depth":2,"agent_path":"root/r1/r2","agent_nickname":"Turing","agent_role":"default"}}},"thread_source":"subagent"}}`)
-	rollout, err := ParseRollout(raw)
-	if err != nil {
-		t.Fatalf("ParseRollout: %v", err)
-	}
-	if rollout.Subagent == nil {
-		t.Fatal("Subagent = nil")
-	}
-	if rollout.Subagent.Depth != 2 {
-		t.Errorf("Subagent.Depth = %d, want 2", rollout.Subagent.Depth)
 	}
 }
 
