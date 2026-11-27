@@ -273,14 +273,17 @@ const CodexEventTaskCompleteSchema = z
   })
   .passthrough();
 
-// CF-362: per-API-call token usage. `cached_input_tokens` is a SUBSET of
-// `input_tokens` (OpenAI semantics — verified against
-// backend/internal/analytics/codex_adapter.go:56-83). Reasoning tokens are
-// billed at the output rate. Total is informational; we don't depend on it.
+// CF-362: per-API-call token usage. `cached_input_tokens` and
+// `cache_write_input_tokens` are both SUBSETS of `input_tokens` (OpenAI
+// semantics; the backend applies the same rule in
+// backend/internal/analytics/analyzer_tokens_codex.go). Reasoning tokens are
+// a subset of output and bill at the output rate. Total is informational; we
+// don't depend on it.
 const CodexTokenUsageDetailsSchema = z
   .object({
     input_tokens: z.number(),
     cached_input_tokens: z.number().optional(),
+    cache_write_input_tokens: z.number().optional(),
     output_tokens: z.number(),
     reasoning_output_tokens: z.number().optional(),
     total_tokens: z.number().optional(),

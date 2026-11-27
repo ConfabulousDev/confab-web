@@ -112,10 +112,10 @@ following rules:
    own. Not reproduced and no sample exists (follow-up ticket filed from
    23h5).
 
-   CachedInputTokens is a SUBSET of InputTokens (OpenAI semantics) — callers
-   that bill cached tokens separately must subtract before applying the
-   uncached rate. `CacheWriteInputTokens` is carried from
-   `cache_write_input_tokens` but nothing bills or displays it yet (`md0z`).
+   CachedInputTokens and `CacheWriteInputTokens` (from
+   `cache_write_input_tokens`) are both SUBSETS of InputTokens (OpenAI
+   semantics) — callers that bill them separately must subtract both before
+   applying the uncached rate.
 9. **Developer-role messages**: dropped after first scanning for a
    `<skills_instructions>` block. The first such block populates
    `AvailableSkills` (parsed from `### Available skills` bullets); subsequent

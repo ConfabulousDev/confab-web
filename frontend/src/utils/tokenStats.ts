@@ -14,7 +14,7 @@ import { PROVIDER_VALUES } from './providers';
 /**
  * Canonical per-message token usage. Cost-billable, provider-agnostic.
  *
- *   - `input`: uncached input tokens (Codex's `max(0, input - cached)`,
+ *   - `input`: uncached input tokens (Codex's `max(0, input - cached - cacheWrite)`,
  *     Anthropic's `input_tokens` already-uncached).
  *   - `output`: total output tokens — the wire `output_tokens` passed
  *     through unchanged. On the OpenAI wire, `reasoning_output_tokens`
@@ -23,9 +23,9 @@ import { PROVIDER_VALUES } from './providers';
  *     reasoning count is preserved separately on the assistant render
  *     item (`reasoningTokens`) for the cost-tooltip sub-line.
  *   - `cacheWrite`: 5-minute cache-creation tokens. Anthropic charges 1.25x
- *     input, as do OpenAI's 5.6 and 6 families; the Codex normalizer still
- *     sets this to 0 because the rollout wire carries no cache-write count
- *     (md0z) — the rate exists, the token count does not.
+ *     input. The Codex normalizer puts `cache_write_input_tokens` here; its
+ *     table rate is OpenAI's 30-minute tier (1.25x input on the 5.6 and 6
+ *     families, 0 on older models).
  *   - `cacheWrite1h`: 1-hour cache-creation tokens (Anthropic charges 2x input).
  *     Split out from `cacheWrite` by the Claude normalizer from the wire
  *     `cache_creation` object; 0 for legacy lines and non-Claude providers (rd9v).

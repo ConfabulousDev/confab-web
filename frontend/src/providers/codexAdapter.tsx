@@ -117,16 +117,20 @@ export const codexAdapter: CodexAdapter = {
   },
 
   extendCostTooltip(base, usage, message) {
-    // CF-418 + CF-471: reconstruct the wire shape for display. Gross input =
-    // uncached + cacheRead (parse layer split them); `usage.output` is the
-    // wire `output_tokens` (reasoning is a subset, surfaced as a sub-line).
+    // CF-418 + CF-471 + md0z: reconstruct the wire shape for display. Gross
+    // input = uncached + cacheRead + cacheWrite (the parse layer split them);
+    // `usage.output` is the wire `output_tokens` (reasoning is a subset,
+    // surfaced as a sub-line).
     const reasoning = message.kind === 'assistant' ? message.reasoningTokens ?? 0 : 0;
-    const grossInput = usage.input + usage.cacheRead;
+    const grossInput = usage.input + usage.cacheRead + usage.cacheWrite;
     // base[0] is `formatCost(cost)`; base[1] is the blank separator line.
     const lines: string[] = [base[0] ?? '', ''];
     lines.push(`Input tokens (in): ${grossInput.toLocaleString()}`);
     if (usage.cacheRead) {
       lines.push(`  Cached (hit): ${usage.cacheRead.toLocaleString()}`);
+    }
+    if (usage.cacheWrite) {
+      lines.push(`  Cache write: ${usage.cacheWrite.toLocaleString()}`);
     }
     lines.push(`Output tokens (out): ${usage.output.toLocaleString()}`);
     if (reasoning) {

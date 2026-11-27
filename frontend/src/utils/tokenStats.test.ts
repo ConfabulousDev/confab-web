@@ -277,8 +277,8 @@ describe('calculateCost', () => {
     expect(cost).toBeCloseTo(1.025, 4);
   });
 
-  it('treats Codex cacheWrite as free (rate is 0 in the table)', () => {
-    // Any value of cacheWrite contributes $0 for Codex models.
+  it('bills Codex cacheWrite at $0 on pre-5.6 models (table rate is 0, no fallback)', () => {
+    // gpt-5's cacheWrite rate is 0, so any cacheWrite count contributes $0.
     const a = calculateCost('codex', 'gpt-5', usage({ input: 100_000 }));
     const b = calculateCost(
       'codex',

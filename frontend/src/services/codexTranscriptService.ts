@@ -262,20 +262,22 @@ function attachTokenCountToAssistant(
     const item = items[i];
     if (!item || item.kind !== 'assistant' || item.usage !== undefined) continue;
     // CF-418 + CF-471: normalize the OpenAI wire shape to canonical TokenUsage.
-    //   - `cached_input_tokens` is a SUBSET of `input_tokens`; subtract it so
-    //     `input` carries only uncached tokens.
+    //   - `cached_input_tokens` and `cache_write_input_tokens` are both SUBSETS
+    //     of `input_tokens`; subtract both so `input` carries only ordinary
+    //     tokens (md0z).
+    //   - Cache writes go in the 5-minute `cacheWrite` slot, which holds
+    //     OpenAI's 30-minute tier rate. The wire has no 30m/12h split, so
+    //     `cacheWrite1h` stays 0.
     //   - `reasoning_output_tokens` is a SUBSET of `output_tokens`; pass the
     //     wire value through unchanged. Reasoning bills at the output rate
     //     implicitly and is preserved on the item for the tooltip sub-line.
-    //   - `cacheWrite` stays 0: the rollout wire carries no cache-write count,
-    //     even though OpenAI's 5.6 and 6 families do have a cache-write rate
-    //     in the price table (md0z).
     const cached = delta.cached_input_tokens ?? 0;
+    const cacheWrite = delta.cache_write_input_tokens ?? 0;
     const reasoning = delta.reasoning_output_tokens ?? 0;
     const usage: TokenUsage = {
-      input: Math.max(0, delta.input_tokens - cached),
+      input: Math.max(0, delta.input_tokens - cached - cacheWrite),
       output: delta.output_tokens,
-      cacheWrite: 0,
+      cacheWrite,
       cacheWrite1h: 0,
       cacheRead: cached,
     };
